@@ -1,0 +1,273 @@
+# Development Plan
+
+Status: Living document
+Last updated: 2026-10-14
+
+How to use this:
+- Check off `[x]` steps as they're finished, and add a line to the [Progress Log](#progress-log) at the bottom.
+- **📄** shows the design docs to read before starting a step.
+- **✅ Done when** lists each phase's exit criteria. Don't move on until they're met.
+- **⚠ Decision** marks a step blocked on an open question in [open-questions.md](00-Overview/open-questions.md).
+- **📝 Doc needed** marks a step that has no design doc yet. Write the doc first.
+
+Guiding rule for a solo, part-time project: **make it fun offline with bots before networking anything.**
+
+---
+
+## Phase 0 — Project Setup
+
+📄 [game-overview](00-Overview/game-overview.md) · [multiplayer](08-Technical/multiplayer.md) · [art-direction](03-Art/art-direction.md)
+
+- [x] Initialize git repo with a Unity `.gitignore`
+- [x] Create the design docs structure and first-pass docs
+- [x] Pick the Unity 6 version: **6000.5.2f1** (Tech stream, already installed). Android module installed
+- [ ] Install the iOS + Linux Dedicated Server build modules (first attempt failed: UAC prompt timed out)
+- [x] Create a 3D **URP** project at the repo root (`Assets/`, `Packages/`, `ProjectSettings/`)
+- [x] Set up **Git LFS** + `.gitattributes` (models, textures, audio) and Unity YAML merge settings
+- [x] Install core packages: Input System, Cinemachine 3, TextMeshPro (built into uGUI 2.x in Unity 6), plus `com.unity.pipeline` so Claude can drive the Editor
+- [x] Create the `Assets/` folder layout (`_Project/Scripts`, `Prefabs`, `Art`, `Scenes`, `Settings`, …)
+- [x] First commit (local)
+- [ ] Push to a private remote (GitHub/GitLab). Deferred: local git only for now
+
+✅ **Done when:** an empty project opens cleanly, is committed, and LFS tracks binary assets.
+
+---
+
+## Phase 1 — Flight Prototype (offline)
+
+📄 [flight-model](02-Mechanics/flight-model.md) · [controls](02-Mechanics/controls.md) · [aircraft-classes](02-Mechanics/aircraft-classes.md)
+
+- [ ] Greybox test scene: ground plane, a few towers and rings to fly through
+- [ ] Placeholder plane prefab, **already modular** (body, L wing, R wing, tail, engine as separate children)
+- [ ] Arcade flight controller: throttle, pitch, roll, yaw, auto-leveling, mild momentum, gentle low-speed nose-drop
+- [ ] Boost with a recharging meter
+- [ ] Third-person chase camera (Cinemachine)
+- [ ] Input actions for keyboard + mouse
+- [ ] Gamepad bindings
+- [ ] Mobile touch controls (virtual stick, fire / missile / boost / ability buttons, auto throttle)
+- [ ] ⚠ Decision: yaw keys + optional mouse-aim mode on PC
+- [ ] Flight stats as ScriptableObjects per class (Fighter, Interceptor, Heavy, Support)
+- [ ] Modifier-stack architecture for stats (needed later for part damage and damage states)
+- [ ] Map boundary soft turn-back + altitude ceiling
+- [ ] Terrain/building collision → crash
+
+✅ **Done when:** flying is fun by itself for 5 minutes on PC, gamepad, and a mobile device, and the four classes feel clearly different.
+
+---
+
+## Phase 2 — Combat & Per-Part Damage
+
+📄 [health-and-damage](02-Mechanics/health-and-damage.md) · [weapons](02-Mechanics/weapons.md) · [aircraft-classes](02-Mechanics/aircraft-classes.md) · [flight-model](02-Mechanics/flight-model.md#part-damage-effects-on-flight)
+
+- [ ] ⚠ Decision: final part list (one tail or two? does the engine detach?)
+- [ ] Per-part hitboxes + per-part HP (data per class)
+- [ ] Machine guns: fire, overheat, lead pipper, hit detection against parts
+- [ ] Part detachment: remove hitbox, spawn falling debris, broken-edge cap
+- [ ] Flight modifiers per lost part: wing (roll bias, lift), tail (wobble, authority), engine (glide)
+- [ ] Body damage states: Healthy / Damaged / Critical with smoke, speed/climb penalties, gun jams
+- [ ] Body at 0 HP → explosion → respawn after a delay
+- [ ] Kill credit for crashes (last attacker)
+- [ ] Rockets (salvo, splash to body)
+- [ ] Homing missiles: lock-on, incoming warning, evade by hard turns
+- [ ] Bombs + impact preview marker
+- [ ] Per-class loadouts
+- [ ] Abilities: Barrel Roll, Afterburner, Armor Shield, Repair Aura (+ radar)
+- [ ] ⚠ Decision: wing-mounted guns (losing a wing halves firepower)?
+- [ ] Target dummies / drone planes to shoot at
+
+✅ **Done when:** you can shoot a wing off a dummy, see it fall, fly a one-winged plane and feel that it's hard but survivable, and kill a plane by hitting its body.
+
+---
+
+## Phase 3 — Repair & Landing Loop
+
+📄 [repair-and-landing](02-Mechanics/repair-and-landing.md) · [health-and-damage](02-Mechanics/health-and-damage.md#damage-state-for-repair-timing) · [hud](06-UI-UX/hud.md)
+
+- [ ] Airfield prefab: runway, repair zone, spawn point
+- [ ] Automatic landing gear: height + descent trigger, ~1.5 s deploy, drag, auto-retract
+- [ ] Landing rules: gear locked, touchdown speed, angle; otherwise bounce or crash
+- [ ] Runway auto-braking
+- [ ] Repair zone: tier calculation (body HP + lost parts) → 5 / 10 / 15 s timer
+- [ ] Repair restores all parts, HP, and ammo; leaving early cancels it
+- [ ] Invulnerability while the repair timer runs (+ shield VFX)
+- [ ] Home airfield AA guns
+- [ ] Spawn: air-spawn vs runway takeoff (⚠ Decision; see [flight-model](02-Mechanics/flight-model.md))
+- [ ] Landing assist: glide-slope guide, speed indicator, gear status light
+
+✅ **Done when:** the full **Fight → Damage → Retreat → Repair → Fight** loop works end to end, including landing on one wing and a dead-stick glide landing.
+
+---
+
+## Phase 4 — Greybox Island Map
+
+📄 [island-map](05-Levels/island-map.md) · [match-modes](01-Game-Design/match-modes.md)
+
+- [ ] Island blockout: city, mountains, desert, ocean
+- [ ] 2 home airfields + 1 neutral central airfield
+- [ ] Big landmark per region
+- [ ] Scale test: crossing time ~45–60 s at Fighter cruise speed; airfield 10–20 s from fights
+- [ ] Approach lanes (2–3 per airfield)
+- [ ] Cloud layer for cover
+- [ ] Ocean boundary turn-back
+
+✅ **Done when:** a 5-minute flight around the map has the right pacing, and every region has a nearby airfield.
+
+---
+
+## Phase 5 — Bots
+
+📄 [aircraft-classes](02-Mechanics/aircraft-classes.md) · [repair-and-landing](02-Mechanics/repair-and-landing.md) · [multiplayer](08-Technical/multiplayer.md)
+
+- [ ] Bot pilot using the same plane controller as players (input-driven)
+- [ ] Behaviors: patrol, chase, attack, evade missiles, avoid terrain
+- [ ] Bot retreats to repair when damaged
+- [ ] Difficulty settings
+- [ ] Bots fill empty team slots
+
+✅ **Done when:** a solo player can play a believable 8v8 against bots.
+
+---
+
+## Phase 6 — Teams Mode + Core UI (offline)
+
+📄 [match-modes](01-Game-Design/match-modes.md) · [core-loop](01-Game-Design/core-loop.md) · [hud](06-UI-UX/hud.md) · [aircraft-classes](02-Mechanics/aircraft-classes.md#class-selection)
+
+- [ ] Match flow: lobby → class select → 5-minute timer → end → scoreboard
+- [ ] Team score (kills, assists, objectives) + win condition
+- [ ] Class select on spawn / respawn (⚠ Decision: also at the airfield?)
+- [ ] HUD: plane damage diagram, speed/throttle, boost, ammo, ability cooldown, crosshair, lock warning, minimap, nearest airfield marker, gear light, timer + score, score popups, kill feed
+- [ ] Damage feedback: vignette, alarm, "RETURN TO BASE" prompt
+- [ ] 📝 Doc needed: **front-end menus** (main menu, settings, class select)
+- [ ] Main menu + settings (controls, graphics, audio)
+
+✅ **Done when:** 🎯 **MILESTONE: Offline Vertical Slice.** A full 5-minute Teams match against bots on PC and mobile. **Playtest with friends and adjust the design docs before Phase 7.**
+
+---
+
+## Phase 7 — Dedicated Server Networking
+
+📄 [multiplayer](08-Technical/multiplayer.md) · [flight-model](02-Mechanics/flight-model.md) · [health-and-damage](02-Mechanics/health-and-damage.md)
+
+- [ ] ⚠ Decision: netcode library (NGO / Fish-Networking / Photon Fusion). Spike-test the top two with planes first
+- [ ] Headless Linux dedicated server build
+- [ ] Server-authoritative plane simulation from client inputs
+- [ ] Client-side prediction + reconciliation for your own plane; interpolation for others
+- [ ] Sync part state (bitmask + part HP), body state, abilities, ammo
+- [ ] Server-side lag-compensated hit detection against part hitboxes
+- [ ] Server-run bots, AA guns, match flow, scoring
+- [ ] Local test: server + 2 clients on one PC
+- [ ] Cross-play test: PC client + mobile client in the same match
+- [ ] ⚠ Decision: hosting provider + regions
+- [ ] Deploy to hosted servers (scale-to-zero)
+- [ ] Matchmaking: quick-join into 8v8, backfill with bots
+- [ ] Network stress test with 16 clients
+
+✅ **Done when:** 🎯 **MILESTONE: Online Teams.** 16 real players (or 16 test clients) finish a match on hosted servers with acceptable latency on PC and mobile.
+
+---
+
+## Phase 8 — Objectives
+
+📄 [objectives](02-Mechanics/objectives.md) · [island-map](05-Levels/island-map.md) · [weapons](02-Mechanics/weapons.md)
+
+- [ ] AI convoys on road splines, with light AA
+- [ ] Supply drops: periodic spawn, announcement, contents
+- [ ] Radar stations: capture → minimap vision
+- [ ] Airfield capture: capture zone, contested logic, forward repair/spawn
+- [ ] Objectives feed into team score
+
+✅ **Done when:** matches spread across the map instead of being one big dogfight.
+
+---
+
+## Phase 9 — Accounts, Progression & Economy
+
+📄 [progression](01-Game-Design/progression.md) · [economy-and-monetization](01-Game-Design/economy-and-monetization.md) · [multiplayer](08-Technical/multiplayer.md) · [art-direction](03-Art/art-direction.md#cosmetics-decided-the-main-player-reward)
+
+- [ ] Player accounts (anonymous sign-in, cross-device)
+- [ ] Cloud save: coins, owned cosmetics, player level, equipped loadout
+- [ ] Server-side coin payout at match end (base + score + win bonus)
+- [ ] Post-match screen with coin breakdown
+- [ ] Player XP + level
+- [ ] Cosmetic system: paint/skin, decals, trail color, destruction effect (per-part compatible)
+- [ ] Readability rules enforced (team color zone, damage smoke override)
+- [ ] Garage/locker screen to equip cosmetics
+- [ ] ⚠ Decision: spin price, duplicate rule, rarity tiers
+- [ ] Prize machine: spin, reveal animation, **odds display**
+- [ ] Free gift timer
+
+✅ **Done when:** play a match → earn coins → spin → equip → other players see the cosmetic online.
+
+---
+
+## Phase 10 — Monetization
+
+📄 [economy-and-monetization](01-Game-Design/economy-and-monetization.md)
+
+- [ ] ⚠ Decision: PC storefront (Steam?)
+- [ ] In-app purchases: coin packs + direct-buy cosmetics (App Store, Google Play, PC store)
+- [ ] Server-side receipt validation
+- [ ] Rewarded ads on mobile ("double coins")
+- [ ] Loot box compliance: odds shown, region flags, direct-buy alternative, age rating
+- [ ] Legal / platform policy review
+
+✅ **Done when:** test purchases and rewarded ads work on every platform and pass store policy checks.
+
+---
+
+## Phase 11 — Art, Audio & Feel Pass
+
+📄 [art-direction](03-Art/art-direction.md) · [health-and-damage](02-Mechanics/health-and-damage.md) · [island-map](05-Levels/island-map.md)
+
+- [ ] Final modular plane models for the 4 classes (parts, broken-edge caps, cosmetic-ready UVs)
+- [ ] VFX: smoke states, fire, explosions, part debris, tracers, missile trails, shield bubble
+- [ ] Environment art for each region + puffy clouds
+- [ ] 📝 Doc needed: **audio direction** (`04-Audio/`)
+- [ ] Audio: engines, guns, sputtering, alarms, gear clunk, explosions, music
+- [ ] Juice: screen shake, hit markers, kill banners
+
+✅ **Done when:** the game looks and sounds like the art direction, and damage is readable at a distance.
+
+---
+
+## Phase 12 — Platform Polish & Launch Prep
+
+📄 [controls](02-Mechanics/controls.md) · [multiplayer](08-Technical/multiplayer.md) · [economy-and-monetization](01-Game-Design/economy-and-monetization.md)
+
+- [ ] Mobile performance: quality tiers, target framerate on low/mid devices
+- [ ] Mobile aim assist tuning for cross-play fairness
+- [ ] 📝 Doc needed: **onboarding / tutorial** (flying, part damage, landing, repair)
+- [ ] Tutorial / first-flight experience
+- [ ] Analytics (match length, repair usage, retention, purchase funnels)
+- [ ] Crash reporting
+- [ ] Store pages, screenshots, trailer
+- [ ] Soft launch in a limited region → tune economy → global launch
+
+✅ **Done when:** 🎯 **MILESTONE: Launch.**
+
+---
+
+## Later / Post-Launch
+
+📄 [match-modes](01-Game-Design/match-modes.md) · [progression](01-Game-Design/progression.md)
+
+- [ ] Free For All
+- [ ] King of the Sky
+- [ ] Carrier War (carrier landing!)
+- [ ] Ram Royale party mode
+- [ ] Challenges that award cosmetics
+- [ ] Seasons / new cosmetic sets
+
+---
+
+## Progress Log
+
+Add a line whenever a step is completed or a major decision is made.
+
+| Date | Phase | What was done | Notes |
+|---|---|---|---|
+| 2026-10-13 | 0 | Initialized git repo (`main`) with a Unity `.gitignore` | Unity project not created yet |
+| 2026-10-13 | 0 | Created the `Design/` folder structure + template | |
+| 2026-10-13 | — | Wrote first-pass design docs from the pitch; recorded decisions (3D, PC+mobile cross-play, 16 players, 5-min matches, player leveling + cosmetics, F2P, dedicated servers, per-part damage, fixed repair times, repair invulnerability, home AA) | See [open-questions.md](00-Overview/open-questions.md) |
+| 2026-10-13 | — | Created this development plan | |
+| 2026-10-14 | 0 | Created the URP 3D Unity project at the repo root (Unity 6000.5.2f1); set up Git LFS, `.gitattributes`, UnityYAMLMerge, and the `Assets/_Project/` layout; added Cinemachine; first commit | Chose the installed Tech-stream editor over 6000.3 LTS. Remote push deferred. iOS + Linux server modules still to install |
