@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 88e074e0f87bc974d9111633cbaa302c, type: 3}
+  m_Name: Interceptor
+  m_EditorClassIdentifier: WingingIt.Runtime::WingingIt.Flight.FlightStats
+  displayName: Interceptor
+  bodyColor: {r: 0.9, g: 0.32, b: 0.25, a: 1}
+  visualScale: 0.9
+  minSpeed: 50
+  maxSpeed: 140
+  cruiseThrottle: 0.65
+  throttleChangeRate: 0.6
+  acceleration: 30
+  deceleration: 12
+  pitchRate: 70
+  rollRate: 230
+  yawRate: 30
+  bankTurnRate: 42
+  responsiveness: 7
+  autoLevelRoll: 2.2
+  autoLevelPitch: 0.5
+  gravityInfluence: 14
+  grip: 3.2
+  stallSpeed: 40
+  noseDropRate: 30
+  boostMultiplier: 1.6
+  boostAcceleration: 60
+  boostDuration: 3.5
+  boostRechargeTime: 7
+  boostRechargeDelay: 1

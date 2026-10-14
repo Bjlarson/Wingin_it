@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 88e074e0f87bc974d9111633cbaa302c, type: 3}
+  m_Name: Fighter
+  m_EditorClassIdentifier: WingingIt.Runtime::WingingIt.Flight.FlightStats
+  displayName: Fighter
+  bodyColor: {r: 0.72, g: 0.8, b: 0.9, a: 1}
+  visualScale: 1
+  minSpeed: 40
+  maxSpeed: 110
+  cruiseThrottle: 0.65
+  throttleChangeRate: 0.6
+  acceleration: 22
+  deceleration: 14
+  pitchRate: 85
+  rollRate: 190
+  yawRate: 35
+  bankTurnRate: 50
+  responsiveness: 6
+  autoLevelRoll: 2.2
+  autoLevelPitch: 0.5
+  gravityInfluence: 14
+  grip: 4
+  stallSpeed: 32
+  noseDropRate: 30
+  boostMultiplier: 1.5
+  boostAcceleration: 45
+  boostDuration: 3
+  boostRechargeTime: 6
+  boostRechargeDelay: 1

@@ -1,7 +1,7 @@
 # Flight Model
 
 Status: Draft
-Last updated: 2026-10-13
+Last updated: 2026-10-14
 
 ## Summary
 
@@ -44,13 +44,16 @@ A **non-physical, velocity-driven controller** (not a full rigidbody aerodynamic
 
 ## Tuning Values (per class)
 
+First-pass values (2026-10-14), from `Assets/_Project/ScriptableObjects/FlightStats/`. The assets are the source of truth; tune them there.
+
 | Value | Fighter | Interceptor | Heavy | Support |
 |---|---|---|---|---|
-| Max speed | TBD | Highest | Low | TBD |
-| Pitch rate (°/s) | TBD | TBD | Low | TBD |
-| Roll rate (°/s) | TBD | TBD | Low | TBD |
-| Yaw rate (°/s) | TBD | TBD | TBD | TBD |
-| Boost multiplier | TBD | TBD | TBD | TBD |
+| Max speed (m/s) | 110 | 140 | 85 | 100 |
+| Pitch rate (°/s) | 85 | 70 | 55 | 78 |
+| Roll rate (°/s) | 190 | 230 | 110 | 170 |
+| Yaw rate (°/s) | 35 | 30 | 25 | 35 |
+| Responsiveness (1/s) | 6 | 7 | 3.5 | 5.5 |
+| Boost multiplier | 1.5 | 1.6 | 1.35 | 1.4 |
 
 Damage states reduce these values; see [health-and-damage.md](health-and-damage.md).
 
@@ -73,13 +76,13 @@ Tuning target: one wing missing should be **way harder** but survivable for a fo
 
 ## Edge Cases
 
-- What happens at the map boundary? (Proposed: soft turn-back plus a warning, not an invisible wall.)
-- Is there a ceiling altitude?
-- Flying upside down: should auto-level fight the player?
+- Map boundary: **soft turn-back** plus a warning. An autopilot takes over outside the radius (implemented).
+- Ceiling altitude: **yes**, 1500 m in the test scene; above it the nose is pushed down.
+- Flying upside down: auto-level rolls the plane upright only when roll input is released.
 - Takeoff: does a plane spawn already in the air or on the runway?
 
 ## Open Questions
 
-- [ ] Is there a yaw (rudder) control? The original control list has roll + pitch only.
-- [ ] Is terrain collision instant death or heavy damage?
+- [x] Is there a yaw (rudder) control? **Yes**: Q/E (D-pad on gamepad); mouse-aim uses it automatically
+- [x] Is terrain collision instant death or heavy damage? **Instant crash** for now (2026-10-14)
 - [ ] Spawn on the runway (taxi and take off) or air-spawn above the airfield? (Proposed: air-spawn for speed, with runway takeoff as an option after a repair.)

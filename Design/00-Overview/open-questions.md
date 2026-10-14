@@ -1,7 +1,7 @@
 # Open Questions
 
 Status: Living document
-Last updated: 2026-10-13
+Last updated: 2026-10-14
 
 ## Decided
 
@@ -24,6 +24,8 @@ Last updated: 2026-10-13
 | Airfield defense | AA guns at home airfields | 2026-10-13 |
 | First playable mode | Teams | 2026-10-13 |
 | Team / scope | Solo developer, part-time | 2026-10-13 |
+| PC flight controls | Mouse-aim is the default (plane steers toward the cursor); a direct mode (A/D roll, mouse/arrows pitch, Q/E yaw) is one key away (M). Keys override mouse-aim per axis | 2026-10-14 |
+| Terrain collision | Instant crash, then respawn (prototype). Revisit once Phase 2 adds HP | 2026-10-14 |
 
 ## Still Open
 
@@ -37,13 +39,12 @@ Last updated: 2026-10-13
 3. Wing-mounted guns (losing a wing halves firepower)?
 4. Class switching: on respawn only, or also at the airfield?
 5. Weapon button mapping for rockets / bombs; confirm per-class loadouts.
-6. Yaw control and mouse-aim mode on PC?
-7. Support class role in Free For All.
-8. Prize machine: spin price, duplicate rule, rarity tiers.
+6. Support class role in Free For All.
+7. Prize machine: spin price, duplicate rule, rarity tiers.
 
 ### Business / Scope
 
-9. **Loot box compliance:** selling coins for random items needs odds disclosure and region handling → [economy](../01-Game-Design/economy-and-monetization.md#-loot-box-regulation)
-10. Server hosting provider and regions.
-11. PC storefront (Steam?).
-12. Final title?
+8. **Loot box compliance:** selling coins for random items needs odds disclosure and region handling → [economy](../01-Game-Design/economy-and-monetization.md#-loot-box-regulation)
+9. Server hosting provider and regions.
+10. PC storefront (Steam?).
+11. Final title?

@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 88e074e0f87bc974d9111633cbaa302c, type: 3}
+  m_Name: Support
+  m_EditorClassIdentifier: WingingIt.Runtime::WingingIt.Flight.FlightStats
+  displayName: Support
+  bodyColor: {r: 0.95, g: 0.8, b: 0.3, a: 1}
+  visualScale: 1.05
+  minSpeed: 38
+  maxSpeed: 100
+  cruiseThrottle: 0.65
+  throttleChangeRate: 0.6
+  acceleration: 20
+  deceleration: 14
+  pitchRate: 78
+  rollRate: 170
+  yawRate: 35
+  bankTurnRate: 48
+  responsiveness: 5.5
+  autoLevelRoll: 2.2
+  autoLevelPitch: 0.5
+  gravityInfluence: 14
+  grip: 4
+  stallSpeed: 30
+  noseDropRate: 30
+  boostMultiplier: 1.4
+  boostAcceleration: 40
+  boostDuration: 3
+  boostRechargeTime: 6
+  boostRechargeDelay: 1

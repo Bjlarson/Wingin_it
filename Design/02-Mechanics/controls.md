@@ -1,7 +1,7 @@
 # Controls
 
 Status: Draft
-Last updated: 2026-10-13
+Last updated: 2026-10-14
 
 ## Summary
 
@@ -66,5 +66,5 @@ Keyboard + mouse is the baseline. Gamepad and mobile (touch) are required. All t
 
 ## Open Questions
 
-- [ ] Mouse-aim mode as the default on PC?
+- [x] Mouse-aim mode as the default on PC? **Yes** (2026-10-14). M toggles direct mode; keys override mouse-aim per axis. Implemented bindings: `Assets/_Project/Settings/FlightControls.inputactions`. Gamepad yaw is on D-pad left/right and throttle on D-pad up/down; touch auto-throttles to cruise
 - [x] Cross-play: yes. Mobile aim assist must be balanced so touch players can compete without being stronger than mouse aim. Consider letting PC players opt into an input-based queue later if it becomes a problem.
