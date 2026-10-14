@@ -65,8 +65,9 @@ Planes take **per-part damage**, and losing a part changes the handling until th
 |---|---|
 | Roll bias (constant torque toward one side) | Lost wing |
 | Lift multiplier | Lost wing(s) |
-| Pitch/yaw authority + random wobble | Lost tail |
-| Auto-stabilization strength | Lost wing / tail weakens or disables it |
+| Pitch authority + pitch wobble | Lost horizontal stabilizer |
+| Yaw authority + yaw wobble | Lost vertical stabilizer |
+| Auto-stabilization strength | Lost wing / stabilizer weakens or disables it |
 | Thrust | Lost engine = 0 (glide) |
 | Top speed / climb | Body damage state |
 

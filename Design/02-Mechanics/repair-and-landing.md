@@ -28,10 +28,10 @@ This is the signature mechanic. Planes do not regenerate health in the air. To r
 | Repair tier | Condition at touchdown | Repair time |
 |---|---|---|
 | Light | Body 60–99% and no parts lost | 5 sec |
-| Heavy | Body 25–59%, or tail/engine lost | 10 sec |
+| Heavy | Body 25–59%, or a stabilizer lost, or engine dead | 10 sec |
 | Critical | Body 1–24%, or a wing lost | 15 sec |
 
-The tier is the **worst** of body HP and lost parts (see [health-and-damage.md](health-and-damage.md#damage-state-for-repair-timing)). A repair always restores **all parts, 100% HP, and full ammo**. Lost wings, tails, and engines are reattached.
+The tier is the **worst** of body HP and lost parts (see [health-and-damage.md](health-and-damage.md#damage-state-for-repair-timing)). A repair always restores **all parts, 100% HP, and full ammo**. Lost wings and stabilizers are reattached, and a dead engine is restarted.
 
 **Proposed:** leaving the repair zone before the timer finishes cancels the repair (no partial repair). This keeps fixed times meaningful: commit or don't.
 

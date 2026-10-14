@@ -59,7 +59,7 @@ Guiding rule for a solo, part-time project: **make it fun offline with bots befo
 
 📄 [health-and-damage](02-Mechanics/health-and-damage.md) · [weapons](02-Mechanics/weapons.md) · [aircraft-classes](02-Mechanics/aircraft-classes.md) · [flight-model](02-Mechanics/flight-model.md#part-damage-effects-on-flight)
 
-- [ ] ⚠ Decision: final part list (one tail or two? does the engine detach?)
+- [x] ⚠ Decision: final part list → **six parts** (body, L/R wing, horizontal + vertical stabilizer, engine); engine dies + smokes, doesn't detach
 - [ ] Per-part hitboxes + per-part HP (data per class)
 - [ ] Machine guns: fire, overheat, lead pipper, hit detection against parts
 - [ ] Part detachment: remove hitbox, spawn falling debris, broken-edge cap
@@ -72,7 +72,7 @@ Guiding rule for a solo, part-time project: **make it fun offline with bots befo
 - [ ] Bombs + impact preview marker
 - [ ] Per-class loadouts
 - [ ] Abilities: Barrel Roll, Afterburner, Armor Shield, Repair Aura (+ radar)
-- [ ] ⚠ Decision: wing-mounted guns (losing a wing halves firepower)?
+- [x] ⚠ Decision: wing-mounted guns → **yes**, losing a wing halves firepower
 - [ ] Target dummies / drone planes to shoot at
 
 ✅ **Done when:** you can shoot a wing off a dummy, see it fall, fly a one-winged plane and feel that it's hard but survivable, and kill a plane by hitting its body.
@@ -272,3 +272,5 @@ Add a line whenever a step is completed or a major decision is made.
 | 2026-10-13 | — | Created this development plan | |
 | 2026-10-14 | 0 | Created the URP 3D Unity project at the repo root (Unity 6000.5.2f1); set up Git LFS, `.gitattributes`, UnityYAMLMerge, and the `Assets/_Project/` layout; added Cinemachine; first commit | Chose the installed Tech-stream editor over 6000.3 LTS. Remote push deferred. iOS + Linux server modules still to install |
 | 2026-10-14 | 1 | Built the flight prototype: arcade controller, stat modifier stack, 4 class stat assets, modular placeholder plane, Cinemachine chase camera, mouse-aim + direct controls, gamepad and touch bindings, boundary turn-back + ceiling, crash + respawn, greybox scene with towers, mountains, and a 10-ring course. 10 EditMode + 7 PlayMode tests pass | Decisions: mouse-aim default with direct mode + Q/E yaw; terrain hits are an instant crash. **Exit criteria still need a hands-on playtest** (5-minute fun test on PC, gamepad, and a phone; class feel) |
+| 2026-10-14 | 0–1 | Committed the Phase 1 flight prototype (`70cd8f1`) | |
+| 2026-10-14 | 2 | Decided the part list: six parts (tail split into horizontal + vertical stabilizers; engine dies + smokes, never detaches). Decided wing-mounted guns | Updated health-and-damage, flight-model, repair-and-landing, open-questions |

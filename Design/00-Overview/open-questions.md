@@ -26,25 +26,25 @@ Last updated: 2026-10-14
 | Team / scope | Solo developer, part-time | 2026-10-13 |
 | PC flight controls | Mouse-aim is the default (plane steers toward the cursor); a direct mode (A/D roll, mouse/arrows pitch, Q/E yaw) is one key away (M). Keys override mouse-aim per axis | 2026-10-14 |
 | Terrain collision | Instant crash, then respawn (prototype). Revisit once Phase 2 adds HP | 2026-10-14 |
+| Part list | Six parts: body, L wing, R wing, horizontal stabilizer, vertical stabilizer, engine. The engine dies and smokes but never detaches (hitbox stays) | 2026-10-14 |
+| Gun mounting | Wing-mounted: losing a wing halves firepower | 2026-10-14 |
 
 ## Still Open
 
 ### Blocking for Prototype
 
 1. **Netcode library** (NGO / Fish-Networking / Fusion) → [multiplayer](../08-Technical/multiplayer.md)
-2. **Part list.** Is one "tail" part enough? Does the engine break off or just die? → [health-and-damage](../02-Mechanics/health-and-damage.md)
 
 ### Design
 
-3. Wing-mounted guns (losing a wing halves firepower)?
-4. Class switching: on respawn only, or also at the airfield?
-5. Weapon button mapping for rockets / bombs; confirm per-class loadouts.
-6. Support class role in Free For All.
-7. Prize machine: spin price, duplicate rule, rarity tiers.
+2. Class switching: on respawn only, or also at the airfield?
+3. Weapon button mapping for rockets / bombs; confirm per-class loadouts.
+4. Support class role in Free For All.
+5. Prize machine: spin price, duplicate rule, rarity tiers.
 
 ### Business / Scope
 
-8. **Loot box compliance:** selling coins for random items needs odds disclosure and region handling → [economy](../01-Game-Design/economy-and-monetization.md#-loot-box-regulation)
-9. Server hosting provider and regions.
-10. PC storefront (Steam?).
-11. Final title?
+6. **Loot box compliance:** selling coins for random items needs odds disclosure and region handling → [economy](../01-Game-Design/economy-and-monetization.md#-loot-box-regulation)
+7. Server hosting provider and regions.
+8. PC storefront (Steam?).
+9. Final title?
