@@ -17,5 +17,15 @@ namespace WingingIt.Flight
         /// <summary>Hold throttle at the class cruise setting (mobile default).</summary>
         public bool AutoThrottle;
         public bool Boost;
+        /// <summary>Hold to fire the machine guns.</summary>
+        public bool FireGuns;
+        /// <summary>Hold to fire rocket salvos (one per <see cref="RocketStats.salvoCooldown"/>).</summary>
+        public bool FireRockets;
+        /// <summary>Press to launch one homing missile at the locked target (needs a full lock).</summary>
+        public bool FireMissile;
+        /// <summary>Hold to drop bombs (one per <see cref="BombStats.dropInterval"/>).</summary>
+        public bool DropBomb;
+        /// <summary>Press to start the class ability (see <see cref="PlaneAbility"/>).</summary>
+        public bool UseAbility;
     }
 }

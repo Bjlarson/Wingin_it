@@ -1,0 +1,171 @@
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+using WingingIt.Flight;
+
+namespace WingingIt.World
+{
+    /// <summary>
+    /// A destructible thing on the ground (truck, radar dish, ...) for bombs to hit. Prototype stand-in for the Phase 8
+    /// objectives: it has HP, turns into a smoking wreck at 0, and rebuilds itself after a delay.
+    /// </summary>
+    public class GroundTarget : MonoBehaviour
+    {
+        static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+        static readonly List<GroundTarget> s_all = new();
+
+        [SerializeField] string displayName = "Target";
+        [SerializeField, Min(1f)] float maxHealth = 100f;
+        [Tooltip("Seconds a wreck stays before the target rebuilds (prototype only).")]
+        [SerializeField, Min(0f)] float rebuildDelay = 20f;
+        [SerializeField] Renderer[] renderers;
+        [SerializeField] Material fireMaterial;
+        [SerializeField] Material smokeMaterial;
+        [SerializeField] Color wreckColor = new Color(0.12f, 0.11f, 0.1f);
+
+        Collider[] _colliders;
+        MaterialPropertyBlock _block;
+        Vector3 _intactScale;
+        float _rebuildTimer;
+        float _smokeTimer;
+
+        public static IReadOnlyList<GroundTarget> All => s_all;
+        /// <summary>Raised when any ground target is destroyed, with whatever destroyed it (a plane, or null).</summary>
+        public static event Action<GroundTarget, UnityEngine.Object> AnyDestroyed;
+
+        public event Action<GroundTarget, float> Damaged;
+
+        public string DisplayName => displayName;
+        public float Health { get; private set; }
+        public float MaxHealth => maxHealth;
+        public float NormalizedHealth => Health / maxHealth;
+        public bool IsDestroyed => Health <= 0f;
+
+        public void Configure(string name, float health, Renderer[] targetRenderers, Material fire, Material smoke)
+        {
+            displayName = name;
+            maxHealth = health;
+            renderers = targetRenderers;
+            fireMaterial = fire;
+            smokeMaterial = smoke;
+        }
+
+        void Awake()
+        {
+            _colliders = GetComponentsInChildren<Collider>();
+            _block = new MaterialPropertyBlock();
+            _intactScale = transform.localScale;
+            Health = maxHealth;
+        }
+
+        void OnEnable() => s_all.Add(this);
+        void OnDisable() => s_all.Remove(this);
+
+        /// <summary>Removes HP. Returns the damage actually taken (0 once it's a wreck).</summary>
+        public float ApplyDamage(float amount, Vector3 point, UnityEngine.Object source = null)
+        {
+            if (IsDestroyed || amount <= 0f)
+                return 0f;
+            float taken = Mathf.Min(amount, Health);
+            Health -= taken;
+            Damaged?.Invoke(this, taken);
+            if (IsDestroyed)
+                Wreck(source);
+            return taken;
+        }
+
+        /// <summary>Back to full HP and intact.</summary>
+        public void Rebuild()
+        {
+            Health = maxHealth;
+            transform.localScale = _intactScale;
+            SetTint(null);
+        }
+
+        void Wreck(UnityEngine.Object source)
+        {
+            _rebuildTimer = rebuildDelay;
+            _smokeTimer = 0f;
+            // Squashed and charred; the collider stays, so it's still something to crash into.
+            transform.localScale = Vector3.Scale(_intactScale, new Vector3(1f, 0.45f, 1f));
+            SetTint(wreckColor);
+            Vector3 center = Center;
+            PlaneVisuals.SpawnFlash(center, smokeMaterial, new Color(0.25f, 0.25f, 0.27f), 4f, 30f, 2.5f, Vector3.up * 4f);
+            PlaneVisuals.SpawnFlash(center, fireMaterial, new Color(1f, 0.5f, 0.08f), 5f, 24f, 0.8f, Vector3.up * 6f);
+            AnyDestroyed?.Invoke(this, source);
+        }
+
+        void Update()
+        {
+            if (!IsDestroyed)
+                return;
+            // A rising smoke column marks the wreck from the air.
+            _smokeTimer -= Time.deltaTime;
+            if (_smokeTimer <= 0f && smokeMaterial != null)
+            {
+                _smokeTimer = 0.35f;
+                PlaneVisuals.SpawnFlash(Center + UnityEngine.Random.insideUnitSphere * 2f, smokeMaterial,
+                    new Color(0.2f, 0.2f, 0.22f), 3f, 14f, 3f, Vector3.up * 9f);
+            }
+            if (rebuildDelay > 0f && (_rebuildTimer -= Time.deltaTime) <= 0f)
+                Rebuild();
+        }
+
+        Vector3 Center
+        {
+            get
+            {
+                if (_colliders == null || _colliders.Length == 0)
+                    return transform.position;
+                var bounds = _colliders[0].bounds;
+                for (int i = 1; i < _colliders.Length; i++)
+                    bounds.Encapsulate(_colliders[i].bounds);
+                return bounds.center;
+            }
+        }
+
+        void SetTint(Color? color)
+        {
+            if (renderers == null)
+                return;
+            foreach (var r in renderers)
+            {
+                if (r == null)
+                    continue;
+                if (color.HasValue)
+                {
+                    r.GetPropertyBlock(_block);
+                    _block.SetColor(BaseColorId, color.Value);
+                    r.SetPropertyBlock(_block);
+                }
+                else
+                {
+                    r.SetPropertyBlock(null);
+                }
+            }
+        }
+
+        /// <summary>Distance from <paramref name="point"/> to this target's nearest collider (0 inside).</summary>
+        public float DistanceTo(Vector3 point)
+        {
+            float best = float.MaxValue;
+            foreach (var col in _colliders)
+                if (col != null && col.enabled)
+                    best = Mathf.Min(best, Vector3.Distance(point, col.ClosestPoint(point)));
+            return best == float.MaxValue ? Vector3.Distance(point, transform.position) : best;
+        }
+
+        /// <summary>Every intact ground target within <paramref name="radius"/> of <paramref name="point"/>, with its distance.</summary>
+        public static void FindInRadius(Vector3 point, float radius, List<(GroundTarget target, float distance)> results)
+        {
+            foreach (var target in s_all)
+            {
+                if (target.IsDestroyed)
+                    continue;
+                float d = target.DistanceTo(point);
+                if (d <= radius)
+                    results.Add((target, d));
+            }
+        }
+    }
+}

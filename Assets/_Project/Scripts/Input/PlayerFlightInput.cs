@@ -44,7 +44,7 @@ namespace WingingIt.Input
         PlaneController _plane;
         InputActionMap _map;
         InputAction _pitch, _roll, _yaw, _throttle, _boost, _mouseLook, _stickLook, _freeLook;
-        InputAction _fireGuns, _fireMissile, _fireSecondary, _ability, _toggleMode, _nextClass;
+        InputAction _fireGuns, _fireMissile, _fireSecondary, _dropBomb, _ability, _toggleMode, _nextClass;
         bool _lastDeviceWasGamepad;
 
         public event Action NextClassPressed;
@@ -55,10 +55,11 @@ namespace WingingIt.Input
         public bool TouchControlsActive { get; set; }
         public bool MouseAimActive => controlMode == ControlMode.MouseAim && !_lastDeviceWasGamepad && !TouchControlsActive;
 
-        // Weapons arrive in Phase 2; exposed now so the HUD can confirm the bindings.
+        // What's held right now, for the HUD's control readout.
         public bool FireGunsHeld => _fireGuns != null && _fireGuns.IsPressed();
         public bool FireMissileHeld => _fireMissile != null && _fireMissile.IsPressed();
         public bool FireSecondaryHeld => _fireSecondary != null && _fireSecondary.IsPressed();
+        public bool DropBombHeld => _dropBomb != null && _dropBomb.IsPressed();
         public bool AbilityHeld => _ability != null && _ability.IsPressed();
 
         void Awake()
@@ -83,6 +84,7 @@ namespace WingingIt.Input
             _fireGuns = _map.FindAction("FireGuns", true);
             _fireMissile = _map.FindAction("FireMissile", true);
             _fireSecondary = _map.FindAction("FireSecondary", true);
+            _dropBomb = _map.FindAction("DropBomb", true);
             _ability = _map.FindAction("Ability", true);
             _toggleMode = _map.FindAction("ToggleControlMode", true);
             _nextClass = _map.FindAction("NextClass", true);
@@ -141,6 +143,12 @@ namespace WingingIt.Input
             {
                 Throttle = throttle,
                 Boost = _boost.IsPressed(),
+                // The click that captures the mouse shouldn't also fire.
+                FireGuns = _fireGuns.IsPressed() && (cursorLocked || _fireGuns.activeControl?.device is not Mouse),
+                FireRockets = _fireSecondary.IsPressed() && (cursorLocked || _fireSecondary.activeControl?.device is not Mouse),
+                FireMissile = _fireMissile.IsPressed() && (cursorLocked || _fireMissile.activeControl?.device is not Mouse),
+                DropBomb = _dropBomb.IsPressed(),
+                UseAbility = _ability.IsPressed(),
                 AutoThrottle = TouchControlsActive && autoThrottleOnTouch && Mathf.Abs(throttle) < 0.1f,
             };
 

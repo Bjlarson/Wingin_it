@@ -18,6 +18,9 @@ namespace WingingIt.Dev
         PlayerFlightInput _input;
         int _index;
 
+        /// <summary>The classes this switcher cycles through (all four in the test scene).</summary>
+        public System.Collections.Generic.IReadOnlyList<FlightStats> Classes => classes;
+
         void Awake()
         {
             _plane = GetComponent<PlaneController>();

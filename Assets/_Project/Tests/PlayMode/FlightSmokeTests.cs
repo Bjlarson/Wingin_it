@@ -1,7 +1,6 @@
 using System.Collections;
 using NUnit.Framework;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using WingingIt.Flight;
 using WingingIt.World;
@@ -19,13 +18,8 @@ namespace WingingIt.Tests
         [UnitySetUp]
         public IEnumerator LoadScene()
         {
-            yield return SceneManager.LoadSceneAsync("FlightTest", LoadSceneMode.Single);
-            yield return null;
-            _plane = Object.FindAnyObjectByType<PlaneController>();
-            Assert.IsNotNull(_plane, "FlightTest scene has no plane");
-            foreach (var mb in _plane.GetComponents<MonoBehaviour>())
-                if (mb.GetType().Name == "PlayerFlightInput" || mb.GetType().Name == "ClassSwitcher")
-                    mb.enabled = false;
+            yield return FlightTestScene.Load();
+            _plane = FlightTestScene.Player;
         }
 
         IEnumerator Fly(FlightInput input, float seconds)
@@ -100,8 +94,9 @@ namespace WingingIt.Tests
             Assert.IsTrue(crashed, "diving into the ground should crash");
             Assert.IsFalse(_plane.IsAlive);
             Assert.Greater(_plane.transform.position.y, -1f, "plane should stop at the ground, not tunnel through it");
+            Assert.AreEqual(DeathCause.Collision, _plane.LastDeathCause);
 
-            yield return new WaitForSeconds(3f);
+            yield return new WaitForSeconds(_plane.GetComponent<PlaneRespawner>().RespawnDelay + 0.5f);
             Assert.IsTrue(_plane.IsAlive, "plane should respawn");
         }
 

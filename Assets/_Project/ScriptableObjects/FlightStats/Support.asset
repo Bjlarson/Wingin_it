@@ -15,6 +15,12 @@ MonoBehaviour:
   displayName: Support
   bodyColor: {r: 0.95, g: 0.8, b: 0.3, a: 1}
   visualScale: 1.05
+  durability: {fileID: 11400000, guid: c00f540a19449864db6d45906c1f3158, type: 2}
+  guns: {fileID: 11400000, guid: 78d9e168cb909f740affd8f8bde47462, type: 2}
+  rockets: {fileID: 11400000, guid: 1eac1bfe57cf9474285f1b29bc0052d2, type: 2}
+  missiles: {fileID: 0}
+  bombs: {fileID: 0}
+  ability: {fileID: 11400000, guid: 26d7962f7270dcc4f93aab18092962fe, type: 2}
   minSpeed: 38
   maxSpeed: 100
   cruiseThrottle: 0.65
@@ -32,6 +38,8 @@ MonoBehaviour:
   grip: 4
   stallSpeed: 30
   noseDropRate: 30
+  glideDeceleration: 3
+  damageSinkSpeed: 25
   boostMultiplier: 1.4
   boostAcceleration: 40
   boostDuration: 3

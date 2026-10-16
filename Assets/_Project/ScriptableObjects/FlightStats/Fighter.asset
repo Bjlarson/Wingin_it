@@ -15,6 +15,12 @@ MonoBehaviour:
   displayName: Fighter
   bodyColor: {r: 0.72, g: 0.8, b: 0.9, a: 1}
   visualScale: 1
+  durability: {fileID: 11400000, guid: 99a5afe4f5071b34196b5cce4bda4dd9, type: 2}
+  guns: {fileID: 11400000, guid: 78d9e168cb909f740affd8f8bde47462, type: 2}
+  rockets: {fileID: 0}
+  missiles: {fileID: 11400000, guid: c226f2e34da44324897a7fcd8c5ee433, type: 2}
+  bombs: {fileID: 0}
+  ability: {fileID: 11400000, guid: 782aa9bec78269d42abd4b9392a75abc, type: 2}
   minSpeed: 40
   maxSpeed: 110
   cruiseThrottle: 0.65
@@ -32,6 +38,8 @@ MonoBehaviour:
   grip: 4
   stallSpeed: 32
   noseDropRate: 30
+  glideDeceleration: 3
+  damageSinkSpeed: 25
   boostMultiplier: 1.5
   boostAcceleration: 45
   boostDuration: 3

@@ -15,6 +15,12 @@ MonoBehaviour:
   displayName: Interceptor
   bodyColor: {r: 0.9, g: 0.32, b: 0.25, a: 1}
   visualScale: 0.9
+  durability: {fileID: 11400000, guid: 8dc81e3111cd567409bfe5a9c98be77b, type: 2}
+  guns: {fileID: 11400000, guid: 78d9e168cb909f740affd8f8bde47462, type: 2}
+  rockets: {fileID: 0}
+  missiles: {fileID: 11400000, guid: c226f2e34da44324897a7fcd8c5ee433, type: 2}
+  bombs: {fileID: 0}
+  ability: {fileID: 11400000, guid: b383fe1e1273754428d11e48a0fe98f9, type: 2}
   minSpeed: 50
   maxSpeed: 140
   cruiseThrottle: 0.65
@@ -32,6 +38,8 @@ MonoBehaviour:
   grip: 3.2
   stallSpeed: 40
   noseDropRate: 30
+  glideDeceleration: 3
+  damageSinkSpeed: 25
   boostMultiplier: 1.6
   boostAcceleration: 60
   boostDuration: 3.5

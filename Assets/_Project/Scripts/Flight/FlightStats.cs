@@ -23,24 +23,46 @@ namespace WingingIt.Flight
         Thrust,          // 0 = dead engine, glide only
         Lift,            // < 1 = sinks and noses down, like flying too slowly
         Climb,           // scales upward vertical speed
-        AutoLevel,       // scales self-stabilization (lost wing / tail weakens it)
+        RollStability,   // scales roll auto-leveling (lost wing / fin weakens it)
+        PitchStability,  // scales pitch auto-leveling (lost horizontal stabilizer turns it off)
 
         // Additive effects with a base of 0.
         RollBias,        // deg/s of constant roll (lost wing); + = rolls right
-        Wobble,          // deg/s amplitude of random pitch/yaw shake (lost tail)
+        PitchWobble,     // deg/s amplitude of random pitch shake (lost horizontal stabilizer)
+        YawWobble,       // deg/s amplitude of random yaw shake (lost vertical stabilizer)
+        EngineSputter,   // 0..1 thrust lost in each random engine cough (Critical body)
     }
 
-    /// <summary>Base flight tuning for one aircraft class.</summary>
+    /// <summary>
+    /// Base flight tuning for one aircraft class, plus links to its part durability and its loadout: the weapons
+    /// it carries, each linked to its tuning asset. An empty weapon slot means the class doesn't carry it.
+    /// </summary>
     [CreateAssetMenu(menuName = "Winging It/Flight Stats", fileName = "FlightStats")]
     public class FlightStats : ScriptableObject
     {
-        public const int StatCount = (int)FlightStat.Wobble + 1;
+        public const int StatCount = (int)FlightStat.EngineSputter + 1;
 
         [Header("Identity")]
         public string displayName = "Fighter";
         public Color bodyColor = new Color(0.85f, 0.85f, 0.85f);
         [Tooltip("Uniform scale of the placeholder model, for silhouette differences.")]
         public float visualScale = 1f;
+        [Tooltip("Max HP of each part for this class.")]
+        public PlaneDurability durability;
+
+        [Header("Loadout")]
+        [Tooltip("Machine gun tuning for this class. Every class carries guns.")]
+        public GunStats guns;
+        [Tooltip("Rocket tuning for this class. Empty = the class carries no rockets.")]
+        public RocketStats rockets;
+        [Tooltip("Homing missile tuning for this class. Empty = the class carries no missiles.")]
+        public MissileStats missiles;
+        [Tooltip("Bomb tuning for this class. Empty = the class carries no bombs.")]
+        public BombStats bombs;
+
+        [Header("Ability")]
+        [Tooltip("The class's special ability. Empty = none.")]
+        public AbilityStats ability;
 
         [Header("Speed (m/s)")]
         [Tooltip("Speed at zero throttle.")]
@@ -79,6 +101,12 @@ namespace WingingIt.Flight
         public float stallSpeed = 32f;
         public float noseDropRate = 30f;
 
+        [Header("Damage")]
+        [Tooltip("Speed lost per second in level flight with a dead engine. Diving gently holds speed (a glide).")]
+        public float glideDeceleration = 3f;
+        [Tooltip("Sink speed (m/s) with all lift lost to damage. Lost wings sink the plane toward a fraction of this.")]
+        public float damageSinkSpeed = 25f;
+
         [Header("Boost")]
         public float boostMultiplier = 1.5f;
         public float boostAcceleration = 45f;
@@ -104,9 +132,12 @@ namespace WingingIt.Flight
             FlightStat.Thrust => 1f,
             FlightStat.Lift => 1f,
             FlightStat.Climb => 1f,
-            FlightStat.AutoLevel => 1f,
+            FlightStat.RollStability => 1f,
+            FlightStat.PitchStability => 1f,
             FlightStat.RollBias => 0f,
-            FlightStat.Wobble => 0f,
+            FlightStat.PitchWobble => 0f,
+            FlightStat.YawWobble => 0f,
+            FlightStat.EngineSputter => 0f,
             _ => 0f,
         };
     }

@@ -38,6 +38,11 @@ namespace WingingIt.CameraSystem
         [SerializeField] float stickLookSpeed = 160f;
         [SerializeField] float freeLookReturnSpeed = 5f;
 
+        [Header("Death cam")]
+        [Tooltip("While dead, the camera eases back to this multiple of the chase offset to frame the explosion.")]
+        [SerializeField] float deathPullback = 3f;
+        [SerializeField] float deathPullbackSpeed = 1.2f;
+
         [Header("Field of view")]
         [SerializeField] float baseFov = 60f;
         [SerializeField] float topSpeedFov = 68f;
@@ -49,6 +54,7 @@ namespace WingingIt.CameraSystem
         Quaternion _chaseRotation = Quaternion.identity;
         Vector2 _stickLook;
         float _fov;
+        float _deathBlend; // 0 = chase framing, 1 = fully pulled back
 
         public PlaneController Target => target;
         public bool MouseAimMode { get; set; }
@@ -122,6 +128,7 @@ namespace WingingIt.CameraSystem
             GetYawPitch(target.transform.forward, out _aimYaw, out _aimPitch);
             _chaseRotation = Quaternion.LookRotation(target.transform.forward, Vector3.up);
             _lookYaw = _lookPitch = 0f;
+            _deathBlend = 0f;
         }
 
         static void GetYawPitch(Vector3 forward, out float yaw, out float pitch)
@@ -161,7 +168,10 @@ namespace WingingIt.CameraSystem
             Quaternion baseView = MouseAimMode ? AimRotation : _chaseRotation;
             Quaternion view = baseView * Quaternion.Euler(-_lookPitch, _lookYaw, 0f);
 
-            float scale = target.Stats != null ? target.Stats.visualScale : 1f;
+            // The dead plane's transform stays where it died, so the camera holds on the explosion and backs away.
+            float deathTarget = target.IsAlive ? 0f : 1f;
+            _deathBlend = Mathf.Lerp(_deathBlend, deathTarget, 1f - Mathf.Exp(-deathPullbackSpeed * dt));
+            float scale = (target.Stats != null ? target.Stats.visualScale : 1f) * Mathf.Lerp(1f, deathPullback, _deathBlend);
             Vector3 pivot = plane.position;
             Vector3 camPos = pivot + view * (offset * scale);
             Vector3 lookPoint = pivot + view * Vector3.forward * lookAheadDistance;

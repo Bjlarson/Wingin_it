@@ -1,7 +1,7 @@
 # Flight Model
 
 Status: Draft
-Last updated: 2026-10-14
+Last updated: 2026-10-15
 
 ## Summary
 
@@ -67,23 +67,42 @@ Planes take **per-part damage**, and losing a part changes the handling until th
 | Lift multiplier | Lost wing(s) |
 | Pitch authority + pitch wobble | Lost horizontal stabilizer |
 | Yaw authority + yaw wobble | Lost vertical stabilizer |
-| Auto-stabilization strength | Lost wing / stabilizer weakens or disables it |
+| Roll / pitch auto-stabilization strength | Lost wing / stabilizer weakens or disables it |
 | Thrust | Lost engine = 0 (glide) |
 | Top speed / climb | Body damage state |
 
 Implement these as a **modifier stack** on the base class stats so effects combine cleanly and can be synced from the server as a compact part-state bitmask.
 
+Implemented via `PartFlightEffects`; current values are in [health-and-damage.md](health-and-damage.md#effects-of-losing-parts). Lift lost to damage settles into a steady sink rather than the free fall of a stall, so a pilot can hold the nose up to fly against it. A dead engine uses a low glide drag instead of the normal deceleration.
+
 Tuning target: one wing missing should be **way harder** but survivable for a focused player. Constant counter-steering on one side is the feel to aim for.
+
+## Spawning
+
+**Decided (2026-10-15):** each level picks its spawn mode with a `LevelSettings` object in the scene (no object = Air).
+
+| Mode | Where you appear | Use it for |
+|---|---|---|
+| **Air** | 300 m up on the home airfield's approach, at cruise speed, gear up | Fast modes: straight back into the fight. The FlightTest scene uses this |
+| **Runway** | Parked at the runway threshold, gear locked, engine idle, brake on | Slower or more immersive modes: throttle up, roll, pull up at flying speed |
+
+- The mode covers respawns at an airfield and, in Runway levels, the player's first spawn. A plane with its own spawn point (the test drones) always air-spawns there.
+- **Takeoff slots:** a runway spawn takes the first free one of 9 slots: rows of three side by side (center, 13 m left, 13 m right), each row 50 m further down the runway. A slot is taken when another live plane is within 10 m of it.
+- A runway-spawned plane **stays parked** at idle. The auto-brake only taxis planes that have landed to the repair zone.
+- Takeoff is the same as after a repair: throttle up (W) or boost, then pitch up once at stall speed. The gear retracts above 35 m.
+- **Touch:** touch has no throttle control and auto-throttle idles while the gear is locked. Boosting on the wheels starts a *takeoff run*, which holds auto-throttle at cruise until the gear is up, so the plane doesn't fall back to idle on the climb-out. This also fixes the touch takeoff after a repair.
+- Debug HUD: "READY FOR TAKEOFF" while parked after a runway spawn. Dev key **N** flips the level between Air and Runway and respawns you with the new mode.
+- Open for later: a match-start group takeoff for Teams (Phase 6) can reuse the Runway mode and the slots.
 
 ## Edge Cases
 
 - Map boundary: **soft turn-back** plus a warning. An autopilot takes over outside the radius (implemented).
 - Ceiling altitude: **yes**, 1500 m in the test scene; above it the nose is pushed down.
 - Flying upside down: auto-level rolls the plane upright only when roll input is released.
-- Takeoff: does a plane spawn already in the air or on the runway?
+- Takeoff: **set per level** (see [Spawning](#spawning) below).
 
 ## Open Questions
 
 - [x] Is there a yaw (rudder) control? **Yes**: Q/E (D-pad on gamepad); mouse-aim uses it automatically
 - [x] Is terrain collision instant death or heavy damage? **Instant crash** for now (2026-10-14)
-- [ ] Spawn on the runway (taxi and take off) or air-spawn above the airfield? (Proposed: air-spawn for speed, with runway takeoff as an option after a repair.)
+- [x] Spawn on the runway or air-spawn above the airfield? **Both, chosen per level** (2026-10-15), so different game modes can play differently. After a repair you always take off from the runway

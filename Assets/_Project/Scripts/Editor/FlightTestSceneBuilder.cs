@@ -20,21 +20,28 @@ using WingingIt.World;
 namespace WingingIt.Editor
 {
     /// <summary>
-    /// Generates the Phase 1 greybox: class stat assets, materials, the modular placeholder plane
-    /// prefab, and the FlightTest scene. Stat assets and materials are only created if missing,
+    /// Generates the greybox: class stat, durability and gun assets, materials, the modular placeholder plane
+    /// prefab, and the FlightTest scene. Those assets and materials are only created if missing,
     /// so tuning survives a rebuild; the prefab and scene are regenerated every time.
     /// </summary>
     public static class FlightTestSceneBuilder
     {
-        const string Root = "Assets/_Project";
+        internal const string Root = "Assets/_Project";
         const string ScenePath = Root + "/Scenes/FlightTest.unity";
-        const string PrefabPath = Root + "/Prefabs/Plane.prefab";
+        internal const string PrefabPath = Root + "/Prefabs/Plane.prefab";
+        internal const string AirfieldPrefabPath = Root + "/Prefabs/Airfield.prefab";
         const string StatsFolder = Root + "/ScriptableObjects/FlightStats";
-        const string MaterialsFolder = Root + "/Art/Materials";
-        const string TexturesFolder = Root + "/Art/Textures";
+        const string DurabilityFolder = Root + "/ScriptableObjects/Durability";
+        const string WeaponsFolder = Root + "/ScriptableObjects/Weapons";
+        const string AbilitiesFolder = Root + "/ScriptableObjects/Abilities";
+        internal const string MaterialsFolder = Root + "/Art/Materials";
+        internal const string TexturesFolder = Root + "/Art/Textures";
         const string InputActionsPath = Root + "/Settings/FlightControls.inputactions";
 
-        static readonly Vector3 SpawnPosition = new Vector3(0f, 300f, -1600f);
+        // The home airfield sits south of the action; its air spawn is 300 m up on the approach.
+        static readonly Vector3 AirfieldPosition = new Vector3(0f, 0f, -1350f);
+        static readonly Vector2 RunwaySize = new Vector2(40f, 600f);
+        static readonly Vector3 AirSpawnLocal = new Vector3(0f, 300f, -250f);
         const float BoundaryRadius = 2800f;
         const float Ceiling = 1500f;
 
@@ -42,7 +49,7 @@ namespace WingingIt.Editor
         static void BuildFromMenu()
         {
             if (File.Exists(ScenePath) && !EditorUtility.DisplayDialog("Rebuild Flight Test",
-                    $"This regenerates {ScenePath} and {PrefabPath}. Flight stat assets and materials are kept.",
+                    $"This regenerates {ScenePath}, {PrefabPath} and {AirfieldPrefabPath}. Flight stat assets and materials are kept.",
                     "Rebuild", "Cancel"))
                 return;
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
@@ -68,6 +75,9 @@ namespace WingingIt.Editor
         public static void BuildAll()
         {
             EnsureFolder(StatsFolder);
+            EnsureFolder(DurabilityFolder);
+            EnsureFolder(WeaponsFolder);
+            EnsureFolder(AbilitiesFolder);
             EnsureFolder(MaterialsFolder);
             EnsureFolder(TexturesFolder);
             EnsureFolder(Root + "/Prefabs");
@@ -76,16 +86,22 @@ namespace WingingIt.Editor
             var classes = CreateClassStats();
             var mats = new Materials();
             var planePrefab = BuildPlanePrefab(classes[0], mats);
-            BuildScene(planePrefab, classes, mats);
+            var airfieldPrefab = BuildAirfieldPrefab(mats, WeaponAsset<AAStats>("AAGuns"));
+            BuildScene(planePrefab, airfieldPrefab, classes, mats);
             AssetDatabase.SaveAssets();
             Debug.Log($"[Winging It] Built {ScenePath}");
         }
 
         // ------------------------------------------------------------------ class stats
 
-        static FlightStats[] CreateClassStats()
+        internal static FlightStats[] CreateClassStats()
         {
-            return new[]
+            // One shared tuning per weapon for now; each class links only the weapons it carries (see ApplyLoadout).
+            var guns = WeaponAsset<GunStats>("MachineGuns");
+            var rockets = WeaponAsset<RocketStats>("Rockets");
+            var missiles = WeaponAsset<MissileStats>("Missiles");
+            var bombs = WeaponAsset<BombStats>("Bombs");
+            var classes = new[]
             {
                 StatsAsset("Fighter", s =>
                 {
@@ -95,7 +111,7 @@ namespace WingingIt.Editor
                     s.pitchRate = 85f; s.rollRate = 190f; s.yawRate = 35f; s.bankTurnRate = 50f; s.responsiveness = 6f;
                     s.grip = 4f; s.stallSpeed = 32f;
                     s.boostMultiplier = 1.5f; s.boostAcceleration = 45f; s.boostDuration = 3f; s.boostRechargeTime = 6f;
-                }),
+                }, (body: 100f, wing: 45f, hStab: 30f, vStab: 30f, engine: 50f)),
                 StatsAsset("Interceptor", s =>
                 {
                     s.bodyColor = new Color(0.90f, 0.32f, 0.25f);
@@ -104,7 +120,7 @@ namespace WingingIt.Editor
                     s.pitchRate = 70f; s.rollRate = 230f; s.yawRate = 30f; s.bankTurnRate = 42f; s.responsiveness = 7f;
                     s.grip = 3.2f; s.stallSpeed = 40f;
                     s.boostMultiplier = 1.6f; s.boostAcceleration = 60f; s.boostDuration = 3.5f; s.boostRechargeTime = 7f;
-                }),
+                }, (body: 75f, wing: 34f, hStab: 22f, vStab: 22f, engine: 38f)),
                 StatsAsset("Heavy Fighter", s =>
                 {
                     s.bodyColor = new Color(0.47f, 0.56f, 0.32f);
@@ -113,7 +129,7 @@ namespace WingingIt.Editor
                     s.pitchRate = 55f; s.rollRate = 110f; s.yawRate = 25f; s.bankTurnRate = 36f; s.responsiveness = 3.5f;
                     s.autoLevelRoll = 1.8f; s.gravityInfluence = 18f; s.grip = 3f; s.stallSpeed = 28f;
                     s.boostMultiplier = 1.35f; s.boostAcceleration = 30f; s.boostDuration = 2.5f; s.boostRechargeTime = 7f;
-                }),
+                }, (body: 160f, wing: 70f, hStab: 45f, vStab: 45f, engine: 80f)),
                 StatsAsset("Support", s =>
                 {
                     s.bodyColor = new Color(0.95f, 0.80f, 0.30f);
@@ -122,45 +138,164 @@ namespace WingingIt.Editor
                     s.pitchRate = 78f; s.rollRate = 170f; s.yawRate = 35f; s.bankTurnRate = 48f; s.responsiveness = 5.5f;
                     s.grip = 4f; s.stallSpeed = 30f;
                     s.boostMultiplier = 1.4f; s.boostAcceleration = 40f; s.boostDuration = 3f; s.boostRechargeTime = 6f;
-                }),
+                }, (body: 110f, wing: 45f, hStab: 30f, vStab: 30f, engine: 55f)),
             };
+
+            // Per-class loadouts (aircraft-classes.md), enforced on every build.
+            ApplyLoadout(classes[0], guns, rockets, missiles, bombs, hasRockets: false, hasMissiles: true, hasBombs: false);  // Fighter
+            ApplyLoadout(classes[1], guns, rockets, missiles, bombs, hasRockets: false, hasMissiles: true, hasBombs: false);  // Interceptor
+            ApplyLoadout(classes[2], guns, rockets, missiles, bombs, hasRockets: true, hasMissiles: false, hasBombs: true);   // Heavy Fighter
+            ApplyLoadout(classes[3], guns, rockets, missiles, bombs, hasRockets: true, hasMissiles: false, hasBombs: false);  // Support
+
+            // One ability per class (aircraft-classes.md).
+            ApplyAbility<BarrelRollAbility>(classes[0], "BarrelRoll");
+            ApplyAbility<AfterburnerAbility>(classes[1], "Afterburner");
+            ApplyAbility<ArmorShieldAbility>(classes[2], "ArmorShield");
+            ApplyAbility<RepairAuraAbility>(classes[3], "RepairAura");
+            return classes;
         }
 
-        static FlightStats StatsAsset(string displayName, System.Action<FlightStats> setup)
+        /// <summary>
+        /// Empties the weapon slots a class doesn't carry and fills the ones it does with the shared asset,
+        /// keeping a class-specific asset if one is already linked.
+        /// </summary>
+        static void ApplyLoadout(FlightStats stats, GunStats guns, RocketStats rockets, MissileStats missiles, BombStats bombs,
+            bool hasRockets, bool hasMissiles, bool hasBombs)
         {
-            string path = $"{StatsFolder}/{displayName.Replace(" ", "")}.asset";
-            var existing = AssetDatabase.LoadAssetAtPath<FlightStats>(path);
+            stats.guns = stats.guns != null ? stats.guns : guns; // every class
+            stats.rockets = !hasRockets ? null : stats.rockets != null ? stats.rockets : rockets;
+            stats.missiles = !hasMissiles ? null : stats.missiles != null ? stats.missiles : missiles;
+            stats.bombs = !hasBombs ? null : stats.bombs != null ? stats.bombs : bombs;
+            EditorUtility.SetDirty(stats);
+        }
+
+        /// <summary>Links the class's ability, keeping a hand-picked asset of the right kind.</summary>
+        static void ApplyAbility<T>(FlightStats stats, string fileName) where T : AbilityStats
+        {
+            if (stats.ability is not T)
+                stats.ability = TuningAsset<T>(AbilitiesFolder, fileName);
+            EditorUtility.SetDirty(stats);
+        }
+
+        internal static T WeaponAsset<T>(string fileName) where T : ScriptableObject => TuningAsset<T>(WeaponsFolder, fileName);
+
+        static T TuningAsset<T>(string folder, string fileName) where T : ScriptableObject
+        {
+            string path = $"{folder}/{fileName}.asset";
+            var existing = AssetDatabase.LoadAssetAtPath<T>(path);
+            if (existing != null)
+                return existing; // keep hand tuning
+            var asset = ScriptableObject.CreateInstance<T>();
+            AssetDatabase.CreateAsset(asset, path);
+            return asset;
+        }
+
+        static FlightStats StatsAsset(string displayName, System.Action<FlightStats> setup,
+            (float body, float wing, float hStab, float vStab, float engine) hp)
+        {
+            string fileName = displayName.Replace(" ", "");
+            string path = $"{StatsFolder}/{fileName}.asset";
+            var stats = AssetDatabase.LoadAssetAtPath<FlightStats>(path); // keep hand tuning
+            if (stats == null)
+            {
+                stats = ScriptableObject.CreateInstance<FlightStats>();
+                stats.displayName = displayName;
+                setup(stats);
+                AssetDatabase.CreateAsset(stats, path);
+            }
+
+            if (stats.durability == null)
+            {
+                stats.durability = DurabilityAsset(fileName, hp);
+                EditorUtility.SetDirty(stats);
+            }
+            return stats;
+        }
+
+        static PlaneDurability DurabilityAsset(string fileName,
+            (float body, float wing, float hStab, float vStab, float engine) hp)
+        {
+            string path = $"{DurabilityFolder}/{fileName}.asset";
+            var existing = AssetDatabase.LoadAssetAtPath<PlaneDurability>(path);
             if (existing != null)
                 return existing; // keep hand tuning
 
-            var stats = ScriptableObject.CreateInstance<FlightStats>();
-            stats.displayName = displayName;
-            setup(stats);
-            AssetDatabase.CreateAsset(stats, path);
-            return stats;
+            var d = ScriptableObject.CreateInstance<PlaneDurability>();
+            d.body = hp.body;
+            d.wing = hp.wing;
+            d.horizontalStabilizer = hp.hStab;
+            d.verticalStabilizer = hp.vStab;
+            d.engine = hp.engine;
+            AssetDatabase.CreateAsset(d, path);
+            return d;
         }
 
         // ------------------------------------------------------------------ materials
 
-        class Materials
+        internal class Materials
         {
-            public readonly Material Ground, Runway, Concrete, ConcreteDark, Mountain, Ring, PlaneBody, PlaneDark, Glass;
+            public readonly Material Ground, Runway, Marking, RepairMarking, Concrete, ConcreteDark, Mountain, Ring, Target, PlaneBody, PlaneDark, Glass, Tracer, FlakTracer, Smoke, Ember, Shield;
 
             public Materials()
             {
                 var checker = CheckerTexture();
                 Ground = Mat("Greybox_Ground", new Color(0.55f, 0.72f, 0.45f), checker, new Vector2(35f, 35f));
                 Runway = Mat("Greybox_Runway", new Color(0.3f, 0.3f, 0.32f));
+                Marking = UnlitMat("Greybox_RunwayMarking", new Color(0.92f, 0.92f, 0.9f));
+                RepairMarking = UnlitMat("Greybox_RepairMarking", new Color(1f, 0.78f, 0.1f));
                 Concrete = Mat("Greybox_Concrete", new Color(0.78f, 0.78f, 0.80f), checker, new Vector2(1f, 3f));
                 ConcreteDark = Mat("Greybox_ConcreteDark", new Color(0.55f, 0.57f, 0.62f), checker, new Vector2(1f, 3f));
                 Mountain = Mat("Greybox_Mountain", new Color(0.62f, 0.55f, 0.45f), checker, new Vector2(6f, 6f));
                 Ring = Mat("Greybox_Ring", Color.white);
+                Target = Mat("Greybox_Target", new Color(0.45f, 0.5f, 0.33f));
                 PlaneBody = Mat("Placeholder_PlaneBody", Color.white);
                 PlaneDark = Mat("Placeholder_PlaneDark", new Color(0.2f, 0.2f, 0.22f));
                 Glass = Mat("Placeholder_PlaneGlass", new Color(0.35f, 0.65f, 0.9f), smoothness: 0.9f);
+                Tracer = UnlitMat("FX_Tracer", new Color(1f, 0.82f, 0.35f));
+                FlakTracer = UnlitMat("FX_FlakTracer", new Color(1f, 0.32f, 0.18f));
+                Smoke = UnlitMat("FX_Smoke", new Color(0.32f, 0.32f, 0.34f));
+                Ember = UnlitMat("FX_Ember", new Color(1f, 0.45f, 0.1f));
+                Shield = TransparentUnlitMat("FX_Shield", new Color(0.45f, 0.75f, 1f, 0.3f));
             }
 
-            static Material Mat(string name, Color color, Texture2D texture = null, Vector2? tiling = null, float smoothness = 0.15f)
+            /// <summary>Alpha-blended unlit, for the shield bubble and the repair aura (tinted per use).</summary>
+            static Material TransparentUnlitMat(string name, Color color)
+            {
+                string path = $"{MaterialsFolder}/{name}.mat";
+                var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+                if (mat != null)
+                    return mat;
+
+                mat = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+                mat.SetColor("_BaseColor", color);
+                mat.SetFloat("_Surface", 1f); // transparent
+                mat.SetFloat("_Blend", 0f);   // alpha
+                mat.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                mat.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                mat.SetFloat("_ZWrite", 0f);
+                mat.SetOverrideTag("RenderType", "Transparent");
+                mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+                mat.enableInstancing = true;
+                AssetDatabase.CreateAsset(mat, path);
+                return mat;
+            }
+
+            internal static Material UnlitMat(string name, Color color)
+            {
+                string path = $"{MaterialsFolder}/{name}.mat";
+                var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+                if (mat != null)
+                    return mat;
+
+                mat = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+                mat.SetColor("_BaseColor", color);
+                mat.enableInstancing = true;
+                AssetDatabase.CreateAsset(mat, path);
+                return mat;
+            }
+
+            internal static Material Mat(string name, Color color, Texture2D texture = null, Vector2? tiling = null, float smoothness = 0.15f)
             {
                 string path = $"{MaterialsFolder}/{name}.mat";
                 var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
@@ -180,22 +315,41 @@ namespace WingingIt.Editor
                 return mat;
             }
 
-            static Texture2D CheckerTexture()
+            /// <summary>The URP terrain material (terrain layers carry the colors).</summary>
+            internal static Material TerrainMat(string name)
             {
-                string path = $"{TexturesFolder}/Greybox_Checker.png";
+                string path = $"{MaterialsFolder}/{name}.mat";
+                var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+                if (mat != null)
+                    return mat;
+
+                mat = new Material(Shader.Find("Universal Render Pipeline/Terrain/Lit"));
+                AssetDatabase.CreateAsset(mat, path);
+                return mat;
+            }
+
+            internal static Texture2D CheckerTexture() => TintedChecker("Greybox_Checker", Color.white);
+
+            /// <summary>
+            /// The greybox checker (8 × 8 cells with grid lines) multiplied by <paramref name="tint"/>. With
+            /// <paramref name="matteAlpha"/> it gets a zero alpha channel: terrain layers read it as smoothness.
+            /// </summary>
+            internal static Texture2D TintedChecker(string name, Color tint, bool matteAlpha = false)
+            {
+                string path = $"{TexturesFolder}/{name}.png";
                 var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
                 if (tex != null)
                     return tex;
 
                 const int size = 256, cells = 8;
-                var t = new Texture2D(size, size, TextureFormat.RGB24, false);
+                var t = new Texture2D(size, size, matteAlpha ? TextureFormat.RGBA32 : TextureFormat.RGB24, false);
                 for (int y = 0; y < size; y++)
                 for (int x = 0; x < size; x++)
                 {
                     bool odd = ((x / (size / cells)) + (y / (size / cells))) % 2 == 1;
                     bool line = x % (size / cells) == 0 || y % (size / cells) == 0;
                     float v = line ? 0.7f : odd ? 0.88f : 1f;
-                    t.SetPixel(x, y, new Color(v, v, v));
+                    t.SetPixel(x, y, new Color(v * tint.r, v * tint.g, v * tint.b, matteAlpha ? 0f : 1f));
                 }
                 File.WriteAllBytes(path, t.EncodeToPNG());
                 Object.DestroyImmediate(t);
@@ -240,10 +394,36 @@ namespace WingingIt.Editor
             var wingR = Part("WingRight", PlanePartType.WingRight, model, new Vector3(2.65f, 0f, 0.4f));
             tinted.Add(Box("Wing", wingR, Vector3.zero, new Vector3(4f, 0.22f, 1.9f), m.PlaneBody, true));
 
-            // Tail
-            var tail = Part("Tail", PlanePartType.Tail, model, new Vector3(0f, 0f, -3.3f));
-            tinted.Add(Box("HorizontalStabilizer", tail, new Vector3(0f, 0.2f, 0f), new Vector3(3.8f, 0.18f, 1.1f), m.PlaneBody, true));
-            tinted.Add(Box("VerticalFin", tail, new Vector3(0f, 1.0f, -0.05f), new Vector3(0.18f, 1.7f, 1.2f), m.PlaneBody, true));
+            // Two guns per wing, so losing a wing halves the firepower.
+            var muzzles = new List<Transform>();
+            foreach (var wing in new[] { wingL, wingR })
+            foreach (float x in new[] { -0.55f, 0.55f })
+                muzzles.Add(Gun(wing, new Vector3(x, 0f, 0.95f), m));
+
+            // One rocket rail under each wing, outboard of the guns; a lost wing loses its rockets too.
+            var rails = new List<Transform>();
+            rails.Add(RocketRail(wingL, new Vector3(-1.3f, -0.3f, 0.1f), m));
+            rails.Add(RocketRail(wingR, new Vector3(1.3f, -0.3f, 0.1f), m));
+
+            // Missile pylon under the fuselage: the body never detaches, so missiles survive a lost wing.
+            var missilePylon = MissilePylon(body, m);
+
+            // Bomb bay behind the missile pylon, also on the body.
+            var bombBay = BombBay(body, m);
+
+            // Tail: horizontal and vertical stabilizers break off separately
+            var hStab = Part("HorizontalStabilizer", PlanePartType.HorizontalStabilizer, model, new Vector3(0f, 0.2f, -3.3f));
+            tinted.Add(Box("Stabilizer", hStab, Vector3.zero, new Vector3(3.8f, 0.18f, 1.1f), m.PlaneBody, true));
+            var vStab = Part("VerticalStabilizer", PlanePartType.VerticalStabilizer, model, new Vector3(0f, 1.0f, -3.35f));
+            tinted.Add(Box("Fin", vStab, Vector3.zero, new Vector3(0.18f, 1.7f, 1.2f), m.PlaneBody, true));
+
+            // Stumps left on the fuselage when a part breaks off (mirrored for the right side by x sign).
+            BrokenEdge(wingL, body, m, (new Vector3(-0.85f, 0f, 0.4f), new Vector3(0.4f, 0.22f, 1.9f)));
+            BrokenEdge(wingR, body, m, (new Vector3(0.85f, 0f, 0.4f), new Vector3(0.4f, 0.22f, 1.9f)));
+            BrokenEdge(hStab, body, m,
+                (new Vector3(-0.8f, 0.2f, -3.3f), new Vector3(0.3f, 0.18f, 1.1f)),
+                (new Vector3(0.8f, 0.2f, -3.3f), new Vector3(0.3f, 0.18f, 1.1f)));
+            BrokenEdge(vStab, body, m, (new Vector3(0f, 0.8f, -3.35f), new Vector3(0.18f, 0.3f, 1.2f)));
 
             // Engine + propeller
             var engine = Part("Engine", PlanePartType.Engine, model, new Vector3(0f, 0f, 3.75f));
@@ -254,13 +434,52 @@ namespace WingingIt.Editor
             Box("Blade", prop, Vector3.zero, new Vector3(3.4f, 0.28f, 0.06f), m.PlaneDark, false);
             Box("Spinner", prop, new Vector3(0f, 0f, 0.1f), new Vector3(0.4f, 0.4f, 0.35f), m.PlaneBody, false);
 
+            // Tricycle landing gear on the body (never detaches), so a one-winged plane can still land.
+            // Mains fold inward under the fuselage, the nose wheel folds back.
+            var gearLegs = new[]
+            {
+                GearLeg("Main Gear L", body, new Vector3(-1.1f, -0.55f, 0f), 1.2f, 0.35f, new Vector3(0f, 0f, 90f), m),
+                GearLeg("Main Gear R", body, new Vector3(1.1f, -0.55f, 0f), 1.2f, 0.35f, new Vector3(0f, 0f, -90f), m),
+                GearLeg("Nose Gear", body, new Vector3(0f, -0.55f, 2.7f), 1.25f, 0.28f, new Vector3(90f, 0f, 0f), m),
+            };
+
             var visuals = root.AddComponent<PlaneVisuals>();
             SetField(visuals, "plane", controller);
+            SetGearLegs(visuals, gearLegs);
             SetField(visuals, "modelRoot", model);
             SetField(visuals, "propeller", prop);
             SetArray(visuals, "tintedRenderers", tinted.ToArray());
+            SetField(visuals, "smokeMaterial", m.Smoke);
+            SetField(visuals, "fireMaterial", m.Ember);
 
+            root.AddComponent<PlaneHealth>();
             root.AddComponent<PlaneRespawner>();
+            var repair = root.AddComponent<PlaneRepair>();
+            SetField(repair, "bubbleMaterial", m.Shield);
+            var landingGear = root.AddComponent<LandingGear>();
+            // The plane sits on the lowest wheel: pivot height + leg length + wheel radius below the origin.
+            SetFloat(landingGear, "wheelDrop", Mathf.Max(0.55f + 1.2f + 0.35f, 0.55f + 1.25f + 0.28f));
+            var guns = root.AddComponent<PlaneGuns>();
+            SetArray(guns, "muzzles", muzzles.ToArray());
+            SetField(guns, "tracerMaterial", m.Tracer);
+            var rocketLauncher = root.AddComponent<PlaneRockets>();
+            SetArray(rocketLauncher, "rails", rails.ToArray());
+            SetField(rocketLauncher, "rocketMaterial", m.PlaneDark);
+            SetField(rocketLauncher, "flameMaterial", m.Ember);
+            SetField(rocketLauncher, "smokeMaterial", m.Smoke);
+            var missileLauncher = root.AddComponent<PlaneMissiles>();
+            SetField(missileLauncher, "launchPoint", missilePylon);
+            SetField(missileLauncher, "missileMaterial", m.PlaneDark);
+            SetField(missileLauncher, "flameMaterial", m.Ember);
+            SetField(missileLauncher, "smokeMaterial", m.Smoke);
+            var bombLauncher = root.AddComponent<PlaneBombs>();
+            SetField(bombLauncher, "bombBay", bombBay);
+            SetField(bombLauncher, "bombMaterial", m.PlaneDark);
+            SetField(bombLauncher, "flameMaterial", m.Ember);
+            SetField(bombLauncher, "smokeMaterial", m.Smoke);
+            var ability = root.AddComponent<PlaneAbility>();
+            SetField(ability, "shieldMaterial", m.Shield);
+            SetField(ability, "flameMaterial", m.Ember);
 
             var prefab = PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
             Object.DestroyImmediate(root);
@@ -276,7 +495,108 @@ namespace WingingIt.Editor
             return go.transform;
         }
 
-        static Renderer Box(string name, Transform parent, Vector3 localPos, Vector3 localScale, Material mat, bool collider)
+        /// <summary>
+        /// Placeholder broken-edge cap: a dark, jagged stump with a glowing edge per stub, parented to the body
+        /// and hidden until <paramref name="part"/> breaks off. Stub positions are in body space.
+        /// </summary>
+        static void BrokenEdge(Transform part, Transform body, Materials m, params (Vector3 pos, Vector3 size)[] stubs)
+        {
+            var edge = new GameObject(part.name + " Broken Edge").transform;
+            edge.SetParent(body, false);
+            foreach (var (pos, size) in stubs)
+            {
+                // Which way the stub points out of the fuselage: the broken face is at its outer end.
+                Vector3 outward = Mathf.Abs(pos.x) > 0.01f ? new Vector3(Mathf.Sign(pos.x), 0f, 0f) : Vector3.up;
+                Vector3 tip = pos + Vector3.Scale(outward, size) * 0.5f;
+                Box("Stump", edge, pos, size, m.PlaneDark, false);
+                var jag = Box("Jag", edge, tip - Vector3.Scale(outward, size) * 0.1f + new Vector3(0f, 0f, size.z * 0.2f),
+                    Vector3.Scale(size, new Vector3(0.7f, 0.9f, 0.45f)), m.PlaneDark, false).transform;
+                jag.localRotation = Quaternion.AngleAxis(25f, outward == Vector3.up ? Vector3.right : Vector3.up);
+                Vector3 emberSize = outward == Vector3.up
+                    ? new Vector3(size.x * 1.2f, 0.06f, size.z * 0.6f)
+                    : new Vector3(0.06f, size.y * 1.2f, size.z * 0.6f);
+                Box("Ember", edge, tip - new Vector3(0f, 0f, size.z * 0.15f), emberSize, m.Ember, false);
+            }
+            edge.gameObject.SetActive(false);
+            part.GetComponent<PlanePart>().brokenEdge = edge.gameObject;
+        }
+
+        /// <summary>
+        /// A landing gear leg (strut + wheel, no colliders) hanging straight down from a pivot on the body, posed
+        /// extended. <paramref name="fold"/> is the local rotation that stows it.
+        /// </summary>
+        static PlaneVisuals.GearLeg GearLeg(string name, Transform body, Vector3 pivotPos, float length, float wheelRadius,
+            Vector3 fold, Materials m)
+        {
+            var pivot = new GameObject(name).transform;
+            pivot.SetParent(body, false);
+            pivot.localPosition = pivotPos;
+            Box("Strut", pivot, new Vector3(0f, -length * 0.5f, 0f), new Vector3(0.12f, length, 0.12f), m.PlaneDark, false);
+            Box("Wheel", pivot, new Vector3(0f, -length, 0f), new Vector3(0.22f, wheelRadius * 2f, wheelRadius * 2f), m.PlaneDark, false);
+            pivot.gameObject.SetActive(false); // starts stowed
+            return new PlaneVisuals.GearLeg { pivot = pivot, foldAngles = fold };
+        }
+
+        static void SetGearLegs(PlaneVisuals visuals, PlaneVisuals.GearLeg[] legs)
+        {
+            var so = new SerializedObject(visuals);
+            var prop = so.FindProperty("gearLegs");
+            prop.arraySize = legs.Length;
+            for (int i = 0; i < legs.Length; i++)
+            {
+                var element = prop.GetArrayElementAtIndex(i);
+                element.FindPropertyRelative("pivot").objectReferenceValue = legs[i].pivot;
+                element.FindPropertyRelative("foldAngles").vector3Value = legs[i].foldAngles;
+            }
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        /// <summary>A gun barrel poking out of the wing's leading edge; returns its muzzle.</summary>
+        static Transform Gun(Transform wing, Vector3 localPos, Materials m)
+        {
+            Box("Gun Barrel", wing, localPos, new Vector3(0.12f, 0.12f, 0.7f), m.PlaneDark, false);
+            var muzzle = new GameObject("Muzzle").transform;
+            muzzle.SetParent(wing, false);
+            muzzle.localPosition = localPos + new Vector3(0f, 0f, 0.4f);
+            return muzzle;
+        }
+
+        /// <summary>A rocket pod hanging under the wing; returns the launch point at its nose.</summary>
+        static Transform RocketRail(Transform wing, Vector3 localPos, Materials m)
+        {
+            Box("Rocket Pod", wing, localPos, new Vector3(0.3f, 0.3f, 1.4f), m.PlaneDark, false);
+            var rail = new GameObject("Rocket Rail").transform;
+            rail.SetParent(wing, false);
+            rail.localPosition = localPos + new Vector3(0f, 0f, 0.9f);
+            return rail;
+        }
+
+        /// <summary>A missile slung under the fuselage; returns the launch point just below its nose.</summary>
+        static Transform MissilePylon(Transform body, Materials m)
+        {
+            Box("Missile Pylon", body, new Vector3(0f, -0.75f, 0.3f), new Vector3(0.2f, 0.2f, 1.2f), m.PlaneDark, false);
+            Box("Slung Missile", body, new Vector3(0f, -0.95f, 0.4f), new Vector3(0.3f, 0.3f, 2.2f), m.PlaneDark, false);
+            var pylon = new GameObject("Missile Launch Point").transform;
+            pylon.SetParent(body, false);
+            pylon.localPosition = new Vector3(0f, -1.3f, 1.8f);
+            return pylon;
+        }
+
+        /// <summary>A bomb slung under the rear fuselage; returns the release point just below it.</summary>
+        static Transform BombBay(Transform body, Materials m)
+        {
+            Box("Bomb Rack", body, new Vector3(0f, -0.72f, -1.5f), new Vector3(0.25f, 0.15f, 1f), m.PlaneDark, false);
+            Box("Slung Bomb", body, new Vector3(0f, -0.95f, -1.5f), new Vector3(0.45f, 0.45f, 1.3f), m.PlaneDark, false);
+            var bay = new GameObject("Bomb Bay").transform;
+            bay.SetParent(body, false);
+            bay.localPosition = new Vector3(0f, -1.5f, -1.5f);
+            return bay;
+        }
+
+        /// <summary>Thin parts get a thicker hitbox than their mesh so they're hittable edge-on.</summary>
+        const float MinHitboxThickness = 0.6f;
+
+        internal static Renderer Box(string name, Transform parent, Vector3 localPos, Vector3 localScale, Material mat, bool collider)
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
             go.name = name;
@@ -284,33 +604,150 @@ namespace WingingIt.Editor
             go.transform.localPosition = localPos;
             go.transform.localScale = localScale;
             if (!collider)
+            {
                 Object.DestroyImmediate(go.GetComponent<Collider>());
+            }
+            else
+            {
+                var box = go.GetComponent<BoxCollider>();
+                box.size = new Vector3(
+                    Mathf.Max(1f, MinHitboxThickness / localScale.x),
+                    Mathf.Max(1f, MinHitboxThickness / localScale.y),
+                    Mathf.Max(1f, MinHitboxThickness / localScale.z));
+            }
             var r = go.GetComponent<Renderer>();
             r.sharedMaterial = mat;
             return r;
         }
 
+        // ------------------------------------------------------------------ airfield prefab
+
+        /// <summary>
+        /// A greybox airfield: runway along +Z with painted markings, a repair zone on its far half, a control tower,
+        /// a hangar and a windsock off to the right, air + runway spawn points on the approach end, and four AA guns
+        /// around the runway (armed only while it's a home airfield).
+        /// </summary>
+        static GameObject BuildAirfieldPrefab(Materials m, AAStats aaStats)
+        {
+            var root = new GameObject("Airfield");
+            float halfLength = RunwaySize.y * 0.5f, halfWidth = RunwaySize.x * 0.5f;
+            const float surface = 0.1f, paint = surface + 0.01f, paintThickness = 0.02f;
+
+            // Runway slab: a plain collider (no hitbox thickening) so its top is exactly the surface.
+            var runway = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            runway.name = "Runway";
+            runway.transform.SetParent(root.transform, false);
+            runway.transform.localPosition = new Vector3(0f, surface * 0.5f, 0f);
+            runway.transform.localScale = new Vector3(RunwaySize.x, surface, RunwaySize.y);
+            runway.GetComponent<Renderer>().sharedMaterial = m.Runway;
+
+            var markings = new GameObject("Markings").transform;
+            markings.SetParent(root.transform, false);
+            for (float z = -halfLength + 60f; z <= halfLength - 60f; z += 30f)
+                Box("Centerline", markings, new Vector3(0f, paint, z), new Vector3(0.9f, paintThickness, 15f), m.Marking, false);
+            foreach (float side in new[] { -1f, 1f })
+            {
+                Box("Edge Line", markings, new Vector3(side * (halfWidth - 1f), paint, 0f), new Vector3(0.6f, paintThickness, RunwaySize.y - 4f), m.Marking, false);
+                // Threshold "piano keys" at both ends.
+                for (int i = 0; i < 4; i++)
+                {
+                    float x = side * (3.5f + i * 4f);
+                    Box("Threshold", markings, new Vector3(x, paint, -halfLength + 22f), new Vector3(2f, paintThickness, 30f), m.Marking, false);
+                    Box("Threshold", markings, new Vector3(x, paint, halfLength - 22f), new Vector3(2f, paintThickness, 30f), m.Marking, false);
+                }
+            }
+
+            // Repair zone on the far half: land, roll out, stop inside the yellow box.
+            var zoneSize = new Vector2(RunwaySize.x - 10f, 200f);
+            var zone = new GameObject("Repair Zone").AddComponent<RepairZone>();
+            zone.transform.SetParent(root.transform, false);
+            zone.transform.localPosition = new Vector3(0f, surface, 140f);
+            zone.Configure(zoneSize, 8f);
+            const float line = 1.5f, zonePaint = 0.02f;
+            foreach (float side in new[] { -0.5f, 0.5f })
+            {
+                Box("Zone Border", zone.transform, new Vector3(side * zoneSize.x, zonePaint, 0f), new Vector3(line, paintThickness, zoneSize.y), m.RepairMarking, false);
+                Box("Zone Border", zone.transform, new Vector3(0f, zonePaint, side * zoneSize.y), new Vector3(zoneSize.x, paintThickness, line), m.RepairMarking, false);
+            }
+            // A big cross in the middle, readable from the air.
+            Box("Zone Cross", zone.transform, new Vector3(0f, zonePaint, 0f), new Vector3(4f, paintThickness, 24f), m.RepairMarking, false);
+            Box("Zone Cross", zone.transform, new Vector3(0f, zonePaint, 0f), new Vector3(16f, paintThickness, 4f), m.RepairMarking, false);
+
+            // Buildings off the right side of the runway. Solid: flying into them is a crash.
+            var buildings = new GameObject("Buildings").transform;
+            buildings.SetParent(root.transform, false);
+            Box("Hangar", buildings, new Vector3(halfWidth + 55f, 7f, -40f), new Vector3(40f, 14f, 32f), m.Concrete, true);
+            Box("Control Tower", buildings, new Vector3(halfWidth + 45f, 11f, 120f), new Vector3(8f, 22f, 8f), m.ConcreteDark, true);
+            Box("Tower Cab", buildings, new Vector3(halfWidth + 45f, 24f, 120f), new Vector3(11f, 4f, 11f), m.Glass, true);
+            Box("Windsock Pole", buildings, new Vector3(halfWidth + 15f, 5f, -halfLength + 60f), new Vector3(0.4f, 10f, 0.4f), m.PlaneDark, false);
+            Box("Windsock", buildings, new Vector3(halfWidth + 15f, 9.6f, -halfLength + 62f), new Vector3(1f, 1f, 4f), m.Ember, false);
+
+            var air = new GameObject("Air Spawn").transform;
+            air.SetParent(root.transform, false);
+            air.localPosition = AirSpawnLocal;
+            var ground = new GameObject("Runway Spawn").transform;
+            ground.SetParent(root.transform, false);
+            ground.localPosition = new Vector3(0f, surface + 3f, -halfLength + 30f);
+
+            // AA guns at the corners, well clear of the runway and the buildings.
+            var aa = new GameObject("AA Guns").transform;
+            aa.SetParent(root.transform, false);
+            var heads = new List<Transform>();
+            int n = 1;
+            foreach (float z in new[] { -halfLength + 80f, halfLength - 80f })
+                foreach (float x in new[] { -halfWidth - 50f, halfWidth + 90f })
+                    heads.Add(AAGunTurret(aa, $"AA Gun {n++}", new Vector3(x, 0f, z), aaStats, m));
+
+            root.AddComponent<Airfield>().Configure("Home Airfield", 0, true, RunwaySize, air, ground, zone);
+
+            foreach (var t in root.GetComponentsInChildren<Transform>())
+                t.gameObject.isStatic = true;
+            foreach (var head in heads) // turret heads turn
+                foreach (var t in head.GetComponentsInChildren<Transform>())
+                    t.gameObject.isStatic = false;
+
+            var prefab = PrefabUtility.SaveAsPrefabAsset(root, AirfieldPrefabPath);
+            Object.DestroyImmediate(root);
+            return prefab;
+        }
+
+        /// <summary>A sandbagged twin-barrel AA turret. Returns its head (the part that turns).</summary>
+        static Transform AAGunTurret(Transform parent, string name, Vector3 localPos, AAStats stats, Materials m)
+        {
+            var root = new GameObject(name).transform;
+            root.SetParent(parent, false);
+            root.localPosition = localPos;
+            Box("Sandbags", root, new Vector3(0f, 0.6f, 0f), new Vector3(7f, 1.2f, 7f), m.Target, true);
+            Box("Base", root, new Vector3(0f, 1.8f, 0f), new Vector3(2.4f, 1.2f, 2.4f), m.PlaneDark, true);
+            var head = new GameObject("Head").transform;
+            head.SetParent(root, false);
+            head.localPosition = new Vector3(0f, 3f, 0f);
+            Box("Mount", head, Vector3.zero, new Vector3(2.2f, 1.4f, 2.2f), m.PlaneDark, false);
+            foreach (float side in new[] { -0.45f, 0.45f })
+                Box("Barrel", head, new Vector3(side, 0.2f, 2.4f), new Vector3(0.25f, 0.25f, 3.6f), m.PlaneDark, false);
+            var muzzle = new GameObject("Muzzle").transform;
+            muzzle.SetParent(head, false);
+            muzzle.localPosition = new Vector3(0f, 0.2f, 4.3f);
+            root.gameObject.AddComponent<AAGun>().Configure(stats, head, muzzle, m.FlakTracer);
+            return head;
+        }
+
         // ------------------------------------------------------------------ scene
 
-        static void BuildScene(GameObject planePrefab, FlightStats[] classes, Materials m)
+        static void BuildScene(GameObject planePrefab, GameObject airfieldPrefab, FlightStats[] classes, Materials m)
         {
             var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
 
-            // Lighting & atmosphere
-            var sun = Object.FindAnyObjectByType<Light>();
-            sun.transform.rotation = Quaternion.Euler(48f, -35f, 0f);
-            sun.intensity = 1.4f;
-            sun.shadows = LightShadows.Soft;
-            RenderSettings.fog = true;
-            RenderSettings.fogMode = FogMode.Linear;
-            RenderSettings.fogColor = new Color(0.72f, 0.82f, 0.92f);
-            RenderSettings.fogStartDistance = 900f;
-            RenderSettings.fogEndDistance = 6000f;
+            SetUpAtmosphere(900f, 6000f);
+
+            // Per-level rules. The test range air-spawns; dev key N flips it to runway takeoffs at runtime.
+            new GameObject("Level Settings").AddComponent<LevelSettings>().SpawnMode = SpawnMode.Air;
 
             var world = new GameObject("World").transform;
             BuildGround(world, m);
             var ringPoints = BuildRings(world, m);
-            BuildTowers(world, m, ringPoints);
+            var targetSite = BuildGroundTargets(world, m);
+            BuildTowers(world, m, ringPoints, targetSite);
             BuildMountains(world, m);
 
             var boundary = new GameObject("Flight Boundary").AddComponent<FlightBoundary>();
@@ -318,16 +755,47 @@ namespace WingingIt.Editor
             boundary.radius = BoundaryRadius;
             boundary.ceiling = Ceiling;
 
-            var spawn = new GameObject("Spawn Point").transform;
-            spawn.SetPositionAndRotation(SpawnPosition, Quaternion.identity);
+            // Home airfield for the player's team (0). The player has no spawn point of its own, so it respawns over it.
+            var airfieldGo = (GameObject)PrefabUtility.InstantiatePrefab(airfieldPrefab, scene);
+            airfieldGo.name = "Home Airfield";
+            airfieldGo.transform.SetParent(world, false);
+            airfieldGo.transform.SetPositionAndRotation(AirfieldPosition, Quaternion.identity);
+            var spawn = airfieldGo.GetComponent<Airfield>().AirSpawn;
 
+            BuildPlayer(scene, planePrefab, classes, spawn);
+            BuildDummies(planePrefab, classes, scene);
+
+            EditorSceneManager.SaveScene(scene, ScenePath);
+            AddSceneToBuildSettings(ScenePath);
+        }
+
+        /// <summary>The sun, soft shadows and linear distance fog (start/end in meters).</summary>
+        internal static void SetUpAtmosphere(float fogStart, float fogEnd)
+        {
+            var sun = Object.FindAnyObjectByType<Light>();
+            sun.transform.rotation = Quaternion.Euler(48f, -35f, 0f);
+            sun.intensity = 1.4f;
+            sun.shadows = LightShadows.Soft;
+            RenderSettings.fog = true;
+            RenderSettings.fogMode = FogMode.Linear;
+            RenderSettings.fogColor = new Color(0.72f, 0.82f, 0.92f);
+            RenderSettings.fogStartDistance = fogStart;
+            RenderSettings.fogEndDistance = fogEnd;
+        }
+
+        /// <summary>
+        /// The player plane at <paramref name="spawn"/> with its chase camera, input, dev tools (class switcher,
+        /// damage tester), debug HUD and touch controls. With no spawn point of its own, it respawns over the nearest
+        /// friendly airfield.
+        /// </summary>
+        internal static void BuildPlayer(Scene scene, GameObject planePrefab, FlightStats[] classes, Transform spawn)
+        {
             // Player plane
             var planeGo = (GameObject)PrefabUtility.InstantiatePrefab(planePrefab, scene);
             planeGo.name = "Player Plane";
             planeGo.transform.SetPositionAndRotation(spawn.position, spawn.rotation);
             var plane = planeGo.GetComponent<PlaneController>();
             var respawner = planeGo.GetComponent<PlaneRespawner>();
-            SetField(respawner, "spawnPoint", spawn);
 
             // Camera: Cinemachine camera hard-locked to the rig
             var mainCam = Camera.main;
@@ -355,6 +823,7 @@ namespace WingingIt.Editor
             SetField(input, "cameraRig", rig);
             var switcher = planeGo.AddComponent<ClassSwitcher>();
             SetArray(switcher, "classes", classes);
+            planeGo.AddComponent<DamageTester>();
 
             // HUD
             var hud = new GameObject("Flight Debug HUD").AddComponent<FlightDebugHUD>();
@@ -362,12 +831,67 @@ namespace WingingIt.Editor
             SetField(hud, "player", input);
             SetField(hud, "cameraRig", rig);
             SetField(hud, "respawner", respawner);
+            SetField(hud, "health", planeGo.GetComponent<PlaneHealth>());
+            SetField(hud, "guns", planeGo.GetComponent<PlaneGuns>());
+            SetField(hud, "rockets", planeGo.GetComponent<PlaneRockets>());
+            SetField(hud, "missiles", planeGo.GetComponent<PlaneMissiles>());
+            SetField(hud, "bombs", planeGo.GetComponent<PlaneBombs>());
+            SetField(hud, "ability", planeGo.GetComponent<PlaneAbility>());
+            SetField(hud, "gear", planeGo.GetComponent<LandingGear>());
+            SetField(hud, "repair", planeGo.GetComponent<PlaneRepair>());
             SetField(hud, "viewCamera", mainCam);
 
-            BuildTouchControls(input, switcher);
+            BuildTouchControls(input, switcher, planeGo);
+        }
 
-            EditorSceneManager.SaveScene(scene, ScenePath);
-            AddSceneToBuildSettings(ScenePath);
+        /// <summary>
+        /// Target drones ahead of the spawn, above the rings and towers: one per class, each flying its own pattern.
+        /// They're on the enemy team, so they fly out of the home AA's range (tow one over the field with T to see it fire).
+        /// </summary>
+        static void BuildDummies(GameObject planePrefab, FlightStats[] classes, Scene scene)
+        {
+            var group = new GameObject("Dummy Planes").transform;
+            // radius = orbit radius, or half a racetrack leg. heading = racetrack leg direction (deg).
+            var drones = new[]
+            {
+                (cls: 2, pattern: DummyPattern.Orbit, center: new Vector3(0f, 450f, 0f), radius: 300f, clockwise: true, heading: 0f),
+                (cls: 3, pattern: DummyPattern.Orbit, center: new Vector3(0f, 520f, 0f), radius: 450f, clockwise: false, heading: 0f),
+                (cls: 1, pattern: DummyPattern.Weave, center: new Vector3(0f, 420f, 600f), radius: 400f, clockwise: false, heading: 0f),
+                (cls: 0, pattern: DummyPattern.Racetrack, center: new Vector3(0f, 620f, 200f), radius: 800f, clockwise: true, heading: 90f),
+            };
+
+            for (int i = 0; i < drones.Length; i++)
+            {
+                var (cls, pattern, center, radius, clockwise, heading) = drones[i];
+                Vector3 pos;
+                Quaternion rot;
+                if (pattern == DummyPattern.Racetrack)
+                {
+                    // Start at one end, heading down the leg.
+                    Vector3 axis = Quaternion.Euler(0f, heading, 0f) * Vector3.forward;
+                    pos = center - axis * radius;
+                    rot = Quaternion.LookRotation(axis);
+                }
+                else
+                {
+                    // Start on the circle, already heading along it.
+                    pos = center + Vector3.right * radius;
+                    rot = Quaternion.LookRotation(clockwise ? Vector3.back : Vector3.forward);
+                }
+
+                var spawn = new GameObject($"Dummy Spawn {i + 1}").transform;
+                spawn.SetParent(group, false);
+                spawn.SetPositionAndRotation(pos, rot);
+
+                var go = (GameObject)PrefabUtility.InstantiatePrefab(planePrefab, scene);
+                go.name = $"Dummy {i + 1} ({classes[cls].displayName}, {pattern})";
+                go.transform.SetParent(group, false);
+                go.transform.SetPositionAndRotation(pos, rot);
+                SetField(go.GetComponent<PlaneController>(), "stats", classes[cls]);
+                SetInt(go.GetComponent<PlaneController>(), "team", 1); // the player is team 0
+                SetField(go.GetComponent<PlaneRespawner>(), "spawnPoint", spawn);
+                go.AddComponent<DummyPilot>().Configure(pattern, center, radius, clockwise, heading, evade: false);
+            }
         }
 
         static void BuildGround(Transform parent, Materials m)
@@ -378,15 +902,6 @@ namespace WingingIt.Editor
             ground.transform.localScale = new Vector3(700f, 1f, 700f); // 7 km square
             ground.GetComponent<Renderer>().sharedMaterial = m.Ground;
             ground.isStatic = true;
-
-            // A runway-shaped strip under the spawn, for orientation (real airfields come in Phase 3).
-            var runway = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            runway.name = "Runway (reference)";
-            runway.transform.SetParent(parent, false);
-            runway.transform.localPosition = new Vector3(0f, 0.05f, -1350f);
-            runway.transform.localScale = new Vector3(40f, 0.1f, 600f);
-            runway.GetComponent<Renderer>().sharedMaterial = m.Runway;
-            runway.isStatic = true;
         }
 
         static List<Vector3> BuildRings(Transform parent, Materials m)
@@ -443,7 +958,51 @@ namespace WingingIt.Editor
             gate.SetRenderers(renderers.ToArray());
         }
 
-        static void BuildTowers(Transform parent, Materials m, List<Vector3> avoid)
+        /// <summary>
+        /// A bombing range ahead of the spawn: a four-truck convoy on a road and a radar station. Returns points the
+        /// towers keep clear of.
+        /// </summary>
+        static List<Vector3> BuildGroundTargets(Transform parent, Materials m)
+        {
+            var group = new GameObject("Ground Targets").transform;
+            group.SetParent(parent, false);
+
+            var road = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            road.name = "Road";
+            road.transform.SetParent(group, false);
+            road.transform.localPosition = new Vector3(-200f, 0.05f, -340f);
+            road.transform.localScale = new Vector3(9f, 0.1f, 220f);
+            road.GetComponent<Renderer>().sharedMaterial = m.Runway;
+            road.isStatic = true;
+
+            for (int i = 0; i < 4; i++)
+            {
+                var truck = new GameObject($"Truck {i + 1}").transform;
+                truck.SetParent(group, false);
+                truck.localPosition = new Vector3(-200f, 0f, -385f + i * 16f);
+                var renderers = new[]
+                {
+                    Box("Cab", truck, new Vector3(0f, 1.4f, 2.6f), new Vector3(2.6f, 2.4f, 2f), m.Target, true),
+                    Box("Cargo", truck, new Vector3(0f, 1.8f, -1f), new Vector3(2.8f, 3.2f, 5f), m.Target, true),
+                };
+                truck.gameObject.AddComponent<GroundTarget>().Configure("Truck", 100f, renderers, m.Ember, m.Smoke);
+            }
+
+            var radar = new GameObject("Radar Station").transform;
+            radar.SetParent(group, false);
+            radar.localPosition = new Vector3(-130f, 0f, -255f);
+            var radarRenderers = new[]
+            {
+                Box("Building", radar, new Vector3(0f, 3f, 0f), new Vector3(14f, 6f, 10f), m.ConcreteDark, true),
+                Box("Mast", radar, new Vector3(0f, 10f, 0f), new Vector3(1.2f, 8f, 1.2f), m.PlaneDark, true),
+                Box("Dish", radar, new Vector3(0f, 15f, 0f), new Vector3(9f, 4f, 0.6f), m.Target, true),
+            };
+            radar.gameObject.AddComponent<GroundTarget>().Configure("Radar Station", 300f, radarRenderers, m.Ember, m.Smoke);
+
+            return new List<Vector3> { new(-200f, 0f, -380f), new(-200f, 0f, -300f), new(-130f, 0f, -255f) };
+        }
+
+        static void BuildTowers(Transform parent, Materials m, List<Vector3> avoid, List<Vector3> keepClear)
         {
             var group = new GameObject("Towers").transform;
             group.SetParent(parent, false);
@@ -459,7 +1018,7 @@ namespace WingingIt.Editor
                 while (placed < count && attempts++ < count * 20)
                 {
                     var p = center + Random2(rng) * radius;
-                    if (!ClearOf(p, avoid, 90f))
+                    if (!ClearOf(p, avoid, 90f) || !ClearOf(p, keepClear, 110f))
                         continue;
                     if (Mathf.Abs(p.x) < 120f && p.y < -900f) // spawn approach
                         continue;
@@ -479,7 +1038,7 @@ namespace WingingIt.Editor
             }
         }
 
-        static Vector2 Random2(System.Random rng)
+        internal static Vector2 Random2(System.Random rng)
         {
             float a = (float)rng.NextDouble() * Mathf.PI * 2f;
             float r = Mathf.Sqrt((float)rng.NextDouble());
@@ -524,7 +1083,7 @@ namespace WingingIt.Editor
 
         // ------------------------------------------------------------------ touch controls
 
-        static void BuildTouchControls(PlayerFlightInput input, ClassSwitcher switcher)
+        static void BuildTouchControls(PlayerFlightInput input, ClassSwitcher switcher, GameObject planeGo)
         {
             var eventSystem = new GameObject("EventSystem");
             eventSystem.AddComponent<UnityEngine.EventSystems.EventSystem>();
@@ -556,8 +1115,10 @@ namespace WingingIt.Editor
 
             // Right: action buttons
             TouchButton("Fire", controls.transform, knob, new Vector2(-230f, 230f), 190f, new Color(1f, 0.35f, 0.25f, 0.5f), "<Gamepad>/rightTrigger");
-            TouchButton("Missile", controls.transform, knob, new Vector2(-430f, 170f), 130f, new Color(1f, 0.75f, 0.2f, 0.5f), "<Gamepad>/leftTrigger");
+            var missileButton = TouchButton("Missile", controls.transform, knob, new Vector2(-430f, 170f), 130f, new Color(1f, 0.75f, 0.2f, 0.5f), "<Gamepad>/leftTrigger");
             TouchButton("Boost", controls.transform, knob, new Vector2(-190f, 450f), 130f, new Color(0.3f, 0.75f, 1f, 0.5f), "<Gamepad>/rightShoulder");
+            var rocketsButton = TouchButton("Rockets", controls.transform, knob, new Vector2(-560f, 300f), 110f, new Color(1f, 0.55f, 0.15f, 0.5f), "<Gamepad>/buttonWest");
+            var bombButton = TouchButton("Bomb", controls.transform, knob, new Vector2(-610f, 130f), 110f, new Color(0.75f, 0.75f, 0.8f, 0.5f), "<Gamepad>/buttonNorth");
             TouchButton("Ability", controls.transform, knob, new Vector2(-390f, 370f), 110f, new Color(0.5f, 1f, 0.5f, 0.5f), "<Gamepad>/buttonSouth");
 
             // Top-right: prototype class switch
@@ -570,14 +1131,22 @@ namespace WingingIt.Editor
             var touchUi = canvasGo.AddComponent<TouchControlsUI>();
             SetField(touchUi, "controlsRoot", controls);
             SetField(touchUi, "player", input);
+            // Weapon buttons only show for the weapons the current class carries.
+            SetField(touchUi, "rockets", planeGo.GetComponent<PlaneRockets>());
+            SetField(touchUi, "rocketsButton", rocketsButton);
+            SetField(touchUi, "missiles", planeGo.GetComponent<PlaneMissiles>());
+            SetField(touchUi, "missileButton", missileButton);
+            SetField(touchUi, "bombs", planeGo.GetComponent<PlaneBombs>());
+            SetField(touchUi, "bombButton", bombButton);
             controls.SetActive(false);
         }
 
-        static void TouchButton(string name, Transform parent, Sprite sprite, Vector2 pos, float size, Color color, string controlPath)
+        static GameObject TouchButton(string name, Transform parent, Sprite sprite, Vector2 pos, float size, Color color, string controlPath)
         {
             var img = UiImage(name, parent, sprite, color, new Vector2(1f, 0f), pos, new Vector2(size, size));
             img.gameObject.AddComponent<OnScreenButton>().controlPath = controlPath;
             Label(img.transform, name.ToUpperInvariant());
+            return img.gameObject;
         }
 
         static Image UiImage(string name, Transform parent, Sprite sprite, Color color, Vector2 anchor, Vector2 pos, Vector2 size)
@@ -619,15 +1188,16 @@ namespace WingingIt.Editor
 
         // ------------------------------------------------------------------ helpers
 
-        static void AddSceneToBuildSettings(string path)
+        /// <summary>Adds <paramref name="path"/> to the build scenes: first (the scene a build opens) or last.</summary>
+        internal static void AddSceneToBuildSettings(string path, bool first = true)
         {
             var scenes = new List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
             scenes.RemoveAll(s => s.path == path);
-            scenes.Insert(0, new EditorBuildSettingsScene(path, true));
+            scenes.Insert(first ? 0 : scenes.Count, new EditorBuildSettingsScene(path, true));
             EditorBuildSettings.scenes = scenes.ToArray();
         }
 
-        static void EnsureFolder(string path)
+        internal static void EnsureFolder(string path)
         {
             if (AssetDatabase.IsValidFolder(path))
                 return;
@@ -636,7 +1206,7 @@ namespace WingingIt.Editor
             AssetDatabase.CreateFolder(parent, Path.GetFileName(path));
         }
 
-        static void SetField(Object target, string field, Object value)
+        internal static void SetField(Object target, string field, Object value)
         {
             var so = new SerializedObject(target);
             var prop = so.FindProperty(field) ?? throw new System.ArgumentException($"{target.GetType().Name} has no field '{field}'");
@@ -644,7 +1214,23 @@ namespace WingingIt.Editor
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        static void SetArray<T>(Object target, string field, T[] values) where T : Object
+        internal static void SetFloat(Object target, string field, float value)
+        {
+            var so = new SerializedObject(target);
+            var prop = so.FindProperty(field) ?? throw new System.ArgumentException($"{target.GetType().Name} has no field '{field}'");
+            prop.floatValue = value;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        internal static void SetInt(Object target, string field, int value)
+        {
+            var so = new SerializedObject(target);
+            var prop = so.FindProperty(field) ?? throw new System.ArgumentException($"{target.GetType().Name} has no field '{field}'");
+            prop.intValue = value;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        internal static void SetArray<T>(Object target, string field, T[] values) where T : Object
         {
             var so = new SerializedObject(target);
             var prop = so.FindProperty(field) ?? throw new System.ArgumentException($"{target.GetType().Name} has no field '{field}'");

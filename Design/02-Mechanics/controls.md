@@ -17,7 +17,8 @@ Keyboard + mouse is the baseline. Gamepad and mobile (touch) are required. All t
 | Yaw (proposed) | Axis |
 | Fire machine guns | Hold |
 | Fire missiles | Press |
-| Fire rockets / bombs (secondary) | Press (TBD) |
+| Fire rockets (secondary) | Hold (one salvo per cooldown) |
+| Drop bombs | Hold (one bomb per interval) |
 | Boost | Hold |
 | Special ability | Press |
 | Look around / free camera | Hold |
@@ -33,9 +34,11 @@ Keyboard + mouse is the baseline. Gamepad and mobile (touch) are required. All t
 | Q / E | Yaw (proposed) |
 | Space | Machine guns |
 | Right Mouse | Missiles |
-| Left Mouse | TBD (guns too? rockets?) |
+| R or Middle Mouse | Rockets (secondary) |
+| B (proposed) | Bombs |
+| Left Mouse | Machine guns (same as Space) |
 | Shift | Boost |
-| F (proposed) | Special ability |
+| F | Special ability |
 | C (proposed) | Free look |
 
 **Consider:** a mouse-aim mode (like War Thunder): the plane steers toward the mouse cursor and Left Mouse fires guns. It's much easier for new players and is common in the genre. It could ship as an option next to the direct-control scheme above.
@@ -50,19 +53,23 @@ Keyboard + mouse is the baseline. Gamepad and mobile (touch) are required. All t
 | LT | Missiles |
 | RB | Boost |
 | LB | Yaw modifier or secondary weapon |
+| X / Square | Rockets (secondary) |
+| Y / Triangle (proposed) | Bombs |
 | A / Cross | Special ability |
 | Bumpers or D-pad | Throttle |
 
 ## Mobile (proposed)
 
 - **Left side:** virtual joystick for pitch/roll, or tilt steering as an option
-- **Right side:** large Fire button, Missile button, Boost button, and an Ability button
+- **Right side:** large Fire button, Missile button, Rockets button, Bomb button, Boost button, and an Ability button
 - **Throttle:** auto-managed by default, with an optional slider
 - **Aim assist:** stronger on mobile, with a gentle magnetism toward targets
 
 ## Landing Gear (all platforms)
 
 **Decided:** there is no landing gear button. The gear deploys automatically when the plane gets close to the ground, and it takes time to extend. Touching down before it's fully out is a crash. See [repair-and-landing.md](repair-and-landing.md#landing-gear).
+
+**Touch auto-throttle** idles while the gear is locked, so an approach slows down by itself (proposed; see [landing rules](repair-and-landing.md#landing-rules)). On the runway, yaw or roll input steers and pitching up at flying speed takes off.
 
 ## Open Questions
 

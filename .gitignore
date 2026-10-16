@@ -43,3 +43,10 @@ crashlytics-build.properties
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Player build outputs
+/Builds/
+/.utmp/
+
+# Test runner temp scenes
+/Assets/InitTestScene*.unity*

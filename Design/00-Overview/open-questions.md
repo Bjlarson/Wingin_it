@@ -1,7 +1,7 @@
 # Open Questions
 
 Status: Living document
-Last updated: 2026-10-14
+Last updated: 2026-10-15
 
 ## Decided
 
@@ -28,6 +28,7 @@ Last updated: 2026-10-14
 | Terrain collision | Instant crash, then respawn (prototype). Revisit once Phase 2 adds HP | 2026-10-14 |
 | Part list | Six parts: body, L wing, R wing, horizontal stabilizer, vertical stabilizer, engine. The engine dies and smokes but never detaches (hitbox stays) | 2026-10-14 |
 | Gun mounting | Wing-mounted: losing a wing halves firepower | 2026-10-14 |
+| Spawning | Per level (`LevelSettings`): **Air** (over the home airfield at cruise) or **Runway** (parked at the threshold, take off yourself). After a repair, always a runway takeoff → [flight-model](../02-Mechanics/flight-model.md#spawning) | 2026-10-15 |
 
 ## Still Open
 
@@ -38,8 +39,8 @@ Last updated: 2026-10-14
 ### Design
 
 2. Class switching: on respawn only, or also at the airfield?
-3. Weapon button mapping for rockets / bombs; confirm per-class loadouts.
-4. Support class role in Free For All.
+3. Weapon button mapping for rockets / bombs (proposed: bombs on their own button, B / gamepad Y); confirm per-class loadouts (implemented as proposed, awaiting a playtest).
+4. Support class role in Free For All. Also: ability tuning (cooldowns, durations, strengths) is first-pass; Support radar is passive (proposed); friendly-fire rule for when teams exist → [aircraft-classes](../02-Mechanics/aircraft-classes.md#abilities-in-the-prototype)
 5. Prize machine: spin price, duplicate rule, rarity tiers.
 
 ### Business / Scope

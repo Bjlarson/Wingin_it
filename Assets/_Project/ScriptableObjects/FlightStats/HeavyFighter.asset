@@ -15,6 +15,12 @@ MonoBehaviour:
   displayName: Heavy Fighter
   bodyColor: {r: 0.47, g: 0.56, b: 0.32, a: 1}
   visualScale: 1.25
+  durability: {fileID: 11400000, guid: 88469530281433a4aaa2ba6a2916d920, type: 2}
+  guns: {fileID: 11400000, guid: 78d9e168cb909f740affd8f8bde47462, type: 2}
+  rockets: {fileID: 11400000, guid: 1eac1bfe57cf9474285f1b29bc0052d2, type: 2}
+  missiles: {fileID: 0}
+  bombs: {fileID: 11400000, guid: 248d871280f43b149af5ef3c746614a2, type: 2}
+  ability: {fileID: 11400000, guid: 781ecef848f22e74493601af1abcfdad, type: 2}
   minSpeed: 35
   maxSpeed: 85
   cruiseThrottle: 0.65
@@ -32,6 +38,8 @@ MonoBehaviour:
   grip: 3
   stallSpeed: 28
   noseDropRate: 30
+  glideDeceleration: 3
+  damageSinkSpeed: 25
   boostMultiplier: 1.35
   boostAcceleration: 30
   boostDuration: 2.5

@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ad6759156d0217b488bb420ed47090ea, type: 3}
+  m_Name: MachineGuns
+  m_EditorClassIdentifier: WingingIt.Runtime::WingingIt.Flight.GunStats
+  damage: 2
+  roundsPerSecondPerGun: 6
+  bulletSpeed: 550
+  bulletLifetime: 1.5
+  convergenceDistance: 350
+  spreadAngle: 0.35
+  bulletRadius: 0.3
+  heatPerSecond: 0.25
+  coolPerSecond: 0.4
+  coolDelay: 0.3
+  overheatRecoverAt: 0.3
+  tracerLength: 6
+  tracerWidth: 0.25

@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f5ee0f1aed1fb654d836f0500281aed8, type: 3}
+  m_Name: Bombs
+  m_EditorClassIdentifier: WingingIt.Runtime::WingingIt.Flight.BombStats
+  ammo: 4
+  dropInterval: 0.5
+  groundDamage: 150
+  directDamage: 40
+  planeSplashDamage: 15
+  splashRadius: 18
+  splashFalloffMin: 0.3
+  gravity: 12
+  ejectSpeed: 3
+  lifetime: 20
+  bombRadius: 0.4
+  bombLength: 1.4
+  bombWidth: 0.45

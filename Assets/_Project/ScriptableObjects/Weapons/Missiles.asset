@@ -1,0 +1,34 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c8646b9d3b4ac04438dd70373c510447, type: 3}
+  m_Name: Missiles
+  m_EditorClassIdentifier: WingingIt.Runtime::WingingIt.Flight.MissileStats
+  ammo: 2
+  launchCooldown: 1
+  lockRange: 900
+  lockConeAngle: 10
+  lockHoldAngle: 18
+  lockTime: 1.5
+  missileSpeed: 240
+  acceleration: 150
+  turnRate: 32
+  seekerAngle: 50
+  armDelay: 0.3
+  lifetime: 6
+  proximityRadius: 6
+  missileRadius: 0.4
+  directDamage: 40
+  splashDamage: 35
+  splashRadius: 12
+  splashFalloffMin: 0.3
+  missileLength: 2.4
+  missileWidth: 0.35

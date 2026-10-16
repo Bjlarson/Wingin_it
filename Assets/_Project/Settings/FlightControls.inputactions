@@ -79,6 +79,15 @@
                     "initialStateCheck": false
                 },
                 {
+                    "name": "DropBomb",
+                    "type": "Button",
+                    "id": "b7d1b4af-2973-4b39-b053-d86f282252d7",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
                     "name": "Ability",
                     "type": "Button",
                     "id": "0e049fce-cafa-431d-881a-2f7a00eea50e",
@@ -494,6 +503,28 @@
                     "processors": "",
                     "groups": "Gamepad",
                     "action": "FireSecondary",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "32eef8a9-3dc0-4692-82f9-17fdce7b4533",
+                    "path": "<Keyboard>/b",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard&Mouse",
+                    "action": "DropBomb",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "ef1bacce-104f-4ee9-8970-405d7b3e5939",
+                    "path": "<Gamepad>/buttonNorth",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "DropBomb",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
