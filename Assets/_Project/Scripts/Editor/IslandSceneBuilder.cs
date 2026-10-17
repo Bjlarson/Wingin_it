@@ -4,7 +4,11 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using WingingIt.Bots;
+using WingingIt.Dev;
 using WingingIt.Flight;
+using WingingIt.Input;
+using WingingIt.Match;
+using WingingIt.UI;
 using WingingIt.World;
 using B = WingingIt.Editor.FlightTestSceneBuilder;
 
@@ -241,7 +245,8 @@ namespace WingingIt.Editor
             BuildClouds(world);
 
             B.BuildPlayer(scene, planePrefab, classes, playerSpawn);
-            BuildBotRoster(planePrefab, classes);
+            var roster = BuildBotRoster(planePrefab, classes);
+            BuildMatch(roster, classes);
 
             EditorSceneManager.SaveScene(scene, ScenePath);
             B.AddSceneToBuildSettings(ScenePath, first: false);
@@ -914,12 +919,34 @@ namespace WingingIt.Editor
         }
 
         /// <summary>Fills both teams to 8v8 with bots that patrol the <see cref="FightAreas"/>.</summary>
-        static void BuildBotRoster(GameObject planePrefab, FlightStats[] classes)
+        static BotRoster BuildBotRoster(GameObject planePrefab, FlightStats[] classes)
         {
             var areas = new List<Vector3>();
             foreach (var (_, xz, agl) in FightAreas)
                 areas.Add(new Vector3(xz.x, HighestPointNear(xz, FightAreaClearanceRadius) + agl, xz.y));
-            new GameObject("Bot Roster").AddComponent<BotRoster>().Configure(planePrefab, classes, areas);
+            var roster = new GameObject("Bot Roster").AddComponent<BotRoster>();
+            roster.Configure(planePrefab, classes, areas);
+            return roster;
+        }
+
+        /// <summary>
+        /// The Teams match flow (lobby → class select → 5:00 → scoreboard) and its screens. The player's controls, dev
+        /// tools, flight HUD and touch controls only run in play.
+        /// </summary>
+        static void BuildMatch(BotRoster roster, FlightStats[] classes)
+        {
+            var player = GameObject.Find("Player Plane");
+            var go = new GameObject("Match");
+            var match = go.AddComponent<MatchManager>();
+            B.SetField(match, "player", player.GetComponent<PlaneController>());
+            B.SetField(match, "roster", roster);
+            B.SetArray(match, "classes", classes);
+            B.SetArray(match, "playOnlyBehaviours", new Behaviour[]
+            {
+                player.GetComponent<PlayerFlightInput>(), player.GetComponent<ClassSwitcher>(), player.GetComponent<DamageTester>(),
+            });
+            B.SetArray(match, "playOnlyObjects", new[] { GameObject.Find("Flight Debug HUD"), GameObject.Find("Touch Controls") });
+            B.SetField(go.AddComponent<MatchScreens>(), "match", match);
         }
 
         /// <summary>The highest solid surface (ground, sea, building) at <paramref name="xz"/> or within <paramref name="radius"/> of it.</summary>

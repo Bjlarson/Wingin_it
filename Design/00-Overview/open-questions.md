@@ -1,7 +1,7 @@
 # Open Questions
 
 Status: Living document
-Last updated: 2026-10-15
+Last updated: 2026-10-17
 
 ## Decided
 
@@ -28,6 +28,7 @@ Last updated: 2026-10-15
 | Terrain collision | Instant crash, then respawn (prototype). Revisit once Phase 2 adds HP | 2026-10-14 |
 | Part list | Six parts: body, L wing, R wing, horizontal stabilizer, vertical stabilizer, engine. The engine dies and smokes but never detaches (hitbox stays) | 2026-10-14 |
 | Gun mounting | Wing-mounted: losing a wing halves firepower | 2026-10-14 |
+| Teams tie-breaker | A tie when time runs out is a **draw**. No overtime for now; revisit after playtests | 2026-10-17 |
 | Spawning | Per level (`LevelSettings`): **Air** (over the home airfield at cruise) or **Runway** (parked at the threshold, take off yourself). After a repair, always a runway takeoff → [flight-model](../02-Mechanics/flight-model.md#spawning) | 2026-10-15 |
 
 ## Still Open

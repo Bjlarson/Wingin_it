@@ -1,0 +1,378 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Low-Poly Asset Guide</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#1E2433; --paper:#F5F1E8; --card:#FFFFFF; --mute:#6B7385;
+  --blue:#2F7DF6; --red:#F2463C; --sun:#FFB21E;
+  --disp:"Fredoka","Segoe UI Black","Segoe UI",sans-serif;
+  --body:"Nunito","Segoe UI",sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1880px;overflow:hidden}
+body{background:var(--paper);color:var(--ink);font-family:var(--body);padding:48px 64px;
+  background-image:radial-gradient(#e6dfcf 1.2px,transparent 1.2px);background-size:22px 22px}
+header{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:28px}
+.eyebrow{font-family:var(--disp);font-weight:500;font-size:15px;letter-spacing:.18em;color:var(--mute);text-transform:uppercase}
+h1{font-family:var(--disp);font-weight:700;font-size:52px;line-height:1.05;margin-top:6px}
+h1 span{color:var(--blue)} h1 em{font-style:normal;color:var(--red)}
+.meta{font-size:14px;color:var(--mute);text-align:right;line-height:1.7}
+.card{background:var(--card);border:3px solid var(--ink);border-radius:22px;box-shadow:6px 6px 0 var(--ink);padding:20px 24px;position:relative}
+.card h2{font-family:var(--disp);font-weight:600;font-size:20px;margin-bottom:12px;display:flex;align-items:center;gap:10px}
+.card h2 i{font-style:normal;background:var(--ink);color:#fff;border-radius:10px;font-size:14px;padding:3px 9px}
+.note{font-size:13.5px;line-height:1.5;color:#3d4457}
+.note b{color:var(--ink)}
+.row{display:grid;gap:32px;margin-bottom:32px}
+.r1{grid-template-columns:1100px 1fr}
+.r2{grid-template-columns:1fr 1fr 1fr}
+.r3{grid-template-columns:620px 1fr 560px}
+.legend{display:grid;grid-template-columns:1fr 1fr;gap:10px 22px;margin-top:6px}
+.legend div{display:grid;grid-template-columns:28px 1fr;gap:8px;font-size:13px;line-height:1.4;color:#3d4457}
+.legend i{font-style:normal;width:24px;height:24px;border-radius:50%;background:var(--sun);border:2.5px solid var(--ink);font-family:var(--disp);font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center}
+.legend b{color:var(--ink);font-family:var(--disp);font-weight:600}
+.classes{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.cls{background:#EAF3FF;border-radius:14px;padding:6px 6px 10px;text-align:center}
+.cls b{font-family:var(--disp);font-weight:600;font-size:16px;display:block}
+.cls span{font-size:12px;color:var(--mute)}
+.sw{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:12px}
+.sw div{border:2.5px solid var(--ink);border-radius:10px;height:52px;position:relative}
+.sw div span{position:absolute;left:0;right:0;bottom:-34px;font-size:10.5px;text-align:center;line-height:1.25;color:#3d4457;font-family:Consolas,monospace}
+.swl{font-family:var(--disp);font-weight:600;font-size:13px;color:var(--mute);margin:4px 0 6px;text-transform:uppercase;letter-spacing:.08em}
+.swg{margin-bottom:34px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{text-align:left;padding:7px 6px;border-bottom:2px dashed #e4dfd3;vertical-align:top}
+th{font-family:var(--disp);font-weight:600;font-size:13px;color:var(--mute);text-transform:uppercase;letter-spacing:.06em}
+td:first-child{font-family:var(--disp);font-weight:600;white-space:nowrap}
+td.n{font-family:Consolas,monospace;font-size:12.5px;white-space:nowrap}
+.dd{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.dd div{border-radius:12px;padding:8px 10px;font-size:12.5px;line-height:1.45}
+.dd .do{background:#E6F7E8;border:2px solid #3AAA4A}
+.dd .dont{background:#FDE9E7;border:2px solid #E0483D}
+.dd b{font-family:var(--disp)}
+svg text{font-family:"Fredoka","Segoe UI",sans-serif}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="eyebrow">Winging It · 03-Art · Asset style guide</div>
+    <h1>Low-Poly <span>Cartoon</span> <em>Assets</em></h1>
+  </div>
+  <div class="meta">Chunky, toy-like, readable at range<br>Flat facets · 3 tones · bold outline · one palette atlas<br>v1.0 · 2026-10-17</div>
+</header>
+
+<div class="row r1">
+  <section class="card">
+    <h2><i>01</i> Hero asset · Fighter, side view</h2>
+    <svg id="hero" width="100%" viewBox="0 0 1040 430"></svg>
+    <div class="legend">
+      <div><i>1</i><p><b>Oversized prop.</b> About 1.4× real scale, with a blur disc behind two chunky blades.</p></div>
+      <div><i>2</i><p><b>Rounded nose.</b> Cowl and spinner are big and blunt. Never a sharp point.</p></div>
+      <div><i>3</i><p><b>Faceted canopy.</b> Flat glass facets with one hard white glint. No reflections.</p></div>
+      <div><i>4</i><p><b>Team zone.</b> Tail and wingtips are always team color. Skins can't paint over them.</p></div>
+      <div><i>5</i><p><b>3-tone flat shading.</b> Top is light, side is the base color, belly is the shadow tone.</p></div>
+      <div><i>6</i><p><b>Bold outline.</b> Inverted-hull outline on planes only, in ink #1E2433.</p></div>
+      <div><i>7</i><p><b>Tricycle gear only.</b> One nose wheel plus two fat main wheels. The plane sits level, and the tail never gets a wheel.</p></div>
+      <div><i>8</i><p><b>Decal zone.</b> Flat fuselage panel kept clear for roundels, numbers and stickers.</p></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2><i>02</i> Class silhouettes · top-down</h2>
+    <div class="classes">
+      <div class="cls"><svg id="c-fighter" viewBox="0 0 200 200" width="100%" height="230"></svg><b>Fighter</b><span>Balanced · straight wing, single prop</span></div>
+      <div class="cls"><svg id="c-inter" viewBox="0 0 200 200" width="100%" height="230"></svg><b>Interceptor</b><span>Sleek delta · canards · jet</span></div>
+      <div class="cls"><svg id="c-heavy" viewBox="0 0 200 200" width="100%" height="230"></svg><b>Heavy Fighter</b><span>Chunky twin-engine · wide tail</span></div>
+      <div class="cls"><svg id="c-support" viewBox="0 0 200 200" width="100%" height="230"></svg><b>Support</b><span>Long high wing · radar dome</span></div>
+    </div>
+    <p class="note" style="margin-top:12px"><b>Squint test:</b> each class must be identifiable as a solid black shape at 32px.</p>
+  </section>
+</div>
+
+<div class="row r2">
+  <section class="card">
+    <h2><i>03</i> Facets &amp; shading</h2>
+    <svg id="shade" width="100%" viewBox="0 0 520 210"></svg>
+    <div class="dd">
+      <div class="do"><b>Do</b><br>Flat normals and big readable facets. Shadows shift toward blue-violet. Corners get chunky chamfers.</div>
+      <div class="dont"><b>Don't</b><br>Smooth gradients, photo textures, pure black shadows, tiny noisy facets or sharp 90° edges.</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2><i>04</i> Modular parts · exploded</h2>
+    <svg id="explode" width="100%" viewBox="0 0 520 300"></svg>
+    <p class="note">Five separate meshes, each with its own collider. Jagged <b>broken-edge caps</b> are hidden until a part detaches.</p>
+  </section>
+
+  <section class="card">
+    <h2><i>05</i> Damage states &amp; FX</h2>
+    <svg id="dmg" width="100%" viewBox="0 0 520 300"></svg>
+    <p class="note">Smoke is made of chunky low-poly puffs, never particles that look like real smoke. In Damaged and Critical, <b>damage smoke replaces</b> cosmetic trails.</p>
+  </section>
+</div>
+
+<div class="row r3">
+  <section class="card">
+    <h2><i>06</i> Palette</h2>
+    <div class="swg"><div class="swl">Teams &amp; plane</div>
+      <div class="sw" id="sw-plane"></div></div>
+    <div class="swg"><div class="swl">Biomes</div>
+      <div class="sw" id="sw-biome"></div></div>
+    <div class="swg" style="margin-bottom:46px"><div class="swl">FX</div>
+      <div class="sw" id="sw-fx"></div></div>
+    <p class="note">Every color lives in one <b>256×256 palette atlas</b>. Each swatch has light, base and shadow tones, and UVs sit on those swatches.</p>
+  </section>
+
+  <section class="card">
+    <h2><i>07</i> Environment props</h2>
+    <svg id="props" width="100%" viewBox="0 0 620 300"></svg>
+  </section>
+
+  <section class="card">
+    <h2><i>08</i> Budgets &amp; build rules</h2>
+    <table>
+      <tr><th>Asset</th><th>Tris</th><th>Notes</th></tr>
+      <tr><td>Plane</td><td class="n">1.5k–3k</td><td>5 parts + 3 gear, 1 material, outline</td></tr>
+      <tr><td>Large prop</td><td class="n">300–1.5k</td><td>Tower, carrier, hangar</td></tr>
+      <tr><td>Small prop</td><td class="n">40–300</td><td>Tree, rock, crate, fuel tank</td></tr>
+      <tr><td>Terrain chunk</td><td class="n">2k–5k</td><td>Flat normals, biome tint</td></tr>
+      <tr><td>Cloud</td><td class="n">80–400</td><td>Puffy, also used as cover</td></tr>
+    </table>
+    <p class="note" style="margin-top:12px"><b>Scale:</b> 1 unit = 1 m, plane wingspan 10–14 m. <b>Bevels:</b> at least 8% of edge length. <b>Normals:</b> hard everywhere except spinner and canopy rim. <b>Textures:</b> palette atlas, plus a separate decal atlas for skins and damage.</p>
+  </section>
+</div>
+
+<script>
+const INK="#1E2433";
+const C={blue:"#2F7DF6",red:"#F2463C",body:"#EFE6D2",metal:"#7E8898",glass:"#8FE3FF",tire:"#2C3242"};
+const SHADOW=[52,46,110];
+function hx(h){return [1,3,5].map(i=>parseInt(h.slice(i,i+2),16))}
+function toHex(a){return "#"+a.map(v=>Math.round(Math.max(0,Math.min(255,v))).toString(16).padStart(2,"0")).join("")}
+// light: mix toward warm white; dark: mix toward blue-violet (hue-shifted shadows)
+function L(h,t=.28){const a=hx(h);return toHex(a.map((v,i)=>v+([255,250,235][i]-v)*t))}
+function D(h,t=.30){const a=hx(h);return toHex(a.map((v,i)=>v+(SHADOW[i]-v)*t))}
+const P=pts=>pts.map(p=>p.join(",")).join(" ");
+const poly=(pts,f,x="")=>`<polygon points="${P(pts)}" fill="${f}" ${x}/>`;
+const mir=pts=>pts.map(([x,y])=>[200-x,y]);
+
+/* ---------- top-down class planes ---------- */
+const TD={
+ fighter:{parts:[
+   ["wing",[[112,78],[178,90],[184,100],[182,110],[112,114]],"body"],
+   ["tip",[[166,88],[178,90],[184,100],[182,110],[166,111]],"team"],
+   ["stab",[[106,156],[142,164],[144,176],[104,178]],"team"],
+   ["fus",[[100,22],[110,28],[117,52],[118,120],[112,170],[104,186],[100,188]],"body"],
+   ["cowl",[[100,22],[110,28],[115,42],[100,42]],"metal"],
+   ["canopy",[[100,58],[107,62],[108,84],[100,88]],"glass"]],
+   props:[[100,16,30]]},
+ inter:{parts:[
+   ["wing",[[110,70],[176,160],[174,168],[110,166]],"body"],
+   ["tip",[[158,136],[176,160],[174,168],[158,168]],"team"],
+   ["canard",[[108,46],[128,58],[108,62]],"team"],
+   ["fus",[[100,6],[106,24],[111,60],[112,172],[106,188],[100,190]],"body"],
+   ["nose",[[100,6],[106,24],[100,26]],"metal"],
+   ["canopy",[[100,36],[106,42],[106,64],[100,68]],"glass"],
+   ["exh",[[100,186],[107,186],[105,196],[100,196]],"metal"]],
+   props:[]},
+ heavy:{parts:[
+   ["wing",[[116,72],[190,74],[194,108],[116,112]],"body"],
+   ["tip",[[176,73],[190,74],[194,108],[176,109]],"team"],
+   ["stab",[[110,154],[160,158],[162,180],[108,182]],"team"],
+   ["nac",[[140,42],[158,42],[162,54],[160,128],[138,128],[136,54]],"body"],
+   ["nacc",[[140,42],[158,42],[161,52],[137,52]],"metal"],
+   ["fus",[[100,22],[114,28],[124,58],[124,140],[114,176],[100,184]],"body"],
+   ["canopy",[[100,38],[110,42],[113,64],[100,68]],"glass"]],
+   props:[[149,36,26],[51,36,26]]},
+ support:{parts:[
+   ["wing",[[112,62],[196,68],[196,86],[112,90]],"body"],
+   ["tip",[[182,67],[196,68],[196,86],[182,87]],"team"],
+   ["stab",[[106,158],[140,162],[140,176],[104,178]],"team"],
+   ["fus",[[100,24],[113,30],[119,60],[117,150],[108,180],[100,184]],"body"],
+   ["cowl",[[100,24],[113,30],[117,42],[100,42]],"metal"],
+   ["canopy",[[100,44],[108,48],[108,58],[100,60]],"glass"]],
+   props:[[100,18,30]],dome:true}
+};
+function col(k,team){return k==="team"?team:C[k]}
+function topdown(def,team,offsets={},scale=1){
+  // outline pass, then fill pass. Left half lit, right half shadowed.
+  let out="",fill="";
+  for(const [name,pts,k] of def.parts){
+    const o=offsets[name]||[0,0], lo=offsets[name+"L"]||[-o[0],o[1]];
+    const R=pts.map(([x,y])=>[x+o[0],y+o[1]]), Lp=mir(pts).map(([x,y])=>[x+lo[0],y+lo[1]]);
+    const c=col(k,team);
+    out+=poly(R,INK,`stroke="${INK}" stroke-width="7" stroke-linejoin="round"`)+poly(Lp,INK,`stroke="${INK}" stroke-width="7" stroke-linejoin="round"`);
+    fill+=poly(Lp,L(c,.18))+poly(R,D(c,.18));
+  }
+  for(const [x,y,w] of def.props){
+    out+=`<rect x="${x-w/2}" y="${y-3}" width="${w}" height="6" rx="3" fill="${INK}" stroke="${INK}" stroke-width="5"/>`;
+    fill+=`<rect x="${x-w/2}" y="${y-2}" width="${w}" height="4" rx="2" fill="${C.metal}"/><circle cx="${x}" cy="${y}" r="4" fill="${L(C.metal,.4)}" stroke="${INK}" stroke-width="2"/>`;
+  }
+  if(def.dome){
+    fill+=`<circle cx="100" cy="112" r="21" fill="${L(team,.1)}" stroke="${INK}" stroke-width="4"/><path d="M100 91 A21 21 0 0 1 100 133 Z" fill="${D(team,.2)}"/><rect x="79" y="109" width="42" height="6" fill="#fff" opacity=".85"/>`;
+  }
+  return `<g transform="scale(${scale})">${out}${fill}</g>`;
+}
+document.getElementById("c-fighter").innerHTML=topdown(TD.fighter,C.blue);
+document.getElementById("c-inter").innerHTML=topdown(TD.inter,C.red);
+document.getElementById("c-heavy").innerHTML=topdown(TD.heavy,C.blue);
+document.getElementById("c-support").innerHTML=topdown(TD.support,C.red);
+
+/* ---------- side-view hero ---------- */
+function sidePlane(team){
+  const B=C.body;
+  const parts=[
+    [[[40,64],[24,20],[46,18],[74,58]],L(team,.12)],              // fin
+    [[[24,20],[46,18],[52,30],[30,34]],L(team,.35)],               // fin top facet
+    [[[118,72],[198,70],[204,80],[198,88],[116,88]],D(B,.22)],     // wing (edge-on)
+    [[[182,70],[198,70],[204,80],[198,88],[182,88]],D(team,.1)],   // wingtip
+    [[[38,62],[96,50],[204,46],[242,54],[252,64],[38,70]],L(B,.35)], // fus top
+    [[[38,70],[252,64],[246,80],[204,90],[96,90],[44,80]],B],       // fus side
+    [[[96,90],[204,90],[192,99],[104,99]],D(B,.3)],                 // belly
+    [[[28,64],[80,62],[82,70],[28,73]],team],                       // stab
+    [[[242,54],[256,58],[264,66],[264,78],[246,80],[252,64]],C.metal], // cowl
+    [[[264,64],[278,71],[264,80]],L(C.metal,.45)],                  // spinner
+    [[[146,48],[160,31],[198,31],[214,47]],C.glass],                // canopy
+    [[[176,31],[198,31],[214,47],[190,47]],D(C.glass,.15)],
+  ];
+  let out="",fill="";
+  for(const [pts,c] of parts){out+=poly(pts,INK,`stroke="${INK}" stroke-width="6" stroke-linejoin="round"`);fill+=poly(pts,c);}
+  // glint, panel lines, decal
+  fill+=poly([[162,31],[171,31],[160,45],[152,45]],"#fff",'opacity=".85"');
+  fill+=`<line x1="210" y1="49" x2="206" y2="88" stroke="${D(B,.25)}" stroke-width="1.5"/><line x1="96" y1="52" x2="96" y2="89" stroke="${D(B,.25)}" stroke-width="1.5"/>`;
+  fill+=`<rect x="108" y="62" width="40" height="20" rx="4" fill="none" stroke="${D(B,.2)}" stroke-width="1.5" stroke-dasharray="3 3"/><circle cx="128" cy="72" r="8" fill="${team}" stroke="${INK}" stroke-width="2"/><circle cx="128" cy="72" r="3.5" fill="#fff"/>`;
+  fill+=poly([[204,77],[226,77],[226,81],[204,81]],C.metal,`stroke="${INK}" stroke-width="1.5"`);
+  // gear
+  const gear=`<line x1="168" y1="90" x2="166" y2="112" stroke="${INK}" stroke-width="5" stroke-linecap="round"/><line x1="168" y1="90" x2="166" y2="112" stroke="${C.metal}" stroke-width="2.5" stroke-linecap="round"/>
+   <circle cx="166" cy="116" r="11" fill="${C.tire}" stroke="${INK}" stroke-width="3"/><circle cx="166" cy="116" r="4.5" fill="${L(C.metal,.3)}"/>
+   <line x1="230" y1="84" x2="230" y2="116" stroke="${INK}" stroke-width="5" stroke-linecap="round"/><line x1="230" y1="84" x2="230" y2="116" stroke="${C.metal}" stroke-width="2.5" stroke-linecap="round"/>
+   <circle cx="230" cy="119" r="8" fill="${C.tire}" stroke="${INK}" stroke-width="3"/><circle cx="230" cy="119" r="3.2" fill="${L(C.metal,.3)}"/>`;
+  const prop=`<ellipse cx="282" cy="72" rx="6" ry="50" fill="#fff" opacity=".55" stroke="${INK}" stroke-width="1.5" stroke-dasharray="4 4"/>
+   ${poly([[279,24],[285,24],[284,68],[280,68]],C.metal,`stroke="${INK}" stroke-width="2.5" stroke-linejoin="round"`)}
+   ${poly([[280,76],[284,76],[285,120],[279,120]],D(C.metal,.2),`stroke="${INK}" stroke-width="2.5" stroke-linejoin="round"`)}`;
+  return gear+out+fill+prop;
+}
+(function(){
+  const s=2.75, ox=150, oy=40;
+  let g=`<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#BFE6FF"/><stop offset="1" stop-color="#EAF6FF"/></linearGradient></defs>
+  <rect x="0" y="0" width="1040" height="430" rx="16" fill="url(#sky)"/>`;
+  // low-poly clouds
+  g+=cloud(70,90,1.1)+cloud(860,70,.9)+cloud(480,70,.6);
+  g+=`<ellipse cx="${ox+150*s}" cy="${oy+136*s}" rx="${120*s}" ry="${7*s}" fill="#9CC6E6" opacity=".6"/>`;
+  g+=`<g transform="translate(${ox},${oy}) scale(${s})">${sidePlane(C.blue)}</g>`;
+  const pin=(n,x,y)=>`<g><circle cx="${x}" cy="${y}" r="15" fill="#FFB21E" stroke="${INK}" stroke-width="3"/><text x="${x}" y="${y+5}" text-anchor="middle" font-size="15" font-weight="700" fill="${INK}">${n}</text></g>`;
+  const X=x=>ox+x*s, Y=y=>oy+y*s;
+  g+=pin(1,X(296),Y(30))+pin(2,X(262),Y(96))+pin(3,X(180),Y(18))+pin(4,X(16),Y(30))+pin(5,X(70),Y(108))+pin(6,X(232),Y(42))+pin(7,X(186),Y(124))+pin(8,X(128),Y(56));
+  g+=`<text x="1020" y="415" text-anchor="end" font-size="13" fill="#5b7a95">Key light: upper-left · shadows hue-shift to blue-violet</text>`;
+  document.getElementById("hero").innerHTML=g;
+})();
+
+function cloud(x,y,k){
+  const W="#FFFFFF", S="#D5E6F7";
+  return `<g transform="translate(${x},${y}) scale(${k})">
+   ${poly([[-60,10],[-40,-18],[-10,-30],[20,-40],[50,-22],[72,0],[80,18],[-62,22]],W,`stroke="${INK}" stroke-width="3" stroke-linejoin="round" opacity=".95"`)}
+   ${poly([[-62,22],[80,18],[70,26],[-50,30]],S,`stroke="${INK}" stroke-width="3" stroke-linejoin="round"`)}
+   ${poly([[-10,-30],[20,-40],[10,-8]],"#F1F7FF")}${poly([[20,-40],[50,-22],[10,-8]],"#E4EFFA")}</g>`;
+}
+
+/* ---------- 03 shading ---------- */
+(function(){
+  const base="#5DBB63";
+  // low-poly ball: center + ring of facets, tone by facing toward upper-left
+  const cx=100,cy=105,r=78,n=10; let f="";
+  const ring=[...Array(n)].map((_,i)=>{const a=i/n*Math.PI*2-Math.PI/2;return [cx+r*Math.cos(a),cy+r*Math.sin(a)]});
+  const inner=[...Array(5)].map((_,i)=>{const a=i/5*Math.PI*2-Math.PI/2+.3;return [cx-14+34*Math.cos(a),cy-14+34*Math.sin(a)]});
+  for(let i=0;i<n;i++){
+    const a=ring[i],b=ring[(i+1)%n],c=inner[Math.floor(i/2)%5];
+    const mx=(a[0]+b[0])/2-cx,my=(a[1]+b[1])/2-cy; const d=(-mx-my)/(r*1.41);
+    const col=d>.35?L(base,.35):d>-.2?base:D(base,.38);
+    f+=poly([a,b,c],col,`stroke="${INK}" stroke-width="1" stroke-opacity=".25"`);
+  }
+  for(let i=0;i<5;i++){const a=inner[i],b=inner[(i+1)%5];const col=i<2?L(base,.5):i<4?L(base,.25):base;f+=poly([a,b,[cx-14,cy-14]],col,`stroke="${INK}" stroke-width="1" stroke-opacity=".25"`);}
+  f+=`<circle cx="${cx}" cy="${cy}" r="${r+1}" fill="none" stroke="${INK}" stroke-width="4"/>`;
+  // tone ramp
+  const ramp=(y,h,name)=>[[L(h,.35),"light"],[h,"base"],[D(h,.38),"shadow"]].map(([c,l],i)=>`<rect x="${230+i*86}" y="${y}" width="78" height="40" rx="8" fill="${c}" stroke="${INK}" stroke-width="2.5"/><text x="${269+i*86}" y="${y+56}" text-anchor="middle" font-size="12" fill="${INK}">${l}</text>`).join("")+`<text x="230" y="${y-6}" font-size="12.5" fill="#6B7385">${name}</text>`;
+  f+=ramp(22,C.blue,"Team Blue · 3 tones")+ramp(122,"#F4A25A","Desert · shadow drifts violet, not black");
+  f+=`<text x="100" y="205" text-anchor="middle" font-size="12" fill="#6B7385">~20 big facets, flat normals</text>`;
+  document.getElementById("shade").innerHTML=f;
+})();
+
+/* ---------- 04 exploded ---------- */
+(function(){
+  const off={wing:[34,6],tip:[34,6],wingL:[-34,6],tipL:[-34,6],stab:[0,40],stabL:[0,40],cowl:[0,-22],cowlL:[0,-22]};
+  let g=`<g transform="translate(150,8) scale(1.15)">${topdown({parts:TD.fighter.parts,props:[[100,-6,30]]},C.blue,off)}</g>`;
+  // broken caps (jagged) at wing roots
+  const jag=(x,y,flip)=>{let p=`M${x} ${y}`;for(let i=1;i<=6;i++)p+=` L${x+(i%2?6:0)*flip} ${y+i*6}`;return `<path d="${p}" fill="none" stroke="#F2463C" stroke-width="3" stroke-linejoin="round"/>`};
+  g+=`<g transform="translate(150,8) scale(1.15)">${jag(146,82,-1)}${jag(54,82,1)}</g>`;
+  const lab=(x,y,t,lx,ly)=>`<line x1="${x}" y1="${y}" x2="${lx}" y2="${ly}" stroke="${INK}" stroke-width="1.5" stroke-dasharray="3 3"/><text x="${x}" y="${y-4}" font-size="14" font-weight="600" text-anchor="middle" fill="${INK}">${t}</text>`;
+  g+=lab(60,40,"Left wing",170,110)+lab(470,72,"Right wing",352,110)+lab(80,250,"Body",250,180)+lab(440,250,"Tail",300,222)+lab(260,290,"",260,290);
+  g+=`<text x="420" y="18" font-size="14" font-weight="600" fill="${INK}">Engine / prop</text><line x1="415" y1="14" x2="285" y2="6" stroke="${INK}" stroke-width="1.5" stroke-dasharray="3 3"/>`;
+  g+=`<text x="10" y="290" font-size="12" fill="#E0483D">— broken-edge cap</text>`;
+  document.getElementById("explode").innerHTML=g;
+})();
+
+/* ---------- 05 damage ---------- */
+(function(){
+  const puff=(x,y,r,c,s="")=>{let p=[];for(let i=0;i<7;i++){const a=i/7*Math.PI*2;const rr=r*(i%2?.82:1);p.push([x+rr*Math.cos(a),y+rr*Math.sin(a)])}return poly(p,c,`stroke="${INK}" stroke-width="2.5" stroke-linejoin="round" ${s}`)};
+  const mini=(x,y)=>`<g transform="translate(${x},${y}) scale(.42)">${sidePlane(C.blue)}</g>`;
+  let g="";
+  const col=[[10,"Healthy"],[180,"Damaged"],[350,"Critical"]];
+  col.forEach(([x,t])=>g+=`<rect x="${x}" y="0" width="160" height="200" rx="12" fill="#F3F7FB"/><text x="${x+80}" y="22" text-anchor="middle" font-size="15" font-weight="600" fill="${INK}">${t}</text>`);
+  g+=mini(30,80);
+  g+=puff(205,120,8,"#D9DDE3",'opacity=".9"')+puff(190,112,6,"#E8EBEF",'opacity=".8"')+mini(200,80);
+  g+=puff(390,118,16,"#3A3E48")+puff(368,104,13,"#2B2E35")+puff(352,92,10,"#4A4F5B")+
+     poly([[392,128],[400,112],[408,128],[404,134],[396,134]],"#FF5E1A",`stroke="${INK}" stroke-width="2"`)+
+     poly([[396,130],[400,120],[404,130]],"#FFB21E")+mini(370,80);
+  g+=`<text x="90" y="186" text-anchor="middle" font-size="11.5" fill="#6B7385">none · trail on</text><text x="260" y="186" text-anchor="middle" font-size="11.5" fill="#6B7385">grey wisps</text><text x="430" y="186" text-anchor="middle" font-size="11.5" fill="#6B7385">black smoke + fire</text>`;
+  // explosion
+  let star=[];for(let i=0;i<16;i++){const a=i/16*Math.PI*2;const r=i%2?34:58;star.push([110+r*Math.cos(a),252+r*Math.sin(a)*.62])}
+  let star2=star.map(([x,y])=>[110+(x-110)*.62,252+(y-252)*.62]);
+  g+=poly(star,"#FF5E1A",`stroke="${INK}" stroke-width="3" stroke-linejoin="round"`)+poly(star2,"#FFB21E")+
+     `<text x="110" y="261" text-anchor="middle" font-size="24" font-weight="700" fill="${INK}" transform="rotate(-6 110 252)">BOOM</text>`;
+  g+=`<g transform="translate(230,218)">${[[0,0],[40,14],[90,-4],[130,20]].map(([x,y],i)=>poly([[x,y],[x+22,y+4],[x+16,y+20],[x-4,y+14]],[C.body,C.blue,D(C.body,.25),C.metal][i],`stroke="${INK}" stroke-width="2.5" stroke-linejoin="round" transform="rotate(${i*25} ${x+9} ${y+10})"`)).join("")}</g>`;
+  g+=`<text x="330" y="290" text-anchor="middle" font-size="12" fill="#6B7385">3–5 large chunky debris pieces</text>`;
+  document.getElementById("dmg").innerHTML=g;
+})();
+
+/* ---------- 06 palette ---------- */
+(function(){
+  const mk=(id,list)=>document.getElementById(id).innerHTML=list.map(([c,n])=>`<div style="background:${c}"><span>${n}<br>${c}</span></div>`).join("");
+  mk("sw-plane",[[C.blue,"Team Blue"],[C.red,"Team Red"],[C.body,"Body"],[C.metal,"Metal"],[C.glass,"Canopy"],[INK,"Ink outline"]]);
+  mk("sw-biome",[["#7F9CC4","City"],["#F4A25A","Desert"],["#5DBB63","Mountain"],["#F3F6F8","Snow"],["#2EC4B6","Ocean"],["#BFE6FF","Sky"]]);
+  mk("sw-fx",[["#FFF3B0","Flash"],["#FFB21E","Fire"],["#FF5E1A","Fire core"],["#D9DDE3","Light smoke"],["#2B2E35","Heavy smoke"],["#9BE15D","Repair aura"]]);
+})();
+
+/* ---------- 07 props ---------- */
+(function(){
+  const o=`stroke="${INK}" stroke-width="3" stroke-linejoin="round"`;
+  let g=`<rect x="0" y="0" width="620" height="300" rx="14" fill="#F3F7FB"/>`;
+  // terrain tile
+  const tile=(x,y,top,side)=>poly([[x,y],[x+70,y-30],[x+140,y],[x+70,y+30]],top,o)+poly([[x,y],[x+70,y+30],[x+70,y+60],[x,y+30]],D(side,.15),o)+poly([[x+70,y+30],[x+140,y],[x+140,y+30],[x+70,y+60]],D(side,.4),o);
+  g+=tile(14,210,"#5DBB63","#A0704A");
+  g+=tile(166,210,"#F4C27A","#E58A45");
+  g+=tile(318,210,"#2EC4B6","#168E97");
+  g+=tile(470,210,"#AFC0D6","#6F7F99");
+  // tree on grass tile
+  g+=`<rect x="80" y="160" width="10" height="44" fill="#8A5A3B" stroke="${INK}" stroke-width="2.5"/>`;
+  g+=poly([[85,80],[60,170],[85,178]],L("#3E9E52",.25),o)+poly([[85,80],[85,178],[110,170]],D("#3E9E52",.2),o);
+  g+=poly([[85,110],[54,182],[85,190]],L("#3E9E52",.15),o)+poly([[85,110],[85,190],[116,182]],D("#3E9E52",.3),o);
+  // rock on desert
+  g+=poly([[205,206],[220,170],[250,160],[272,186],[268,210]],L("#C9B7A0",.2),o)+poly([[250,160],[272,186],[268,210],[240,212]],D("#C9B7A0",.25),o)+poly([[220,170],[250,160],[240,190]],L("#C9B7A0",.45),o);
+  // carrier on ocean
+  g+=poly([[340,200],[440,192],[452,198],[350,212]],"#8C96A6",o)+poly([[350,212],[452,198],[446,206],[356,220]],D("#8C96A6",.35),o)+
+     `<rect x="420" y="174" width="14" height="20" fill="${L("#8C96A6",.2)}" stroke="${INK}" stroke-width="2.5"/><line x1="350" y1="205" x2="440" y2="196" stroke="#fff" stroke-width="1.5" stroke-dasharray="6 4"/>`;
+  // tower on city
+  g+=poly([[505,210],[540,196],[540,70],[505,84]],L("#AFC0D6",.15),o)+poly([[540,196],[575,210],[575,84],[540,70]],D("#7F9CC4",.25),o)+poly([[505,84],[540,70],[575,84],[540,98]],L("#AFC0D6",.5),o);
+  for(let i=0;i<6;i++){g+=`<line x1="511" y1="${100+i*17}" x2="534" y2="${91+i*17}" stroke="${C.glass}" stroke-width="4"/><line x1="546" y1="${91+i*17}" x2="569" y2="${100+i*17}" stroke="${D(C.glass,.3)}" stroke-width="4"/>`}
+  g+=cloud(300,70,.75);
+  g+=`<text x="84" y="290" text-anchor="middle" font-size="13" font-weight="600" fill="${INK}">Mountain</text><text x="236" y="290" text-anchor="middle" font-size="13" font-weight="600" fill="${INK}">Desert</text><text x="388" y="290" text-anchor="middle" font-size="13" font-weight="600" fill="${INK}">Ocean</text><text x="540" y="290" text-anchor="middle" font-size="13" font-weight="600" fill="${INK}">City</text>`;
+  g+=`<text x="300" y="118" text-anchor="middle" font-size="12" fill="#6B7385">Puffy cloud · doubles as cover</text>`;
+  document.getElementById("props").innerHTML=g;
+})();
+</script>
+</body>
+</html>

@@ -1013,7 +1013,7 @@ namespace WingingIt.UI
                     text += $"   {label} {hp}";
                 }
             }
-            var rect = new Rect(width * 0.5f - 460f, 64f, 920f, 30f);
+            var rect = new Rect(width * 0.5f - 460f, 86f, 920f, 30f);
             Box(rect, new Color(0f, 0f, 0f, 0.35f));
             GUI.Label(rect, text, _tinyCentered);
         }

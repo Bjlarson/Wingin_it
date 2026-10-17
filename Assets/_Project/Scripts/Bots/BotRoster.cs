@@ -46,6 +46,27 @@ namespace WingingIt.Bots
             return (from, (from + step) % areaCount);
         }
 
+        /// <summary>
+        /// The classes of the next <paramref name="bots"/> bots on a team that already has <paramref name="counts"/>
+        /// of each, picked one after another by <see cref="PickClass"/> (what <see cref="BotRoster"/> will spawn).
+        /// </summary>
+        public static List<int> Lineup(IReadOnlyList<int> counts, IReadOnlyList<int> weights, int bots)
+        {
+            var have = new List<int>(counts);
+            while (have.Count < weights.Count)
+                have.Add(0);
+            var lineup = new List<int>();
+            for (int i = 0; i < bots; i++)
+            {
+                int cls = PickClass(have, weights);
+                if (cls < 0)
+                    break;
+                have[cls]++;
+                lineup.Add(cls);
+            }
+            return lineup;
+        }
+
         /// <summary>How many bots a team needs so that it has <paramref name="teamSize"/> planes counting its <paramref name="humans"/>.</summary>
         public static int BotsWanted(int teamSize, int humans) => Mathf.Max(0, teamSize - humans);
     }
@@ -87,6 +108,7 @@ namespace WingingIt.Bots
         public IReadOnlyList<BotBrain> Bots => _bots;
         public IReadOnlyList<Vector3> FightAreas => fightAreas;
         public int TeamCount => teamCount;
+        public IReadOnlyList<FlightStats> Classes => classes;
 
         public int TeamSize
         {
@@ -170,6 +192,24 @@ namespace WingingIt.Bots
                     have--;
                 }
             }
+        }
+
+        /// <summary>
+        /// The classes of the bots <see cref="Refresh"/> would add to <paramref name="team"/> right now, around the
+        /// humans already on it (for the pre-match lobby, before any bot exists).
+        /// </summary>
+        public List<FlightStats> PlannedBots(int team)
+        {
+            int humans = 0;
+            foreach (var plane in PlaneController.All)
+                if (plane.Team == team && !plane.TryGetComponent<BotBrain>(out _))
+                    humans++;
+            int want = TeamFill.BotsWanted(teamSize, humans) - CountBots(team);
+            var planned = new List<FlightStats>();
+            foreach (int cls in TeamFill.Lineup(ClassCounts(team), classWeights, want))
+                if (cls < classes.Length)
+                    planned.Add(classes[cls]);
+            return planned;
         }
 
         int CountBots(int team)

@@ -87,5 +87,19 @@ namespace WingingIt.Tests
             Assert.AreEqual(0, TeamFill.BotsWanted(8, 8));
             Assert.AreEqual(0, TeamFill.BotsWanted(8, 10));
         }
+
+        [Test]
+        public void Lineup_IsThePicksInOrder_AroundTheHumans()
+        {
+            // A human Fighter: 7 bots make up the rest of the 3/2/2/1 mix.
+            var lineup = TeamFill.Lineup(new[] { 1, 0, 0, 0 }, Mix, 7);
+            Assert.AreEqual(7, lineup.Count);
+            var counts = new[] { 1, 0, 0, 0 };
+            foreach (int cls in lineup)
+                counts[cls]++;
+            CollectionAssert.AreEqual(Mix, counts);
+            CollectionAssert.AreEqual(new List<int> { 0, 1, 2, 3 }, TeamFill.Lineup(new int[4], Mix, 4));
+            Assert.IsEmpty(TeamFill.Lineup(new int[4], new[] { 0, 0, 0, 0 }, 3), "nothing to fly");
+        }
     }
 }

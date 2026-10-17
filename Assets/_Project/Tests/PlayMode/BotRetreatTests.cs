@@ -9,6 +9,7 @@ using UnityEngine.TestTools;
 using WingingIt.Bots;
 using WingingIt.Dev;
 using WingingIt.Flight;
+using WingingIt.Match;
 using WingingIt.World;
 using Object = UnityEngine.Object;
 
@@ -261,6 +262,7 @@ namespace WingingIt.Tests
         {
             yield return SceneManager.LoadSceneAsync("Island", LoadSceneMode.Single);
             yield return null;
+            Object.FindAnyObjectByType<MatchManager>()?.Dismiss(); // free flight: no lobby, no match clock
             Object.FindAnyObjectByType<BotRoster>()?.Clear(); // an empty sky: these tests fly alone
             yield return null;
             var go = GameObject.Find("Player Plane");

@@ -26,7 +26,7 @@ Last updated: 2026-10-13
 
 - Pick any class at spawn. **Proposed:** you can switch class on respawn or while repairing at a home airfield.
 - Every class has its full loadout and ability from spawn (see [aircraft-classes.md](../02-Mechanics/aircraft-classes.md)).
-- Kills, assists, and objectives earn **team score** (to win the match) and **personal XP** (for player level).
+- Kills, assists, and objectives earn **team score** (to win the match) and **personal XP** (for player level). Team score values: kill 50, assist 20, objectives set per objective (see [match-modes](match-modes.md#team-score-built-2026-10-17)); a pilot's own share is their **personal score**.
 - **Death penalty:** the respawn timer, the flight time back to the fight, and score for the enemy. Nothing else. Retreating to repair is still the smart move, because dying wastes a big chunk of a 5-minute match.
 
 ## Player XP Sources

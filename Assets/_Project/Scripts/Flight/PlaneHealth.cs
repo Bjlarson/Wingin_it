@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace WingingIt.Flight
@@ -30,13 +31,19 @@ namespace WingingIt.Flight
         /// <summary>The damage source credited with the kill (the killer plane, an AA gun, ...), or null.</summary>
         public readonly UnityEngine.Object Source;
         public readonly DeathCause Cause;
+        /// <summary>
+        /// Other planes that helped (see <see cref="PlaneHealth.AssistMinDamage"/>), any team, never the killer. Never null.
+        /// </summary>
+        public readonly IReadOnlyList<PlaneController> Assisters;
 
-        public KillInfo(PlaneHealth victim, PlaneController killer, UnityEngine.Object source, DeathCause cause)
+        public KillInfo(PlaneHealth victim, PlaneController killer, UnityEngine.Object source, DeathCause cause,
+            IReadOnlyList<PlaneController> assisters = null)
         {
             Victim = victim;
             Killer = killer;
             Source = source;
             Cause = cause;
+            Assisters = assisters ?? Array.Empty<PlaneController>();
         }
     }
 
@@ -60,10 +67,21 @@ namespace WingingIt.Flight
         [SerializeField] BodyDamageEffects bodyEffects = new();
         [Tooltip("Seconds a hit keeps kill credit if the plane then crashes. A crippled plane (lost part or Critical body) keeps it until repaired.")]
         [SerializeField] float killCreditWindow = 20f;
+        [Tooltip("Assist: another plane that did at least this fraction of the body's max HP in damage (any parts), with a hit inside the kill credit window, or shot off a part this life.")]
+        [SerializeField, Range(0f, 1f)] float assistMinDamage = 0.2f;
 
         PlaneController _plane;
         readonly PlanePart[] _parts = new PlanePart[PlanePart.TypeCount];
         float _lastAttackTime = float.NegativeInfinity;
+        readonly Dictionary<PlaneController, AttackRecord> _attackers = new();
+
+        /// <summary>What one enemy plane has done to us this life, for assists.</summary>
+        struct AttackRecord
+        {
+            public float Damage;
+            public float LastHitTime;
+            public bool BrokePart;
+        }
 
         public event Action<PlaneHealth, PartDamageInfo> Damaged;
         /// <summary>Raised after a detachable part has already broken off (<see cref="PlanePart.IsDetached"/>).</summary>
@@ -97,6 +115,13 @@ namespace WingingIt.Flight
         {
             get => killCreditWindow;
             set => killCreditWindow = Mathf.Max(0f, value);
+        }
+
+        /// <summary>Fraction of the body's max HP another plane must deal (inside the kill credit window) for an assist.</summary>
+        public float AssistMinDamage
+        {
+            get => assistMinDamage;
+            set => assistMinDamage = Mathf.Clamp01(value);
         }
 
         /// <summary>Lost a part or the body is Critical: whoever did it keeps kill credit until the plane is repaired.</summary>
@@ -154,6 +179,7 @@ namespace WingingIt.Flight
         {
             LastAttacker = null;
             _lastAttackTime = float.NegativeInfinity;
+            _attackers.Clear();
             var durability = Durability();
             foreach (var part in _parts)
             {
@@ -184,6 +210,7 @@ namespace WingingIt.Flight
 
             RecordAttacker(source);
             float taken = part.TakeDamage(amount * Mathf.Max(0f, DamageTakenMultiplier));
+            RecordDamageBy(source, taken, part.IsDestroyed);
             var info = new PartDamageInfo(part, taken, point, source);
             Damaged?.Invoke(this, info);
             if (part.partType == PlanePartType.Body)
@@ -228,6 +255,31 @@ namespace WingingIt.Flight
             _lastAttackTime = Time.time;
         }
 
+        void RecordDamageBy(UnityEngine.Object source, float taken, bool brokePart)
+        {
+            var attacker = GetPlane(source);
+            if (attacker == null || attacker == _plane)
+                return;
+            _attackers.TryGetValue(attacker, out var record);
+            record.Damage += taken;
+            record.LastHitTime = Time.time;
+            record.BrokePart |= brokePart;
+            _attackers[attacker] = record;
+        }
+
+        /// <summary>Every plane but <paramref name="killer"/> that shot off a part this life, or did enough damage recently.</summary>
+        List<PlaneController> Assisters(PlaneController killer)
+        {
+            var body = GetPart(PlanePartType.Body);
+            float minDamage = assistMinDamage * (body != null ? body.MaxHealth : 0f);
+            var assisters = new List<PlaneController>();
+            foreach (var (plane, record) in _attackers)
+                if (plane != null && plane != killer
+                    && (record.BrokePart || (record.Damage >= minDamage && Time.time - record.LastHitTime <= killCreditWindow)))
+                    assisters.Add(plane);
+            return assisters;
+        }
+
         /// <summary>
         /// Kill credit: the last attacker gets it if they hit within <see cref="KillCreditWindow"/>, or at any
         /// time if the plane is crippled. A plane shot down always credits whoever fired the fatal hit.
@@ -237,7 +289,8 @@ namespace WingingIt.Flight
             var source = LastAttacker;
             if (source != null && !IsCrippled && Time.time - _lastAttackTime > killCreditWindow)
                 source = null;
-            LastKill = new KillInfo(this, GetPlane(source), source, _plane.LastDeathCause);
+            var killer = GetPlane(source);
+            LastKill = new KillInfo(this, killer, source, _plane.LastDeathCause, Assisters(killer));
             Killed?.Invoke(LastKill);
             AnyKilled?.Invoke(LastKill);
         }

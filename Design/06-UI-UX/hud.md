@@ -1,7 +1,7 @@
 # HUD
 
 Status: Draft
-Last updated: 2026-10-16
+Last updated: 2026-10-17
 
 ## Summary
 
@@ -24,8 +24,8 @@ A minimal HUD that supports the core decision of fight or retreat. The pilot sho
 | Cloud cover | Shows you're in cloud and whether you're hidden | Prototype: white screen wash that thickens deeper in; **IN CLOUD: HIDDEN FROM LOCKS AND AA** or **CLOUD EDGE: STILL VISIBLE**. Enemies behind or deep in cloud lose their bracket, pipper and readout (radar diamonds still show) |
 | Minimap | Map, objectives, friendlies, radar-revealed enemies | Prototype: no minimap yet; radar-revealed enemies get a green diamond + distance in view |
 | **Nearest airfield marker** | Arrow + distance to the closest friendly repair zone | Key to the retreat loop |
-| Match timer + team score | Teams mode | |
-| Score popups | "+50 Kill", "+20 Assist", "WING SHOT OFF!" | The coin summary is shown after the match |
+| Match timer + team score | Teams mode | Prototype (`MatchScreens`): a top-center bar, WEST score · clock · EAST score, the clock flashing gold in the last 30 s |
+| Score popups | "+50 Kill", "+20 Assist", "WING SHOT OFF!" | The coin summary is shown after the match. The points are live (kill 50, assist 20); `MatchScore.Awarded` is the hook for the popups |
 
 ## Post-Match Screen
 

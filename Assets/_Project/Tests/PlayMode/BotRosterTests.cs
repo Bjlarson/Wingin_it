@@ -7,6 +7,7 @@ using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using WingingIt.Bots;
 using WingingIt.Flight;
+using WingingIt.Match;
 using WingingIt.World;
 
 namespace WingingIt.Tests
@@ -22,6 +23,8 @@ namespace WingingIt.Tests
         {
             yield return SceneManager.LoadSceneAsync("Island", LoadSceneMode.Single);
             yield return null;
+            Object.FindAnyObjectByType<MatchManager>()?.Dismiss(); // free flight: no lobby, no match clock
+            yield return null; // the roster starts filling
             var go = GameObject.Find("Player Plane");
             Assert.IsNotNull(go, "Island scene has no Player Plane");
             _player = go.GetComponent<PlaneController>();

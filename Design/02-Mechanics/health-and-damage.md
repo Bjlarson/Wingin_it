@@ -98,6 +98,7 @@ Part damage stacks on top of these. A Critical body with a missing wing is in de
 - Explosive cartoon crash, with parts scattering as big chunky pieces
 - The killer gets team score + coins for the match (see [economy-and-monetization.md](../01-Game-Design/economy-and-monetization.md))
 - **Kill credit for crashes:** if a crippled plane crashes, the last player to damage it gets the kill
+- **Assists:** `PlaneHealth` tracks each other plane's damage this life; at death, every one but the killer that shot off a part, or did ≥ 20% of body max HP with a hit in the last 20 s, is listed in `KillInfo.Assisters` (scoring drops teammates). Cleared on respawn and repair
 - Custom destruction cosmetics (confetti, "POOF") play here, but must still read clearly as a kill
 - Respawn after a delay (TBD, proposed 5s)
 
