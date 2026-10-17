@@ -5,6 +5,7 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
+using WingingIt.Bots;
 using WingingIt.Dev;
 using WingingIt.Flight;
 using WingingIt.World;
@@ -20,6 +21,8 @@ namespace WingingIt.Tests
         public IEnumerator LoadScene()
         {
             yield return SceneManager.LoadSceneAsync("Island", LoadSceneMode.Single);
+            yield return null;
+            Object.FindAnyObjectByType<BotRoster>()?.Clear(); // an empty sky: these tests fly alone
             yield return null;
             var go = GameObject.Find("Player Plane");
             Assert.IsNotNull(go, "Island scene has no Player Plane");

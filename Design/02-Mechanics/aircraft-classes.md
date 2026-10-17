@@ -40,7 +40,7 @@ First-pass tuning (all **proposed**, to confirm in a playtest):
 Notes:
 - The barrel roll holds its heading (no bank-turn while rolling) and ends wings-level, so it's a pure dodge.
 - **Teams are a placeholder:** each plane has a team number. The player is team 0 and the test dummies are team 1, so in the test scene the aura only heals the Support itself. Weapons don't check teams yet (no friendly-fire rule).
-- Bots don't use abilities yet (Phase 5).
+- Bots use every ability (except at Easy difficulty); see [bots](bots.md#abilities).
 
 ## Fighter: Balanced
 

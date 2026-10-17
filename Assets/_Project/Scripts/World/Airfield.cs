@@ -17,6 +17,14 @@ namespace WingingIt.World
         public const float RunwayLaneSpacing = 13f;
         /// <summary>Gap between runway spawn rows (m), further down the runway.</summary>
         public const float RunwayRowSpacing = 50f;
+        /// <summary>Planes that can appear over the field at once: rows of three in the air (see <see cref="AirSpawnSlot"/>).</summary>
+        public const int AirSpawnSlots = 9;
+        /// <summary>Gap between air spawn lanes (m), wide enough that nobody spawns in a neighbor's wake.</summary>
+        public const float AirLaneSpacing = 40f;
+        /// <summary>Each air spawn row is this far (m) behind the one before it...</summary>
+        public const float AirRowSpacing = 60f;
+        /// <summary>...and this much (m) higher, so a row never flies into the one ahead.</summary>
+        public const float AirRowStep = 10f;
 
         static readonly List<Airfield> s_all = new();
 
@@ -77,6 +85,21 @@ namespace WingingIt.World
             float x = lane == 0 ? 0f : lane == 1 ? -RunwayLaneSpacing : RunwayLaneSpacing;
             Vector3 offset = transform.right * x + RunwayDirection * (row * RunwayRowSpacing);
             return new Pose(spawn.position + offset, Quaternion.LookRotation(RunwayDirection));
+        }
+
+        /// <summary>
+        /// Where the <paramref name="slot"/>th plane appearing in the air is put: the air spawn, then beside it (left,
+        /// right), then the next row behind and a little above. All face the air spawn's heading. Slots past
+        /// <see cref="AirSpawnSlots"/> wrap around.
+        /// </summary>
+        public Pose AirSpawnSlot(int slot)
+        {
+            Transform spawn = airSpawn != null ? airSpawn : transform;
+            slot = ((slot % AirSpawnSlots) + AirSpawnSlots) % AirSpawnSlots;
+            int lane = slot % 3, row = slot / 3;
+            float x = lane == 0 ? 0f : lane == 1 ? -AirLaneSpacing : AirLaneSpacing;
+            Vector3 offset = spawn.right * x - spawn.forward * (row * AirRowSpacing) + Vector3.up * (row * AirRowStep);
+            return new Pose(spawn.position + offset, spawn.rotation);
         }
 
         /// <summary>Where a plane at <paramref name="position"/> flying at <paramref name="velocity"/> is relative to this runway's glide path.</summary>

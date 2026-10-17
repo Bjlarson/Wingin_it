@@ -8,7 +8,8 @@ namespace WingingIt.Flight
     /// After any death (crash or shot down), waits <see cref="RespawnDelay"/> and puts the plane back at the spawn
     /// point, or at the nearest friendly airfield if no spawn point is set. The level's
     /// <see cref="LevelSettings.CurrentSpawnMode"/> picks how: in the air on the approach, or parked on the runway in
-    /// the first free takeoff slot. In <see cref="SpawnMode.Runway"/> levels a plane with no spawn point also starts
+    /// the first free takeoff slot. Air spawns also take the first free slot, so a team respawning together doesn't
+    /// appear inside itself. In <see cref="SpawnMode.Runway"/> levels a plane with no spawn point also starts
     /// the level on the runway.
     /// </summary>
     [RequireComponent(typeof(PlaneController))]
@@ -21,6 +22,8 @@ namespace WingingIt.Flight
 
         /// <summary>A takeoff slot with another live plane closer than this (m, ignoring height) is taken.</summary>
         const float SlotClearance = 10f;
+        /// <summary>An air spawn slot with another live plane closer than this (m) is taken.</summary>
+        const float AirSlotClearance = 25f;
 
         PlaneController _plane;
 
@@ -85,8 +88,7 @@ namespace WingingIt.Flight
                 onRunway = true;
                 return FreeRunwaySlot(field);
             }
-            return field.AirSpawn != null ? new Pose(field.AirSpawn.position, field.AirSpawn.rotation)
-                : new Pose(transform.position, transform.rotation);
+            return field.AirSpawn != null ? FreeAirSlot(field) : new Pose(transform.position, transform.rotation);
         }
 
         /// <summary>The first takeoff slot on <paramref name="field"/>'s runway that no other live plane is sitting on (the first one if all are).</summary>
@@ -99,6 +101,26 @@ namespace WingingIt.Flight
                     return pose;
             }
             return field.RunwaySpawnSlot(0);
+        }
+
+        /// <summary>The first air spawn slot over <paramref name="field"/> with no other live plane in it (the first one if all are).</summary>
+        Pose FreeAirSlot(Airfield field)
+        {
+            for (int slot = 0; slot < Airfield.AirSpawnSlots; slot++)
+            {
+                Pose pose = field.AirSpawnSlot(slot);
+                if (!IsAirSlotTaken(pose.position))
+                    return pose;
+            }
+            return field.AirSpawnSlot(0);
+        }
+
+        bool IsAirSlotTaken(Vector3 position)
+        {
+            foreach (var other in PlaneController.All)
+                if (other != _plane && other.IsAlive && (other.Position - position).sqrMagnitude < AirSlotClearance * AirSlotClearance)
+                    return true;
+            return false;
         }
 
         bool IsSlotTaken(Vector3 position)

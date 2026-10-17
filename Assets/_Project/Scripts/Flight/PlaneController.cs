@@ -637,7 +637,8 @@ namespace WingingIt.Flight
             _angularRates = Vector3.zero;
             _stallLift = _damageLift = LiftFactor = 1f;
 
-            if (flyingSpeed && _groundPitch >= liftoffPitch)
+            // Only a pull-up lifts off: a nose-high touchdown (a flare, or a crippled plane holding its nose up) stays down.
+            if (flyingSpeed && pitchTarget > 0f && _groundPitch >= liftoffPitch)
             {
                 IsGrounded = IsAutoBraking = false; // rotate and climb away along the nose
                 AutoBrakeStopDistance = null;

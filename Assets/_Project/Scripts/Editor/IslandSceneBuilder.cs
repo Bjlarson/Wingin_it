@@ -3,6 +3,7 @@ using System.IO;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using WingingIt.Bots;
 using WingingIt.Flight;
 using WingingIt.World;
 using B = WingingIt.Editor.FlightTestSceneBuilder;
@@ -79,6 +80,21 @@ namespace WingingIt.Editor
             ("East Home Airfield", 1, true, new Vector2(1600f, 0f), 180f),
             ("Central Airfield", Airfield.Neutral, false, new Vector2(0f, -700f), 90f),
         };
+        /// <summary>
+        /// Where bots patrol when nothing's in sight (<see cref="BotRoster"/>): world XZ and the height to fly above the
+        /// highest thing within <see cref="FightAreaClearanceRadius"/>. Mirrored across x = 0, so both teams' areas are
+        /// the same distances from home: their own home-region landmark, the city, Central, the lighthouse, the enemy's.
+        /// </summary>
+        static readonly (string name, Vector2 xz, float agl)[] FightAreas =
+        {
+            ("City", new Vector2(0f, 300f), 150f),
+            ("Summit Radar", new Vector2(-600f, 600f), 200f),
+            ("The Pyramid", new Vector2(600f, 600f), 200f),
+            ("Central Airfield", new Vector2(0f, -700f), 250f),
+            ("Lighthouse Rock", new Vector2(0f, -1700f), 250f),
+        };
+        const float FightAreaClearanceRadius = 150f;
+
         // Flattened pad around each airfield (local half extents), blending into the land around it.
         static readonly Vector2 PadHalfSize = new Vector2(130f, 400f);
         const float PadBlend = 250f;
@@ -225,6 +241,7 @@ namespace WingingIt.Editor
             BuildClouds(world);
 
             B.BuildPlayer(scene, planePrefab, classes, playerSpawn);
+            BuildBotRoster(planePrefab, classes);
 
             EditorSceneManager.SaveScene(scene, ScenePath);
             B.AddSceneToBuildSettings(ScenePath, first: false);
@@ -894,6 +911,15 @@ namespace WingingIt.Editor
             root.gameObject.AddComponent<CloudBank>().Configure(puffs);
             foreach (var t in root.GetComponentsInChildren<Transform>())
                 t.gameObject.isStatic = true;
+        }
+
+        /// <summary>Fills both teams to 8v8 with bots that patrol the <see cref="FightAreas"/>.</summary>
+        static void BuildBotRoster(GameObject planePrefab, FlightStats[] classes)
+        {
+            var areas = new List<Vector3>();
+            foreach (var (_, xz, agl) in FightAreas)
+                areas.Add(new Vector3(xz.x, HighestPointNear(xz, FightAreaClearanceRadius) + agl, xz.y));
+            new GameObject("Bot Roster").AddComponent<BotRoster>().Configure(planePrefab, classes, areas);
         }
 
         /// <summary>The highest solid surface (ground, sea, building) at <paramref name="xz"/> or within <paramref name="radius"/> of it.</summary>
