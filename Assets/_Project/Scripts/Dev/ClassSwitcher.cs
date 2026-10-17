@@ -59,7 +59,8 @@ namespace WingingIt.Dev
 
         public void SelectClass(int index)
         {
-            if (index < 0 || index >= classes.Length || classes[index] == null)
+            // Off in a match (MatchManager has the rules for when a class can change); the touch button still calls in.
+            if (!isActiveAndEnabled || index < 0 || index >= classes.Length || classes[index] == null)
                 return;
             _index = index;
             _plane.SetStats(classes[index]);

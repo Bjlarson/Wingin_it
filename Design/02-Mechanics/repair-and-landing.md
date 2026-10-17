@@ -20,7 +20,7 @@ This is the signature mechanic. Planes do not regenerate health in the air. To r
 3. Wait for the gear to fully extend, then land safely: touch down below a max speed and angle.
 4. Stop in the repair zone (a marked area on the runway or apron). **Greybox:** a 30 × 200 m yellow box on the far half of a 40 × 600 m runway, so a plane lands, rolls out, and stops in it without taxiing.
 5. Hold in place while the repair runs.
-6. **Proposed:** switch class here if wanted (see [aircraft-classes.md](aircraft-classes.md)).
+6. Switch class here if wanted, once the repair is done and the plane is stopped at a **home** field (Tab / CHANGE PLANE; see [aircraft-classes.md](aircraft-classes.md#class-selection)).
 7. Take off and rejoin.
 
 ## Repair Times (decided: fixed)

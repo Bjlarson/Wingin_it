@@ -28,6 +28,7 @@ Last updated: 2026-10-17
 | Terrain collision | Instant crash, then respawn (prototype). Revisit once Phase 2 adds HP | 2026-10-14 |
 | Part list | Six parts: body, L wing, R wing, horizontal stabilizer, vertical stabilizer, engine. The engine dies and smokes but never detaches (hitbox stays) | 2026-10-14 |
 | Gun mounting | Wing-mounted: losing a wing halves firepower | 2026-10-14 |
+| Class switching | On every respawn (pick while the respawn timer runs), or parked and repaired at a **home** airfield (not a captured one). The class picker shows how many teammates fly each class; no class limits → [aircraft-classes](../02-Mechanics/aircraft-classes.md#class-selection) | 2026-10-17 |
 | Teams tie-breaker | A tie when time runs out is a **draw**. No overtime for now; revisit after playtests | 2026-10-17 |
 | Spawning | Per level (`LevelSettings`): **Air** (over the home airfield at cruise) or **Runway** (parked at the threshold, take off yourself). After a repair, always a runway takeoff → [flight-model](../02-Mechanics/flight-model.md#spawning) | 2026-10-15 |
 
@@ -39,14 +40,13 @@ Last updated: 2026-10-17
 
 ### Design
 
-2. Class switching: on respawn only, or also at the airfield?
-3. Weapon button mapping for rockets / bombs (proposed: bombs on their own button, B / gamepad Y); confirm per-class loadouts (implemented as proposed, awaiting a playtest).
-4. Support class role in Free For All. Also: ability tuning (cooldowns, durations, strengths) is first-pass; Support radar is passive (proposed); friendly-fire rule for when teams exist → [aircraft-classes](../02-Mechanics/aircraft-classes.md#abilities-in-the-prototype)
-5. Prize machine: spin price, duplicate rule, rarity tiers.
+2. Weapon button mapping for rockets / bombs (proposed: bombs on their own button, B / gamepad Y); confirm per-class loadouts (implemented as proposed, awaiting a playtest).
+3. Support class role in Free For All. Also: ability tuning (cooldowns, durations, strengths) is first-pass; Support radar is passive (proposed); friendly-fire rule for when teams exist → [aircraft-classes](../02-Mechanics/aircraft-classes.md#abilities-in-the-prototype)
+4. Prize machine: spin price, duplicate rule, rarity tiers.
 
 ### Business / Scope
 
-6. **Loot box compliance:** selling coins for random items needs odds disclosure and region handling → [economy](../01-Game-Design/economy-and-monetization.md#-loot-box-regulation)
-7. Server hosting provider and regions.
-8. PC storefront (Steam?).
-9. Final title?
+5. **Loot box compliance:** selling coins for random items needs odds disclosure and region handling → [economy](../01-Game-Design/economy-and-monetization.md#-loot-box-regulation)
+6. Server hosting provider and regions.
+7. PC storefront (Steam?).
+8. Final title?

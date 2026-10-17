@@ -255,4 +255,28 @@ namespace WingingIt.Match
 
         bool IsTeam(int team) => team >= 0 && team < _teamScores.Length;
     }
+    /// <summary>
+    /// When a pilot may change class mid-match: on every respawn, or parked at a home airfield once repaired (see
+    /// Design/02-Mechanics/aircraft-classes.md#class-selection). Pure, so the rule is EditMode-testable.
+    /// </summary>
+    public static class ClassSwap
+    {
+        /// <summary>
+        /// True if a pilot can swap class where they are: alive, on the wheels in a home airfield's repair zone,
+        /// stopped (<paramref name="speed"/> ≤ <paramref name="stoppedSpeed"/>), not mid-repair, and at full health.
+        /// </summary>
+        public static bool CanSwapAtAirfield(bool alive, bool grounded, bool inHomeRepairZone, float speed, float stoppedSpeed,
+            bool repairing, bool fullHealth) =>
+            alive && grounded && inHomeRepairZone && speed <= stoppedSpeed && !repairing && fullHealth;
+
+        /// <summary>How many of <paramref name="classIndexes"/> fly each of <paramref name="classCount"/> classes (out-of-range indexes are skipped).</summary>
+        public static int[] Composition(IEnumerable<int> classIndexes, int classCount)
+        {
+            var counts = new int[Math.Max(0, classCount)];
+            foreach (int i in classIndexes)
+                if (i >= 0 && i < counts.Length)
+                    counts[i]++;
+            return counts;
+        }
+    }
 }

@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using UnityEngine;
 using WingingIt.World;
@@ -29,6 +30,9 @@ namespace WingingIt.Flight
 
         public float RespawnDelay => respawnDelay;
         public float RespawnTimeLeft { get; private set; }
+
+        /// <summary>Raised just before the plane is put back, so a pending class change can apply first.</summary>
+        public event Action<PlaneRespawner> Spawning;
 
         public void SetSpawnPoint(Transform point) => spawnPoint = point;
 
@@ -67,6 +71,7 @@ namespace WingingIt.Flight
         public void SpawnNow()
         {
             CancelPendingRespawn();
+            Spawning?.Invoke(this);
             Pose pose = SpawnPoseFor(_plane.Position, out bool onRunway);
             if (onRunway)
                 _plane.SpawnOnGround(pose.position, pose.rotation);

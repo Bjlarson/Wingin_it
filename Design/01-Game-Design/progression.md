@@ -24,7 +24,7 @@ Last updated: 2026-10-13
 
 ## In-Match
 
-- Pick any class at spawn. **Proposed:** you can switch class on respawn or while repairing at a home airfield.
+- Pick any class at spawn. **Decided:** you can switch class on respawn, or parked at a home airfield once repaired (see [aircraft-classes](../02-Mechanics/aircraft-classes.md#class-selection)).
 - Every class has its full loadout and ability from spawn (see [aircraft-classes.md](../02-Mechanics/aircraft-classes.md)).
 - Kills, assists, and objectives earn **team score** (to win the match) and **personal XP** (for player level). Team score values: kill 50, assist 20, objectives set per objective (see [match-modes](match-modes.md#team-score-built-2026-10-17)); a pilot's own share is their **personal score**.
 - **Death penalty:** the respawn timer, the flight time back to the fight, and score for the enemy. Nothing else. Retreating to repair is still the smart move, because dying wastes a big chunk of a 5-minute match.
@@ -81,4 +81,4 @@ Persistent player level and cosmetics need **player accounts and cloud save** (e
 - [x] Unlock style: coins → random prize machine (+ direct-buy shop)
 - [x] Monetization: free to play, cosmetic + coin sales, rewarded ads
 - [ ] Does player level do anything beyond display + bonus coins?
-- [ ] Class switching: on respawn only, or also at the airfield?
+- [x] Class switching: on respawn, or repaired at a home airfield (decided 2026-10-17)

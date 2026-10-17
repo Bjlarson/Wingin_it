@@ -129,6 +129,18 @@ namespace WingingIt.Flight
 
         public PlanePart GetPart(PlanePartType type) => _parts[(int)type];
 
+        /// <summary>Every part attached and at full HP: a fresh or fully repaired plane.</summary>
+        public bool IsFullHealth
+        {
+            get
+            {
+                foreach (var part in _parts)
+                    if (part != null && part.Health < part.MaxHealth)
+                        return false;
+                return true;
+            }
+        }
+
         /// <summary>Bitmask of destroyed parts (bit = <see cref="PlanePartType"/>); what the network will sync.</summary>
         public int LostPartsMask
         {

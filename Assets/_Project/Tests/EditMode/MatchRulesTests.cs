@@ -209,4 +209,29 @@ namespace WingingIt.Tests
             Assert.AreEqual("w1 renamed", score.Pilots[0].Name);
         }
     }
+    public class ClassSwapTests
+    {
+        static bool Can(bool alive = true, bool grounded = true, bool home = true, float speed = 0f, bool repairing = false, bool full = true) =>
+            ClassSwap.CanSwapAtAirfield(alive, grounded, home, speed, 0.5f, repairing, full);
+
+        [Test]
+        public void ParkedAndRepaired_AtHome_CanSwap() => Assert.IsTrue(Can());
+
+        [Test]
+        public void Rolling_Airborne_Away_Dead_MidRepair_OrDamaged_CantSwap()
+        {
+            Assert.IsFalse(Can(speed: 3f), "still rolling");
+            Assert.IsFalse(Can(grounded: false), "in the air");
+            Assert.IsFalse(Can(home: false), "not in a home field's repair zone");
+            Assert.IsFalse(Can(alive: false), "dead (that's the respawn picker's job)");
+            Assert.IsFalse(Can(repairing: true), "repair still running");
+            Assert.IsFalse(Can(full: false), "not repaired yet");
+        }
+
+        [Test]
+        public void Composition_CountsEachClass_SkippingUnknowns()
+        {
+            CollectionAssert.AreEqual(new[] { 2, 0, 1, 1 }, ClassSwap.Composition(new[] { 0, 2, 0, 3, -1, 7 }, 4));
+        }
+    }
 }

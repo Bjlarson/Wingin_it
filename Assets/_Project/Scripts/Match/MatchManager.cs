@@ -8,12 +8,24 @@ using WingingIt.World;
 
 namespace WingingIt.Match
 {
+    /// <summary>Why the in-play class picker is open.</summary>
+    public enum ClassPicker
+    {
+        None,
+        /// <summary>The player is dead: the pick is the class they respawn in.</summary>
+        Respawn,
+        /// <summary>Parked and repaired at a home airfield: the pick swaps class on the spot.</summary>
+        Airfield,
+    }
+
     /// <summary>
     /// Runs one offline Teams match: lobby → class select → 3-2-1 → a 5-minute clock → scoreboard (see
     /// <see cref="MatchClock"/>). The world is frozen (time scale 0) everywhere but in play, the bots only join once a
     /// class is picked, and the player's controls and flight HUD are off outside play. Every death in play goes to the
     /// <see cref="MatchScore"/> (kills and assists), and objectives score through <see cref="AwardObjective"/>. <see cref="MatchScreens"/> draws it. <see cref="Dismiss"/> drops all of this for free
     /// flight (tests, sandbox).
+    /// In play the class can change only on respawn (<see cref="ChooseRespawnClass"/> while dead) or parked and repaired
+    /// at a home airfield (<see cref="ChangeClassAtAirfield"/>); see <see cref="ClassSwap"/>.
     /// </summary>
     public class MatchManager : MonoBehaviour
     {
@@ -27,6 +39,8 @@ namespace WingingIt.Match
         [SerializeField] Behaviour[] playOnlyBehaviours;
         [Tooltip("Flight HUD and touch controls, hidden outside play.")]
         [SerializeField] GameObject[] playOnlyObjects;
+        [Tooltip("Dev tools that break the match rules (free class switching). Only on after Dismiss.")]
+        [SerializeField] Behaviour[] sandboxOnlyBehaviours;
 
         [Header("Rules")]
         [Tooltip("Seconds of play.")]
@@ -47,6 +61,10 @@ namespace WingingIt.Match
         MatchClock _clock;
         MatchScore _score;
         bool _dismissed;
+        PlaneRespawner _respawner;
+        PlaneHealth _health;
+        PlaneRepair _repair;
+        bool _playOnlyOn = true; // as the scene is saved
 
         public event Action<MatchPhase> PhaseChanged;
 
@@ -61,6 +79,28 @@ namespace WingingIt.Match
         public IReadOnlyList<FlightStats> Classes => classes;
         public int SelectedClass => s_classIndex;
         public bool IsDismissed => _dismissed;
+
+        /// <summary>Whether (and why) the in-play class picker is showing. The world keeps running under it.</summary>
+        public ClassPicker Picker { get; private set; }
+        /// <summary>Seconds until the dead player reappears (0 when alive).</summary>
+        public float RespawnTimeLeft => _respawner != null ? _respawner.RespawnTimeLeft : 0f;
+
+        /// <summary>The home airfield the player is parked and repaired at, able to swap class; null if not.</summary>
+        public Airfield SwapAirfield
+        {
+            get
+            {
+                if (player == null || _dismissed || _clock.Phase != MatchPhase.Playing)
+                    return null;
+                var field = HomeFieldAt(player.Position, player.Team);
+                bool ok = ClassSwap.CanSwapAtAirfield(player.IsAlive, player.IsGrounded, field != null, player.Speed,
+                    _repair != null ? _repair.Rules.stoppedSpeed : 0.5f, _repair != null && _repair.IsRepairing,
+                    _health == null || _health.IsFullHealth);
+                return ok ? field : null;
+            }
+        }
+
+        public bool CanChangeClassAtAirfield => SwapAirfield != null;
 
         public float MatchLength
         {
@@ -108,14 +148,30 @@ namespace WingingIt.Match
                 roster.Difficulty = s_difficulty;
             }
             s_classIndex = Mathf.Clamp(s_classIndex, 0, Mathf.Max(0, classes.Length - 1));
+            if (player != null)
+            {
+                _respawner = player.GetComponent<PlaneRespawner>();
+                _health = player.GetComponent<PlaneHealth>();
+                _repair = player.GetComponent<PlaneRepair>();
+            }
+            foreach (var b in sandboxOnlyBehaviours)
+                if (b != null)
+                    b.enabled = false;
             ApplyPhase();
         }
 
-        void OnEnable() => PlaneHealth.AnyKilled += OnAnyKilled;
+        void OnEnable()
+        {
+            PlaneHealth.AnyKilled += OnAnyKilled;
+            if (_respawner != null)
+                _respawner.Spawning += OnPlayerSpawning;
+        }
 
         void OnDisable()
         {
             PlaneHealth.AnyKilled -= OnAnyKilled;
+            if (_respawner != null)
+                _respawner.Spawning -= OnPlayerSpawning;
             Time.timeScale = 1f; // never leave the game frozen (scene unload, tests)
         }
 
@@ -126,6 +182,98 @@ namespace WingingIt.Match
             float dt = _clock.Phase == MatchPhase.Countdown ? Time.unscaledDeltaTime : Time.deltaTime;
             if (_clock.Tick(dt))
                 ApplyPhase();
+            if (_clock.Phase == MatchPhase.Playing)
+                UpdatePicker();
+        }
+
+        /// <summary>Opens the respawn picker on death and closes it on respawn; drops the airfield picker once a swap isn't allowed.</summary>
+        void UpdatePicker()
+        {
+            var want = Picker;
+            if (player != null && !player.IsAlive)
+                want = ClassPicker.Respawn;
+            else if (Picker == ClassPicker.Respawn || (Picker == ClassPicker.Airfield && !CanChangeClassAtAirfield))
+                want = ClassPicker.None;
+            SetPicker(want);
+        }
+
+        void SetPicker(ClassPicker picker)
+        {
+            Picker = picker;
+            // Controls off frees the mouse for the picker (the flight input locks it); the flight HUD would draw over it.
+            SetPlayOnly(_clock.Phase == MatchPhase.Playing && picker == ClassPicker.None);
+        }
+
+        /// <summary>While dead: the class to respawn in. Takes effect when the respawn timer runs out.</summary>
+        public void ChooseRespawnClass(int index)
+        {
+            if (Picker == ClassPicker.Respawn && IsClass(index))
+                s_classIndex = index;
+        }
+
+        /// <summary>Opens the class picker while parked and repaired at a home airfield.</summary>
+        public void OpenAirfieldPicker()
+        {
+            if (Picker == ClassPicker.None && CanChangeClassAtAirfield)
+                SetPicker(ClassPicker.Airfield);
+        }
+
+        /// <summary>Closes the airfield picker without changing class.</summary>
+        public void CloseAirfieldPicker()
+        {
+            if (Picker == ClassPicker.Airfield)
+                SetPicker(ClassPicker.None);
+        }
+
+        /// <summary>
+        /// Swaps the parked player into <see cref="Classes"/>[<paramref name="index"/>] on the spot (a fresh plane: full
+        /// HP, ammo and ability) and closes the picker. Only while <see cref="CanChangeClassAtAirfield"/>. True if it swapped.
+        /// </summary>
+        public bool ChangeClassAtAirfield(int index)
+        {
+            if (!IsClass(index) || !CanChangeClassAtAirfield)
+                return false;
+            s_classIndex = index;
+            if (player.Stats != classes[index])
+                player.SetStats(classes[index]);
+            if (Picker == ClassPicker.Airfield)
+                SetPicker(ClassPicker.None);
+            return true;
+        }
+
+        /// <summary>
+        /// How many planes on the player's team, not counting the player, fly each of <see cref="Classes"/>: the bots
+        /// planned so far before the match starts, then the planes in the air.
+        /// </summary>
+        public int[] TeamComposition()
+        {
+            var indexes = new List<int>();
+            if (roster != null && !roster.enabled)
+                foreach (var stats in roster.PlannedBots(PlayerTeam))
+                    indexes.Add(Array.IndexOf(classes, stats));
+            foreach (var plane in PlaneController.All)
+                if (plane != player && plane.Team == PlayerTeam)
+                    indexes.Add(Array.IndexOf(classes, plane.Stats));
+            return ClassSwap.Composition(indexes, classes.Length);
+        }
+
+        bool IsClass(int index) => index >= 0 && index < classes.Length && classes[index] != null;
+
+        void OnPlayerSpawning(PlaneRespawner _)
+        {
+            if (!_dismissed && IsClass(s_classIndex) && player.Stats != classes[s_classIndex])
+                player.SetStats(classes[s_classIndex]);
+        }
+
+        static Airfield HomeFieldAt(Vector3 position, int team)
+        {
+            var zone = PlaneRepair.FriendlyZoneAt(position, team);
+            if (zone == null)
+                return null;
+            foreach (var field in Airfield.All)
+                if (field.IsHome && field.RepairZone == zone)
+                    return field;
+            return null;
         }
 
         /// <summary>Lobby → class select.</summary>
@@ -199,7 +347,11 @@ namespace WingingIt.Match
         {
             _dismissed = true;
             Time.timeScale = 1f;
+            Picker = ClassPicker.None;
             SetPlayOnly(true);
+            foreach (var b in sandboxOnlyBehaviours)
+                if (b != null)
+                    b.enabled = true;
             if (roster != null)
                 roster.enabled = true;
             enabled = false;
@@ -209,6 +361,7 @@ namespace WingingIt.Match
         {
             bool playing = _clock.Phase == MatchPhase.Playing;
             Time.timeScale = playing ? 1f : 0f;
+            Picker = ClassPicker.None;
             SetPlayOnly(playing);
             if (playing)
                 RegisterPilots();
@@ -219,6 +372,9 @@ namespace WingingIt.Match
 
         void SetPlayOnly(bool on)
         {
+            if (on == _playOnlyOn)
+                return;
+            _playOnlyOn = on;
             foreach (var b in playOnlyBehaviours)
                 if (b != null)
                     b.enabled = on;

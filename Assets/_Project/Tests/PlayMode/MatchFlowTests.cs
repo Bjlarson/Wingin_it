@@ -162,6 +162,73 @@ namespace WingingIt.Tests
         }
 
         [UnityTest]
+        public IEnumerator Dying_OpensTheRespawnPicker_AndTheRespawnUsesThePick()
+        {
+            yield return StartPlaying(0);
+            var input = _player.GetComponent<PlayerFlightInput>();
+            Assert.AreEqual(ClassPicker.None, _match.Picker);
+            Assert.IsFalse(_match.CanChangeClassAtAirfield, "in the air");
+
+            _player.Crash(_player.Position);
+            yield return null;
+            Assert.AreEqual(ClassPicker.Respawn, _match.Picker);
+            Assert.IsFalse(input.enabled, "controls off (mouse free) while picking");
+            Assert.IsNull(Object.FindAnyObjectByType<FlightDebugHUD>(), "flight HUD hidden under the picker");
+            Assert.AreEqual(1f, Time.timeScale, "the match keeps running");
+            Assert.Greater(_match.RespawnTimeLeft, 0f);
+
+            _match.ChooseRespawnClass(3);
+            Assert.AreEqual(_match.Classes[0], _player.Stats, "no change until the respawn");
+            _player.GetComponent<PlaneRespawner>().SpawnNow();
+            yield return null;
+            Assert.AreEqual(_match.Classes[3], _player.Stats);
+            Assert.AreEqual(ClassPicker.None, _match.Picker);
+            Assert.IsTrue(input.enabled);
+            Assert.IsNotNull(Object.FindAnyObjectByType<FlightDebugHUD>());
+        }
+
+        [UnityTest]
+        public IEnumerator ParkedAndRepairedAtHome_CanSwapClassOnTheSpot()
+        {
+            yield return StartPlaying(0);
+            Assert.IsFalse(_match.ChangeClassAtAirfield(2), "not in the air");
+
+            var home = World.Airfield.All.First(f => f.IsHome && f.Team == _player.Team);
+            _player.SpawnOnGround(home.RepairZone.transform.position, home.transform.rotation);
+            var repair = _player.GetComponent<PlaneRepair>();
+            yield return new WaitForFixedUpdate();
+            yield return new WaitForFixedUpdate();
+            Assert.IsTrue(repair.IsRepairing, "parked at home: repairing (and refilling) first");
+            Assert.IsFalse(_match.CanChangeClassAtAirfield, "not while the repair runs");
+
+            float t = Time.time;
+            while (repair.IsRepairing && Time.time - t < 8f)
+                yield return null;
+            Assert.IsTrue(_match.CanChangeClassAtAirfield, "repaired and stopped at home");
+            Assert.AreEqual(home, _match.SwapAirfield);
+
+            _match.OpenAirfieldPicker();
+            Assert.AreEqual(ClassPicker.Airfield, _match.Picker);
+            Assert.IsFalse(_player.GetComponent<PlayerFlightInput>().enabled);
+            Assert.IsTrue(_match.ChangeClassAtAirfield(2));
+            Assert.AreEqual(_match.Classes[2], _player.Stats);
+            Assert.AreEqual(ClassPicker.None, _match.Picker);
+            Assert.IsTrue(_player.GetComponent<PlayerFlightInput>().enabled);
+            Assert.IsTrue(_player.IsGrounded, "still parked");
+            Assert.IsTrue(_player.GetComponent<PlaneHealth>().IsFullHealth, "a fresh plane of the new class");
+        }
+
+        [UnityTest]
+        public IEnumerator TheFreeClassSwitcher_IsOffInAMatch()
+        {
+            yield return StartPlaying(0);
+            var switcher = _player.GetComponent<Dev.ClassSwitcher>();
+            Assert.IsFalse(switcher.enabled);
+            switcher.SelectClass(3); // what the touch CLASS button calls
+            Assert.AreEqual(_match.Classes[0], _player.Stats);
+        }
+
+        [UnityTest]
         public IEnumerator Dismiss_GivesFreeFlight()
         {
             _match.Dismiss();
@@ -170,6 +237,7 @@ namespace WingingIt.Tests
             Assert.AreEqual(1f, Time.timeScale);
             Assert.IsTrue(_player.GetComponent<PlayerFlightInput>().enabled);
             Assert.AreEqual(15, _roster.Bots.Count);
+            Assert.IsTrue(_player.GetComponent<Dev.ClassSwitcher>().enabled, "free class switching in the sandbox");
         }
     }
 }

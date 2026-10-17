@@ -931,7 +931,7 @@ namespace WingingIt.Editor
 
         /// <summary>
         /// The Teams match flow (lobby → class select → 5:00 → scoreboard) and its screens. The player's controls, dev
-        /// tools, flight HUD and touch controls only run in play.
+        /// tools, flight HUD and touch controls only run in play; the free class switcher only runs once dismissed.
         /// </summary>
         static void BuildMatch(BotRoster roster, FlightStats[] classes)
         {
@@ -943,8 +943,9 @@ namespace WingingIt.Editor
             B.SetArray(match, "classes", classes);
             B.SetArray(match, "playOnlyBehaviours", new Behaviour[]
             {
-                player.GetComponent<PlayerFlightInput>(), player.GetComponent<ClassSwitcher>(), player.GetComponent<DamageTester>(),
+                player.GetComponent<PlayerFlightInput>(), player.GetComponent<DamageTester>(),
             });
+            B.SetArray(match, "sandboxOnlyBehaviours", new Behaviour[] { player.GetComponent<ClassSwitcher>() });
             B.SetArray(match, "playOnlyObjects", new[] { GameObject.Find("Flight Debug HUD"), GameObject.Find("Touch Controls") });
             B.SetField(go.AddComponent<MatchScreens>(), "match", match);
         }

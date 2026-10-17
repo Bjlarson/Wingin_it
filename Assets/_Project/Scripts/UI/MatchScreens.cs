@@ -11,7 +11,8 @@ namespace WingingIt.UI
     /// <summary>
     /// Prototype match screens drawn with IMGUI, over the <see cref="MatchManager"/>: the pre-match lobby (both
     /// rosters, bot difficulty, Start), class select, the 3-2-1, the match clock + team score bar in play, and the
-    /// end-of-match scoreboard. Buttons work with mouse and touch; Enter / Esc and 1-4 work on the keyboard.
+    /// end-of-match scoreboard. In play it also draws the class picker (while dead, and parked + repaired at home
+    /// with Tab or the CHANGE PLANE button). Buttons work with mouse and touch; Enter / Esc and 1-4 work on the keyboard.
     /// Styled to Design/06-UI-UX/glass-menu-style-guide.html (dark tinted glass, DIN type, rail selection).
     /// </summary>
     public class MatchScreens : MonoBehaviour
@@ -63,6 +64,27 @@ namespace WingingIt.UI
                         if (keyboard[Key.Digit1 + i].wasPressedThisFrame)
                             match.SelectClass(i);
                     break;
+                case MatchPhase.Playing:
+                    if (match.Picker == ClassPicker.None)
+                    {
+                        if (keyboard.tabKey.wasPressedThisFrame)
+                            match.OpenAirfieldPicker();
+                        break;
+                    }
+                    if (match.Picker == ClassPicker.Airfield && (keyboard.escapeKey.wasPressedThisFrame || keyboard.tabKey.wasPressedThisFrame))
+                    {
+                        match.CloseAirfieldPicker();
+                        break;
+                    }
+                    for (int i = 0; i < 4; i++)
+                        if (keyboard[Key.Digit1 + i].wasPressedThisFrame)
+                        {
+                            if (match.Picker == ClassPicker.Respawn)
+                                match.ChooseRespawnClass(i);
+                            else
+                                match.ChangeClassAtAirfield(i);
+                        }
+                    break;
                 case MatchPhase.Ended:
                     if (keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame)
                         match.PlayAgain();
@@ -93,7 +115,13 @@ namespace WingingIt.UI
                 case MatchPhase.Lobby: DrawLobby(width); break;
                 case MatchPhase.ClassSelect: DrawClassSelect(width); break;
                 case MatchPhase.Countdown: DrawCountdown(width); break;
-                case MatchPhase.Playing: DrawScoreBar(width); break;
+                case MatchPhase.Playing:
+                    if (match.Picker != ClassPicker.None)
+                        DrawPicker(width);
+                    else if (match.CanChangeClassAtAirfield)
+                        DrawSwapPrompt(width);
+                    DrawScoreBar(width);
+                    break;
                 case MatchPhase.Ended: DrawScoreboard(width); break;
             }
         }
@@ -173,19 +201,68 @@ namespace WingingIt.UI
             Fill(new Rect(0f, 0f, width, ReferenceHeight), Dim);
             Tracked(new Rect(0f, 110f, width, 60f), "CHOOSE YOUR PLANE", _title, 8f, TextAnchor.MiddleCenter, Color.white);
             Tracked(new Rect(0f, 176f, width, 24f), "1 – 4 OR CLICK  ·  ENTER KEEPS THE HIGHLIGHTED ONE  ·  ESC BACK", _hint, 3.4f, TextAnchor.MiddleCenter, Steel);
+            int picked = ClassCards(width, 250f, "FLY", match.SelectedClass);
+            if (picked >= 0)
+                match.SelectClass(picked);
+            if (Item(new Rect(width / 2f - 130f, 250f + CardH + 36f, 260f, 56f), "BACK", "ESC", false, false, false, TextAnchor.MiddleCenter))
+                match.BackToLobby();
+        }
 
+        /// <summary>
+        /// In play: while dead, picks the class to respawn in (the timer keeps running); parked and repaired at home,
+        /// swaps class on the spot. The world runs underneath.
+        /// </summary>
+        void DrawPicker(float width)
+        {
+            Fill(new Rect(0f, 0f, width, ReferenceHeight), Dim);
+            bool respawn = match.Picker == ClassPicker.Respawn;
+            string title = respawn ? $"RESPAWN IN {Mathf.CeilToInt(match.RespawnTimeLeft)}" : "CHANGE PLANE";
+            string hint = respawn ? "1 – 4 OR CLICK TO PICK YOUR NEXT PLANE" : $"AT {match.SwapAirfield?.DisplayName.ToUpperInvariant()}  ·  1 – 4 OR CLICK  ·  ESC OR TAB KEEP THIS ONE";
+            Tracked(new Rect(0f, 110f, width, 60f), title, _title, 8f, TextAnchor.MiddleCenter, Color.white);
+            Tracked(new Rect(0f, 176f, width, 24f), hint, _hint, 3.4f, TextAnchor.MiddleCenter, Steel);
+            int picked = ClassCards(width, 250f, respawn ? "PICK" : "SWAP", match.SelectedClass);
+            if (picked >= 0)
+            {
+                if (respawn)
+                    match.ChooseRespawnClass(picked);
+                else
+                    match.ChangeClassAtAirfield(picked);
+            }
+            if (!respawn && Item(new Rect(width / 2f - 130f, 250f + CardH + 36f, 260f, 56f), "KEEP", "ESC", false, false, false, TextAnchor.MiddleCenter))
+                match.CloseAirfieldPicker();
+        }
+
+        /// <summary>Parked and repaired at home: a small clickable (and touchable) "change plane" prompt above the HUD's bottom edge.</summary>
+        void DrawSwapPrompt(float width)
+        {
+            var r = new Rect(width / 2f - 170f, ReferenceHeight - 200f, 340f, 56f);
+            Panel(r, GlowRest, false);
+            if (Item(r, "CHANGE PLANE", "TAB", false, false, false, TextAnchor.MiddleCenter))
+                match.OpenAirfieldPicker();
+        }
+
+        const float CardH = 470f;
+
+        /// <summary>
+        /// One card per class (stats, loadout, ability, how many teammates fly it) with a <paramref name="button"/> row.
+        /// Returns the index whose button was pressed this frame, or -1.
+        /// </summary>
+        int ClassCards(float width, float top, string button, int selectedIndex)
+        {
             var classes = match.Classes;
             int n = classes.Count;
-            const float cardW = 340f, cardH = 470f, gap = 36f;
+            int[] team = match.TeamComposition();
+            const float cardW = 340f, gap = 36f;
             float x0 = (width - (n * cardW + (n - 1) * gap)) / 2f;
             float glow = OpenGlow();
+            int pressed = -1;
             for (int i = 0; i < n; i++)
             {
                 var stats = classes[i];
                 if (stats == null)
                     continue;
-                var card = new Rect(x0 + i * (cardW + gap), 250f, cardW, cardH);
-                bool selected = i == match.SelectedClass;
+                var card = new Rect(x0 + i * (cardW + gap), top, cardW, CardH);
+                bool selected = i == selectedIndex;
                 Panel(card, selected ? Mathf.Max(glow, GlowSettle) : glow * 0.5f);
 
                 var head = new Rect(card.x, card.y + 22f, card.width, 44f);
@@ -201,11 +278,15 @@ namespace WingingIt.UI
                 GUI.Label(new Rect(card.x + 36f, head.yMax + 22f, card.width - 72f, 250f), Describe(stats), _body);
                 GUI.color = Color.white;
 
-                if (Item(new Rect(card.x, card.yMax - 78f, card.width, 56f), "FLY", null, selected, false, true))
-                    match.SelectClass(i);
+                int mates = i < team.Length ? team[i] : 0;
+                Tracked(new Rect(card.x + 36f, card.yMax - 124f, card.width - 72f, 30f), "ON YOUR TEAM", _hint, 2.4f, TextAnchor.MiddleLeft, Steel);
+                Tracked(new Rect(card.x + 36f, card.yMax - 124f, card.width - 72f, 30f), mates.ToString(), _numeral, 0f, TextAnchor.MiddleRight,
+                    mates == 0 ? Alpha(White, 0.5f) : White, 0.75f);
+
+                if (Item(new Rect(card.x, card.yMax - 78f, card.width, 56f), button, null, selected, false, true))
+                    pressed = i;
             }
-            if (Item(new Rect(width / 2f - 130f, 250f + cardH + 36f, 260f, 56f), "BACK", "ESC", false, false, false, TextAnchor.MiddleCenter))
-                match.BackToLobby();
+            return pressed;
         }
 
         static string Describe(FlightStats s)

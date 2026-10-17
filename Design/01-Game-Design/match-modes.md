@@ -33,6 +33,10 @@ Team deathmatch with objectives. **This mode gets built first (decided).**
 4. **Play:** a 5:00 game-time clock with both team scores at the top center (it flashes in the last 30 s). Controls, the flight HUD and touch controls only run in this phase.
 5. **End:** time's up freezes the world. VICTORY / DEFEAT / DRAW, the final score, and each team's pilots with kills, assists, deaths and score (sorted by score). **Play Again** (Enter) reloads the level to the lobby, keeping the difficulty and class.
 
+### Class Changes in a Match (built 2026-10-17)
+
+Class select happens before the match, then again on every respawn (pick during the respawn timer) or while parked and repaired at a home airfield (Tab / CHANGE PLANE). Details in [aircraft-classes](../02-Mechanics/aircraft-classes.md#class-selection).
+
 ### Team Score (built 2026-10-17)
 
 Every point a pilot earns goes to their team's score and their own (personal score, later the basis for coins and XP). Highest team score at the whistle wins; a tie is a draw.
