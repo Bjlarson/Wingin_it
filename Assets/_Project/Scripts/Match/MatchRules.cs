@@ -3,11 +3,11 @@ using System.Collections.Generic;
 
 namespace WingingIt.Match
 {
-    /// <summary>Where a Teams match is: lobby → class select → countdown → playing → ended.</summary>
+    /// <summary>Where a Teams match is: menu → class select → countdown → playing → ended.</summary>
     public enum MatchPhase
     {
-        /// <summary>The pre-match screen: rosters, bot difficulty, Start. The world is frozen.</summary>
-        Lobby,
+        /// <summary>The main menu and game mode select (and settings), over the player's plane in its hangar. The world is frozen.</summary>
+        Menu,
         /// <summary>Picking a class. The world is frozen.</summary>
         ClassSelect,
         /// <summary>Everyone is in place, frozen, while 3-2-1 counts down (real time).</summary>
@@ -19,7 +19,7 @@ namespace WingingIt.Match
     }
 
     /// <summary>
-    /// The phase order and the two timers of a match. Lobby ↔ class select move on the player's say-so; the countdown
+    /// The phase order and the two timers of a match. Menu ↔ class select move on the player's say-so; the countdown
     /// and the match clock run out on <see cref="Tick"/>. Pure, so the rules are EditMode-testable.
     /// </summary>
     public sealed class MatchClock
@@ -30,18 +30,18 @@ namespace WingingIt.Match
             CountdownLength = countdownLength;
         }
 
-        public MatchPhase Phase { get; private set; } = MatchPhase.Lobby;
+        public MatchPhase Phase { get; private set; } = MatchPhase.Menu;
         /// <summary>Seconds left on the countdown or the match clock; 0 in the other phases.</summary>
         public float TimeLeft { get; private set; }
         /// <summary>Seconds of play. Read when the match starts, so changing it mid-match doesn't move the clock.</summary>
         public float MatchLength { get; set; }
         public float CountdownLength { get; set; }
 
-        /// <summary>Lobby → class select. False (and no change) from any other phase.</summary>
-        public bool OpenClassSelect() => Move(MatchPhase.Lobby, MatchPhase.ClassSelect);
+        /// <summary>Menu → class select (a game mode was confirmed). False (and no change) from any other phase.</summary>
+        public bool OpenClassSelect() => Move(MatchPhase.Menu, MatchPhase.ClassSelect);
 
-        /// <summary>Class select → lobby.</summary>
-        public bool BackToLobby() => Move(MatchPhase.ClassSelect, MatchPhase.Lobby);
+        /// <summary>Class select → menu (back to the game mode screen).</summary>
+        public bool BackToMenu() => Move(MatchPhase.ClassSelect, MatchPhase.Menu);
 
         /// <summary>Class select → countdown (straight to playing with no countdown).</summary>
         public bool StartCountdown()

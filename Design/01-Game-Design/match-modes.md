@@ -27,11 +27,11 @@ Team deathmatch with objectives. **This mode gets built first (decided).**
 
 `MatchManager` + `MatchScreens` (IMGUI placeholder screens) on the Island:
 
-1. **Lobby:** both rosters (You + 7 bots for West, 8 bots for East, with the classes the bots will fly), a bot difficulty pick (Easy / Normal / Hard), and **Start** (Enter). The world is frozen behind it and no bots exist yet.
-2. **Class select:** four cards (speed, turn rates, body HP, weapons, ability); click **Fly**, press 1–4, or Enter for the highlighted one. Esc goes back. The player spawns fresh over home in that class and the bots join.
+1. **Menu** (replaced the lobby, 2026-10-17): the main menu over the player's plane parked in its home hangar, then the game mode cards with the Teams card's bot difficulty (Easy / Normal / Hard). See [front-end-menus](../06-UI-UX/front-end-menus.md). The world is frozen behind it and no bots exist yet.
+2. **Class select:** four cards (speed, turn rates, body HP, weapons, ability) and both rosters (You + 7 bots for West, 8 bots for East, with the classes the bots will fly); click **Fly**, press 1–4, or Enter for the highlighted one. Esc goes back to the game mode cards. The player spawns fresh over home in that class and the bots join.
 3. **Countdown:** 3-2-1 in real time with everyone frozen in place.
-4. **Play:** a 5:00 game-time clock with both team scores at the top center (it flashes in the last 30 s). Controls, the flight HUD and touch controls only run in this phase.
-5. **End:** time's up freezes the world. VICTORY / DEFEAT / DRAW, the final score, and each team's pilots with kills, assists, deaths and score (sorted by score). **Play Again** (Enter) reloads the level to the lobby, keeping the difficulty and class.
+4. **Play:** a 5:00 game-time clock with both team scores at the top center (it flashes in the last 30 s). Controls, the flight HUD and touch controls only run in this phase. Esc / Start / ☰ opens the in-match menu, which never pauses.
+5. **End:** time's up freezes the world. VICTORY / DEFEAT / DRAW, the final score, and each team's pilots with kills, assists, deaths and score (sorted by score). **Play Again** (Enter) reloads the level straight to class select, keeping the difficulty and class; **Main Menu** (Esc) reloads it to the menu.
 
 ### Class Changes in a Match (built 2026-10-17)
 

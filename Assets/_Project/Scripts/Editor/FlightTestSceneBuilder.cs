@@ -36,7 +36,7 @@ namespace WingingIt.Editor
         const string AbilitiesFolder = Root + "/ScriptableObjects/Abilities";
         internal const string MaterialsFolder = Root + "/Art/Materials";
         internal const string TexturesFolder = Root + "/Art/Textures";
-        const string InputActionsPath = Root + "/Settings/FlightControls.inputactions";
+        internal const string InputActionsPath = Root + "/Settings/FlightControls.inputactions";
 
         // The home airfield sits south of the action; its air spawn is 300 m up on the approach.
         static readonly Vector3 AirfieldPosition = new Vector3(0f, 0f, -1350f);
@@ -676,7 +676,7 @@ namespace WingingIt.Editor
             // Buildings off the right side of the runway. Solid: flying into them is a crash.
             var buildings = new GameObject("Buildings").transform;
             buildings.SetParent(root.transform, false);
-            Box("Hangar", buildings, new Vector3(halfWidth + 55f, 7f, -40f), new Vector3(40f, 14f, 32f), m.Concrete, true);
+            var hangarSpot = BuildHangar(buildings, new Vector3(halfWidth + 55f, 0f, -40f), m);
             Box("Control Tower", buildings, new Vector3(halfWidth + 45f, 11f, 120f), new Vector3(8f, 22f, 8f), m.ConcreteDark, true);
             Box("Tower Cab", buildings, new Vector3(halfWidth + 45f, 24f, 120f), new Vector3(11f, 4f, 11f), m.Glass, true);
             Box("Windsock Pole", buildings, new Vector3(halfWidth + 15f, 5f, -halfLength + 60f), new Vector3(0.4f, 10f, 0.4f), m.PlaneDark, false);
@@ -698,7 +698,9 @@ namespace WingingIt.Editor
                 foreach (float x in new[] { -halfWidth - 50f, halfWidth + 90f })
                     heads.Add(AAGunTurret(aa, $"AA Gun {n++}", new Vector3(x, 0f, z), aaStats, m));
 
-            root.AddComponent<Airfield>().Configure("Home Airfield", 0, true, RunwaySize, air, ground, zone);
+            var airfield = root.AddComponent<Airfield>();
+            airfield.Configure("Home Airfield", 0, true, RunwaySize, air, ground, zone);
+            airfield.SetHangarSpot(hangarSpot);
 
             foreach (var t in root.GetComponentsInChildren<Transform>())
                 t.gameObject.isStatic = true;
@@ -709,6 +711,85 @@ namespace WingingIt.Editor
             var prefab = PrefabUtility.SaveAsPrefabAsset(root, AirfieldPrefabPath);
             Object.DestroyImmediate(root);
             return prefab;
+        }
+
+        /// <summary>
+        /// The hangar, centred on <paramref name="center"/> (on the ground), 40 m deep along X with its open doors facing
+        /// -X (the runway), 32 m wide, 14 m tall. Inside: a painted floor, lights, a workbench, crates, barrels and a
+        /// parking T. It's the main menu's backdrop, so it has an interior. Walls and roof are solid (flying into them is
+        /// a crash); the floor is paint on the airfield pad. Returns the parking spot (nose to the doors).
+        /// </summary>
+        static Transform BuildHangar(Transform parent, Vector3 center, Materials m)
+        {
+            const float depth = 40f, width = 32f, height = 14f, wall = 1f, doorHeight = 11f;
+            var root = new GameObject("Hangar").transform;
+            root.SetParent(parent, false);
+            root.localPosition = center;
+            float front = -depth / 2f, back = depth / 2f, side = width / 2f;
+
+            Box("Floor", root, new Vector3(0f, 0.03f, 0f), new Vector3(depth, 0.02f, width), m.ConcreteDark, false);
+            Box("Back Wall", root, new Vector3(back - wall / 2f, height / 2f, 0f), new Vector3(wall, height, width), m.Concrete, true);
+            foreach (float z in new[] { -1f, 1f })
+            {
+                Box("Side Wall", root, new Vector3(0f, height / 2f, z * (side - wall / 2f)), new Vector3(depth, height, wall), m.Concrete, true);
+                // Door pillar, and the door slid open past it along its track.
+                Box("Door Pillar", root, new Vector3(front + 0.75f, doorHeight / 2f, z * (side - 1.5f)), new Vector3(1.5f, doorHeight, 3f), m.Concrete, true);
+                Box("Door", root, new Vector3(front - 0.6f, doorHeight / 2f, z * (side + 3.5f)), new Vector3(0.4f, doorHeight, 8f), m.ConcreteDark, true);
+                Box("Door Track", root, new Vector3(front - 0.6f, doorHeight + 0.2f, z * (side + 3f)), new Vector3(0.5f, 0.4f, 11f), m.PlaneDark, false);
+            }
+            Box("Roof", root, new Vector3(0f, height - 0.5f, 0f), new Vector3(depth + 1f, 1f, width + 1f), m.Concrete, true);
+            Box("Door Header", root, new Vector3(front + wall / 2f, (doorHeight + height) / 2f, 0f), new Vector3(wall, height - doorHeight, width), m.Concrete, true);
+            // Roof trusses, for some depth looking up.
+            for (float x = front + 6f; x < back; x += 8f)
+                Box("Truss", root, new Vector3(x, height - 1.6f, 0f), new Vector3(0.5f, 1.2f, width - 2f), m.PlaneDark, false);
+
+            // Parking T (yellow), under the plane.
+            Box("Parking Line", root, new Vector3(-2f, 0.05f, 0f), new Vector3(22f, 0.02f, 0.5f), m.RepairMarking, false);
+            Box("Parking Bar", root, new Vector3(-12f, 0.05f, 0f), new Vector3(0.5f, 0.02f, 8f), m.RepairMarking, false);
+
+            // Workshop along the back wall: bench, tool chest, crates, oil drums, a tyre stack.
+            Box("Workbench", root, new Vector3(back - 2.2f, 0.9f, -8f), new Vector3(1.6f, 0.15f, 7f), m.Target, false);
+            foreach (float z in new[] { -11f, -5f })
+                Box("Bench Leg", root, new Vector3(back - 2.2f, 0.45f, z), new Vector3(1.2f, 0.9f, 0.2f), m.PlaneDark, false);
+            Box("Tool Chest", root, new Vector3(back - 2f, 0.7f, -3f), new Vector3(1.2f, 1.4f, 2f), m.Ember, false);
+            Box("Crate", root, new Vector3(back - 3f, 0.75f, 9f), new Vector3(1.5f, 1.5f, 1.5f), m.Target, false);
+            Box("Crate", root, new Vector3(back - 3f, 2.1f, 9.3f), new Vector3(1.2f, 1.2f, 1.2f), m.Target, false);
+            Box("Crate", root, new Vector3(back - 5f, 0.6f, 11f), new Vector3(1.2f, 1.2f, 1.2f), m.Target, false);
+            foreach (var (x, z) in new[] { (front + 6f, side - 2.5f), (front + 7.3f, side - 2.2f), (front + 6.5f, side - 3.8f) })
+                Cylinder("Oil Drum", root, new Vector3(x, 0.45f, z), new Vector3(0.6f, 0.45f, 0.6f), m.RepairMarking);
+            for (int i = 0; i < 3; i++)
+                Cylinder("Tyre", root, new Vector3(back - 4f, 0.2f + i * 0.4f, -side + 3f), new Vector3(1.1f, 0.2f, 1.1f), m.PlaneDark);
+
+            // Lights: warm work lamps under the roof (the roof shades out the sun), each with a little fixture.
+            foreach (float x in new[] { front + 8f, 0f, back - 8f })
+            {
+                Box("Lamp", root, new Vector3(x, height - 2.4f, 0f), new Vector3(1.4f, 0.25f, 1.4f), m.Marking, false);
+                var lamp = new GameObject("Lamp Light").AddComponent<Light>();
+                lamp.transform.SetParent(root, false);
+                lamp.transform.localPosition = new Vector3(x, height - 3f, 0f);
+                lamp.type = LightType.Point;
+                lamp.range = 24f;
+                lamp.intensity = 6f;
+                lamp.color = new Color(1f, 0.9f, 0.75f);
+                lamp.shadows = LightShadows.None;
+            }
+
+            var spot = new GameObject("Hangar Spot").transform;
+            spot.SetParent(root, false);
+            spot.localPosition = new Vector3(0f, 0.1f, 0f);
+            spot.localRotation = Quaternion.LookRotation(Vector3.left); // nose to the doors
+            return spot;
+        }
+
+        static void Cylinder(string name, Transform parent, Vector3 localPos, Vector3 localScale, Material mat)
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            go.name = name;
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = localPos;
+            go.transform.localScale = localScale;
+            Object.DestroyImmediate(go.GetComponent<Collider>());
+            go.GetComponent<Renderer>().sharedMaterial = mat;
         }
 
         /// <summary>A sandbagged twin-barrel AA turret. Returns its head (the part that turns).</summary>
@@ -825,12 +906,11 @@ namespace WingingIt.Editor
             SetArray(switcher, "classes", classes);
             planeGo.AddComponent<DamageTester>();
 
-            // HUD
-            var hud = new GameObject("Flight Debug HUD").AddComponent<FlightDebugHUD>();
+            // HUD: the real one, plus the debug overlay (landing assist, messages, help)
+            var hud = new GameObject("Flight HUD").AddComponent<FlightHUD>();
             SetField(hud, "plane", plane);
             SetField(hud, "player", input);
             SetField(hud, "cameraRig", rig);
-            SetField(hud, "respawner", respawner);
             SetField(hud, "health", planeGo.GetComponent<PlaneHealth>());
             SetField(hud, "guns", planeGo.GetComponent<PlaneGuns>());
             SetField(hud, "rockets", planeGo.GetComponent<PlaneRockets>());
@@ -840,6 +920,18 @@ namespace WingingIt.Editor
             SetField(hud, "gear", planeGo.GetComponent<LandingGear>());
             SetField(hud, "repair", planeGo.GetComponent<PlaneRepair>());
             SetField(hud, "viewCamera", mainCam);
+            var feedback = hud.gameObject.AddComponent<DamageFeedback>();
+            SetField(feedback, "plane", plane);
+            SetField(feedback, "health", planeGo.GetComponent<PlaneHealth>());
+            SetField(feedback, "player", input);
+
+            var debugHud = new GameObject("Flight Debug HUD").AddComponent<FlightDebugHUD>();
+            SetField(debugHud, "plane", plane);
+            SetField(debugHud, "player", input);
+            SetField(debugHud, "respawner", respawner);
+            SetField(debugHud, "health", planeGo.GetComponent<PlaneHealth>());
+            SetField(debugHud, "repair", planeGo.GetComponent<PlaneRepair>());
+            SetField(debugHud, "viewCamera", mainCam);
 
             BuildTouchControls(input, switcher, planeGo);
         }
@@ -1227,6 +1319,14 @@ namespace WingingIt.Editor
             var so = new SerializedObject(target);
             var prop = so.FindProperty(field) ?? throw new System.ArgumentException($"{target.GetType().Name} has no field '{field}'");
             prop.intValue = value;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        internal static void SetBool(Object target, string field, bool value)
+        {
+            var so = new SerializedObject(target);
+            var prop = so.FindProperty(field) ?? throw new System.ArgumentException($"{target.GetType().Name} has no field '{field}'");
+            prop.boolValue = value;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 

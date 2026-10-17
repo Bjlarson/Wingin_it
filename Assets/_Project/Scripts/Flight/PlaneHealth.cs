@@ -96,6 +96,8 @@ namespace WingingIt.Flight
         public event Action<KillInfo> Killed;
         /// <summary>Raised on every death of any plane: what scoring and the kill feed listen to.</summary>
         public static event Action<KillInfo> AnyKilled;
+        /// <summary>Raised whenever any plane's part reaches 0 HP (after <see cref="PartDestroyed"/>): the HUD's "WING SHOT OFF!".</summary>
+        public static event Action<PlaneHealth, PartDamageInfo> AnyPartDestroyed;
 
         public PlaneController Plane => _plane;
 
@@ -234,6 +236,7 @@ namespace WingingIt.Flight
                     part.SetDetached(true);
                 ApplyFlightEffects();
                 PartDestroyed?.Invoke(this, info);
+                AnyPartDestroyed?.Invoke(this, info);
                 if (part.partType == PlanePartType.Body)
                     _plane.Crash(_plane.Position, DeathCause.ShotDown);
             }

@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using WingingIt.CameraSystem;
 using WingingIt.Flight;
+using WingingIt.Settings;
 
 namespace WingingIt.Input
 {
@@ -16,7 +17,9 @@ namespace WingingIt.Input
 
     /// <summary>
     /// Reads the Flight action map (keyboard + mouse, gamepad, and on-screen touch controls, which
-    /// act as a virtual gamepad) and turns it into <see cref="FlightInput"/> for the plane.
+    /// act as a virtual gamepad) and turns it into <see cref="FlightInput"/> for the plane. Control mode, invert pitch
+    /// and auto throttle come from <see cref="GameSettings"/> (M switches the mode and saves it). Disabled, it lets go of
+    /// the stick: the plane flies on with neutral controls and its throttle where it was.
     /// </summary>
     [RequireComponent(typeof(PlaneController))]
     public class PlayerFlightInput : MonoBehaviour
@@ -46,6 +49,7 @@ namespace WingingIt.Input
         InputAction _pitch, _roll, _yaw, _throttle, _boost, _mouseLook, _stickLook, _freeLook;
         InputAction _fireGuns, _fireMissile, _fireSecondary, _dropBomb, _ability, _toggleMode, _nextClass;
         bool _lastDeviceWasGamepad;
+        bool _autoThrottle;
 
         public event Action NextClassPressed;
 
@@ -92,6 +96,8 @@ namespace WingingIt.Input
 
         void OnEnable()
         {
+            GameSettings.Current.Changed += ReadSettings;
+            ReadSettings();
             if (_map == null)
                 return;
             _map.actionTriggered += OnActionTriggered;
@@ -102,6 +108,9 @@ namespace WingingIt.Input
 
         void OnDisable()
         {
+            GameSettings.Current.Changed -= ReadSettings;
+            if (_plane != null)
+                _plane.SetInput(new FlightInput { AutoThrottle = _autoThrottle });
             if (_map == null)
                 return;
             _map.actionTriggered -= OnActionTriggered;
@@ -123,8 +132,16 @@ namespace WingingIt.Input
                 _lastDeviceWasGamepad = false;
         }
 
+        void ReadSettings()
+        {
+            var s = GameSettings.Current.Data;
+            controlMode = s.mouseAim ? ControlMode.MouseAim : ControlMode.Direct;
+            invertPitch = s.invertPitch;
+            autoThrottleOnTouch = s.autoThrottle;
+        }
+
         void OnToggleMode(InputAction.CallbackContext _) =>
-            controlMode = controlMode == ControlMode.MouseAim ? ControlMode.Direct : ControlMode.MouseAim;
+            GameSettings.Current.Set(s => s.mouseAim = controlMode != ControlMode.MouseAim);
 
         void OnNextClass(InputAction.CallbackContext _) => NextClassPressed?.Invoke();
 
@@ -151,6 +168,7 @@ namespace WingingIt.Input
                 UseAbility = _ability.IsPressed(),
                 AutoThrottle = TouchControlsActive && autoThrottleOnTouch && Mathf.Abs(throttle) < 0.1f,
             };
+            _autoThrottle = input.AutoThrottle;
 
             bool mouseAim = MouseAimActive && cameraRig != null;
             if (cameraRig != null)

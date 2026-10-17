@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using WingingIt.Flight;
+using WingingIt.Settings;
 using WingingIt.World;
 
 namespace WingingIt.Dev
@@ -41,7 +42,7 @@ namespace WingingIt.Dev
         void Update()
         {
             var keyboard = Keyboard.current;
-            if (keyboard == null)
+            if (keyboard == null || !GameSettings.DevToolsOn)
                 return;
             if (keyboard.digit5Key.wasPressedThisFrame) Hit(PlanePartType.Body);
             if (keyboard.digit6Key.wasPressedThisFrame) Hit(PlanePartType.WingLeft);

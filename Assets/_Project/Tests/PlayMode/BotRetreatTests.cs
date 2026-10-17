@@ -262,7 +262,7 @@ namespace WingingIt.Tests
         {
             yield return SceneManager.LoadSceneAsync("Island", LoadSceneMode.Single);
             yield return null;
-            Object.FindAnyObjectByType<MatchManager>()?.Dismiss(); // free flight: no lobby, no match clock
+            Object.FindAnyObjectByType<MatchManager>()?.Dismiss(); // free flight: no menu, no match clock
             Object.FindAnyObjectByType<BotRoster>()?.Clear(); // an empty sky: these tests fly alone
             yield return null;
             var go = GameObject.Find("Player Plane");

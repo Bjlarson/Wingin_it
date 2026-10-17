@@ -3,7 +3,9 @@ using System.IO;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using WingingIt.Bots;
+using WingingIt.CameraSystem;
 using WingingIt.Dev;
 using WingingIt.Flight;
 using WingingIt.Input;
@@ -930,8 +932,9 @@ namespace WingingIt.Editor
         }
 
         /// <summary>
-        /// The Teams match flow (lobby → class select → 5:00 → scoreboard) and its screens. The player's controls, dev
-        /// tools, flight HUD and touch controls only run in play; the free class switcher only runs once dismissed.
+        /// The Teams match flow (menu → class select → 5:00 → scoreboard), its screens and the menu camera. The player's
+        /// controls, dev tools, flight HUD and touch controls only run in play (controls and touch controls also stop
+        /// while the in-match menu is open); the free class switcher only runs once dismissed.
         /// </summary>
         static void BuildMatch(BotRoster roster, FlightStats[] classes)
         {
@@ -946,8 +949,20 @@ namespace WingingIt.Editor
                 player.GetComponent<PlayerFlightInput>(), player.GetComponent<DamageTester>(),
             });
             B.SetArray(match, "sandboxOnlyBehaviours", new Behaviour[] { player.GetComponent<ClassSwitcher>() });
-            B.SetArray(match, "playOnlyObjects", new[] { GameObject.Find("Flight Debug HUD"), GameObject.Find("Touch Controls") });
-            B.SetField(go.AddComponent<MatchScreens>(), "match", match);
+            var hud = GameObject.Find("Flight HUD");
+            var debugHud = GameObject.Find("Flight Debug HUD");
+            B.SetArray(match, "playOnlyObjects", new[] { hud, debugHud });
+            B.SetArray(match, "controlObjects", new[] { GameObject.Find("Touch Controls") });
+            B.SetField(hud.GetComponent<FlightHUD>(), "match", match);
+            B.SetBool(debugHud.GetComponent<FlightDebugHUD>(), "showHelp", false); // the match starts clean: F1 shows it
+
+            var menuCamera = go.AddComponent<MenuCamera>();
+            B.SetField(menuCamera, "match", match);
+            B.SetField(menuCamera, "view", Camera.main);
+            var screens = go.AddComponent<MatchScreens>();
+            B.SetField(screens, "match", match);
+            B.SetField(screens, "menuCamera", menuCamera);
+            B.SetField(screens, "actions", AssetDatabase.LoadAssetAtPath<InputActionAsset>(B.InputActionsPath));
         }
 
         /// <summary>The highest solid surface (ground, sea, building) at <paramref name="xz"/> or within <paramref name="radius"/> of it.</summary>

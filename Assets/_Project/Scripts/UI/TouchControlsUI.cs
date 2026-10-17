@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using WingingIt.Flight;
 using WingingIt.Input;
+using WingingIt.Settings;
 
 namespace WingingIt.UI
 {
@@ -9,7 +10,8 @@ namespace WingingIt.UI
     /// Shows the on-screen stick and buttons on mobile, or after a touchscreen is touched.
     /// The controls are Input System OnScreen controls that feed a virtual gamepad, so they use
     /// the same actions as a real controller. F2 toggles them in the Editor for testing.
-    /// Weapon buttons only show for the weapons the plane's class carries.
+    /// Weapon buttons only show for the weapons the plane's class carries. Settings: Touch controls Auto (the above) /
+    /// On / Off, and the button size.
     /// </summary>
     public class TouchControlsUI : MonoBehaviour
     {
@@ -27,6 +29,23 @@ namespace WingingIt.UI
 
         bool _touchSeen;
 
+        void OnEnable()
+        {
+            GameSettings.Current.Changed += ApplySize;
+            ApplySize();
+        }
+
+        void OnDisable() => GameSettings.Current.Changed -= ApplySize;
+
+        void ApplySize()
+        {
+            if (controlsRoot == null)
+                return;
+            var scale = Vector3.one * GameSettings.Current.Data.touchButtonSize;
+            foreach (Transform child in controlsRoot.transform)
+                child.localScale = scale; // each button grows around its own anchor
+        }
+
         void Update()
         {
             var touch = Touchscreen.current;
@@ -37,7 +56,12 @@ namespace WingingIt.UI
             if (keyboard != null && keyboard.f2Key.wasPressedThisFrame)
                 showOnDesktop = !showOnDesktop;
 
-            bool show = Application.isMobilePlatform || _touchSeen || showOnDesktop;
+            bool show = GameSettings.Current.Data.touchControls switch
+            {
+                TouchControlsMode.On => true,
+                TouchControlsMode.Off => false,
+                _ => Application.isMobilePlatform || _touchSeen || showOnDesktop,
+            };
             if (controlsRoot != null && controlsRoot.activeSelf != show)
                 controlsRoot.SetActive(show);
             if (player != null)

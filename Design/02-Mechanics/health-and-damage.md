@@ -91,7 +91,7 @@ Part damage stacks on top of these. A Critical body with a missing wing is in de
 **Implemented (2026-10-14), first pass.** `BodyDamageEffects` (tuned on the plane's `PlaneHealth`) maps body HP to a state and rebuilds its modifiers on every state change, so they stack with lost-part effects and a server only needs to sync body HP:
 
 - **Damaged:** top speed ×0.85, light grey smoke trail.
-- **Critical:** top speed ×0.85, climb ×0.7, the engine coughs (random thrust dips of up to 50%), heavy black smoke + fire, guns jam at 0.3 chance per second of firing for 1.2 s (`GunStats`). The debug HUD flashes "CRITICAL DAMAGE — RETURN TO BASE" and pulses a red vignette (placeholder for the Phase 6 vignette; no alarm sound yet).
+- **Critical:** top speed ×0.85, climb ×0.7, the engine coughs (random thrust dips of up to 50%), heavy black smoke + fire, guns jam at 0.3 chance per second of firing for 1.2 s (`GunStats`). The HUD's damage feedback (red heartbeat vignette, alarm, RETURN TO BASE) is described in [hud.md](../06-UI-UX/hud.md#damage-feedback); it treats a lost wing as Critical too.
 
 ## Destruction
 

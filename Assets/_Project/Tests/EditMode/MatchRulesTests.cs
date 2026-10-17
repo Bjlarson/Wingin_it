@@ -6,13 +6,13 @@ namespace WingingIt.Tests
     public class MatchClockTests
     {
         [Test]
-        public void Phases_GoLobby_ClassSelect_Countdown_Playing_Ended()
+        public void Phases_GoMenu_ClassSelect_Countdown_Playing_Ended()
         {
             var clock = new MatchClock(300f, 3f);
-            Assert.AreEqual(MatchPhase.Lobby, clock.Phase);
+            Assert.AreEqual(MatchPhase.Menu, clock.Phase);
             Assert.IsFalse(clock.StartCountdown(), "can't skip class select");
             Assert.IsTrue(clock.OpenClassSelect());
-            Assert.IsTrue(clock.BackToLobby());
+            Assert.IsTrue(clock.BackToMenu());
             Assert.IsTrue(clock.OpenClassSelect());
             Assert.IsTrue(clock.StartCountdown());
             Assert.AreEqual(MatchPhase.Countdown, clock.Phase);
@@ -32,7 +32,7 @@ namespace WingingIt.Tests
         }
 
         [Test]
-        public void Lobby_AndClassSelect_DontTick()
+        public void Menu_AndClassSelect_DontTick()
         {
             var clock = new MatchClock(300f, 3f);
             Assert.IsFalse(clock.Tick(1000f));

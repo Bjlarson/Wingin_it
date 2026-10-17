@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using WingingIt.Bots;
 using WingingIt.Flight;
+using WingingIt.Settings;
 using WingingIt.World;
 
 namespace WingingIt.Match
@@ -19,9 +21,11 @@ namespace WingingIt.Match
     }
 
     /// <summary>
-    /// Runs one offline Teams match: lobby → class select → 3-2-1 → a 5-minute clock → scoreboard (see
-    /// <see cref="MatchClock"/>). The world is frozen (time scale 0) everywhere but in play, the bots only join once a
-    /// class is picked, and the player's controls and flight HUD are off outside play. Every death in play goes to the
+    /// Runs one offline Teams match: menu (main menu + game mode select, the player's plane parked in its home hangar)
+    /// → class select → 3-2-1 → a 5-minute clock → scoreboard (see <see cref="MatchClock"/>). The world is frozen (time
+    /// scale 0) everywhere but in play, the bots only join once a class is picked, and the player's controls and flight
+    /// HUD are off outside play. In play the in-match menu (<see cref="OpenMenu"/>) never pauses: it only lets go of the
+    /// controls. Every death in play goes to the
     /// <see cref="MatchScore"/> (kills and assists), and objectives score through <see cref="AwardObjective"/>. <see cref="MatchScreens"/> draws it. <see cref="Dismiss"/> drops all of this for free
     /// flight (tests, sandbox).
     /// In play the class can change only on respawn (<see cref="ChooseRespawnClass"/> while dead) or parked and repaired
@@ -37,8 +41,10 @@ namespace WingingIt.Match
         [SerializeField] FlightStats[] classes;
         [Tooltip("Player controls (input, dev tools) that only run in play.")]
         [SerializeField] Behaviour[] playOnlyBehaviours;
-        [Tooltip("Flight HUD and touch controls, hidden outside play.")]
+        [Tooltip("Flight HUD and debug overlay, hidden outside play.")]
         [SerializeField] GameObject[] playOnlyObjects;
+        [Tooltip("On-screen controls: like the HUD, but also hidden while the in-match menu is open (taps go to the menu).")]
+        [SerializeField] GameObject[] controlObjects;
         [Tooltip("Dev tools that break the match rules (free class switching). Only on after Dismiss.")]
         [SerializeField] Behaviour[] sandboxOnlyBehaviours;
 
@@ -57,6 +63,9 @@ namespace WingingIt.Match
         // Kept across Play Again (a scene reload), so a rematch starts with the same picks.
         static BotDifficulty s_difficulty = BotDifficulty.Normal;
         static int s_classIndex;
+        static bool s_skipMenu; // Play Again: the reload opens on class select
+
+        const string DifficultyPref = "WingingIt.Teams.BotDifficulty";
 
         MatchClock _clock;
         MatchScore _score;
@@ -64,7 +73,8 @@ namespace WingingIt.Match
         PlaneRespawner _respawner;
         PlaneHealth _health;
         PlaneRepair _repair;
-        bool _playOnlyOn = true; // as the scene is saved
+        bool _playOnlyOn = true, _controlsOn = true; // as the scene is saved
+        bool _parked;
 
         public event Action<MatchPhase> PhaseChanged;
 
@@ -79,6 +89,10 @@ namespace WingingIt.Match
         public IReadOnlyList<FlightStats> Classes => classes;
         public int SelectedClass => s_classIndex;
         public bool IsDismissed => _dismissed;
+        /// <summary>The in-match menu is open (the match runs on; the player's controls are let go).</summary>
+        public bool MenuOpen { get; private set; }
+        /// <summary>Where the player's plane waits during the menu: its home hangar. Null if the level has none.</summary>
+        public Transform HangarSpot => player != null ? Airfield.HomeOf(player.Team)?.HangarSpot : null;
 
         /// <summary>Whether (and why) the in-play class picker is showing. The world keeps running under it.</summary>
         public ClassPicker Picker { get; private set; }
@@ -120,13 +134,15 @@ namespace WingingIt.Match
             set
             {
                 s_difficulty = value;
+                PlayerPrefs.SetInt(DifficultyPref, (int)value); // remembered between sessions
                 if (roster != null)
                     roster.Difficulty = value;
             }
         }
 
         public string TeamName(int team) => team >= 0 && team < teamNames.Length ? teamNames[team] : $"Team {team + 1}";
-        public Color TeamColor(int team) => team >= 0 && team < teamColors.Length ? teamColors[team] : Color.white;
+        /// <summary>The team's colour, or its high-contrast one if the player picked that (see <see cref="GameSettings.TeamColor"/>).</summary>
+        public Color TeamColor(int team) => GameSettings.TeamColor(team, team >= 0 && team < teamColors.Length ? teamColors[team] : Color.white);
 
         /// <summary>What the scoreboard calls a pilot: "You" for the player, the plane's name for bots.</summary>
         public string PilotName(PlaneController plane) => plane == player ? "You" : plane.name;
@@ -134,13 +150,17 @@ namespace WingingIt.Match
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         static void ResetStatics()
         {
-            s_difficulty = BotDifficulty.Normal;
+            s_difficulty = (BotDifficulty)Mathf.Clamp(PlayerPrefs.GetInt(DifficultyPref, (int)BotDifficulty.Normal), 0, 2);
             s_classIndex = 0;
+            s_skipMenu = false;
         }
 
         void Awake()
         {
             _clock = new MatchClock(matchLength, countdownLength);
+            if (s_skipMenu)
+                _clock.OpenClassSelect();
+            s_skipMenu = false;
             _score = new MatchScore(TeamCount, killPoints, assistPoints);
             if (roster != null)
             {
@@ -160,9 +180,28 @@ namespace WingingIt.Match
             ApplyPhase();
         }
 
+        void Start()
+        {
+            if (!_dismissed && _clock.Phase is MatchPhase.Menu or MatchPhase.ClassSelect)
+                ParkInHangar();
+        }
+
+        /// <summary>The menu backdrop: the player's plane, in the class picked last, parked in its home hangar.</summary>
+        void ParkInHangar()
+        {
+            var spot = HangarSpot;
+            if (player == null || spot == null)
+                return;
+            if (IsClass(s_classIndex) && player.Stats != classes[s_classIndex])
+                player.SetStats(classes[s_classIndex]);
+            player.SpawnOnGround(spot.position, spot.rotation);
+            _parked = true;
+        }
+
         void OnEnable()
         {
             PlaneHealth.AnyKilled += OnAnyKilled;
+            InputSystem.onDeviceChange += OnDeviceChange;
             if (_respawner != null)
                 _respawner.Spawning += OnPlayerSpawning;
         }
@@ -170,6 +209,7 @@ namespace WingingIt.Match
         void OnDisable()
         {
             PlaneHealth.AnyKilled -= OnAnyKilled;
+            InputSystem.onDeviceChange -= OnDeviceChange;
             if (_respawner != null)
                 _respawner.Spawning -= OnPlayerSpawning;
             Time.timeScale = 1f; // never leave the game frozen (scene unload, tests)
@@ -200,8 +240,40 @@ namespace WingingIt.Match
         void SetPicker(ClassPicker picker)
         {
             Picker = picker;
-            // Controls off frees the mouse for the picker (the flight input locks it); the flight HUD would draw over it.
-            SetPlayOnly(_clock.Phase == MatchPhase.Playing && picker == ClassPicker.None);
+            RefreshPlayOnly();
+        }
+
+        /// <summary>
+        /// Opens the in-match menu (countdown or play). The match keeps running: the player's controls let go of the
+        /// stick and the mouse is freed; the HUD stays up behind the menu.
+        /// </summary>
+        public void OpenMenu()
+        {
+            if (_dismissed || MenuOpen || _clock.Phase is not (MatchPhase.Countdown or MatchPhase.Playing))
+                return;
+            MenuOpen = true;
+            RefreshPlayOnly();
+        }
+
+        public void CloseMenu()
+        {
+            if (!MenuOpen)
+                return;
+            MenuOpen = false;
+            RefreshPlayOnly();
+        }
+
+        // Platform guidelines: a lost controller or a backgrounded app opens the menu (the match still runs on).
+        void OnDeviceChange(InputDevice device, InputDeviceChange change)
+        {
+            if (device is Gamepad && change is InputDeviceChange.Removed or InputDeviceChange.Disconnected)
+                OpenMenu();
+        }
+
+        void OnApplicationPause(bool paused)
+        {
+            if (paused)
+                OpenMenu();
         }
 
         /// <summary>While dead: the class to respawn in. Takes effect when the respawn timer runs out.</summary>
@@ -276,17 +348,17 @@ namespace WingingIt.Match
             return null;
         }
 
-        /// <summary>Lobby → class select.</summary>
+        /// <summary>Menu → class select: the game mode was confirmed.</summary>
         public void OpenClassSelect()
         {
             if (_clock.OpenClassSelect())
                 ApplyPhase();
         }
 
-        /// <summary>Class select → lobby.</summary>
-        public void BackToLobby()
+        /// <summary>Class select → menu (the game mode screen).</summary>
+        public void BackToMenu()
         {
-            if (_clock.BackToLobby())
+            if (_clock.BackToMenu())
                 ApplyPhase();
         }
 
@@ -304,6 +376,7 @@ namespace WingingIt.Match
                 player.SetStats(classes[index]);
                 if (player.TryGetComponent<PlaneRespawner>(out var respawner))
                     respawner.SpawnNow();
+                _parked = false;
             }
             if (roster != null)
             {
@@ -332,8 +405,21 @@ namespace WingingIt.Match
             return _score.AwardPoints(team, pilot, pilot != null ? PilotName(pilot) : null, points, label);
         }
 
-        /// <summary>A rematch: reloads the level back to the lobby, keeping the difficulty and class picked.</summary>
+        /// <summary>A rematch: reloads the level straight to class select, keeping the difficulty and class picked.</summary>
         public void PlayAgain()
+        {
+            s_skipMenu = true;
+            Reload();
+        }
+
+        /// <summary>Back to the main menu: from the scoreboard, or leaving a match (offline the team just plays on without you).</summary>
+        public void ReturnToMainMenu()
+        {
+            s_skipMenu = false;
+            Reload();
+        }
+
+        void Reload()
         {
             Time.timeScale = 1f;
             SceneManager.LoadScene(gameObject.scene.name);
@@ -348,7 +434,11 @@ namespace WingingIt.Match
             _dismissed = true;
             Time.timeScale = 1f;
             Picker = ClassPicker.None;
-            SetPlayOnly(true);
+            MenuOpen = false;
+            RefreshPlayOnly();
+            if (_parked && player != null && player.TryGetComponent<PlaneRespawner>(out var respawner))
+                respawner.SpawnNow(); // out of the hangar, as free flight always started
+            _parked = false;
             foreach (var b in sandboxOnlyBehaviours)
                 if (b != null)
                     b.enabled = true;
@@ -362,7 +452,9 @@ namespace WingingIt.Match
             bool playing = _clock.Phase == MatchPhase.Playing;
             Time.timeScale = playing ? 1f : 0f;
             Picker = ClassPicker.None;
-            SetPlayOnly(playing);
+            if (_clock.Phase is not (MatchPhase.Countdown or MatchPhase.Playing))
+                MenuOpen = false; // time ran out with it open: the scoreboard takes over
+            RefreshPlayOnly();
             if (playing)
                 RegisterPilots();
             if (_clock.Phase == MatchPhase.Ended)
@@ -370,17 +462,31 @@ namespace WingingIt.Match
             PhaseChanged?.Invoke(_clock.Phase);
         }
 
-        void SetPlayOnly(bool on)
+        /// <summary>
+        /// The flight HUD shows in play with no class picker up (the picker frees the mouse, and the HUD would draw over
+        /// it); the controls and on-screen controls also need the in-match menu closed. Dismissed, all of it is on.
+        /// </summary>
+        void RefreshPlayOnly()
         {
-            if (on == _playOnlyOn)
-                return;
-            _playOnlyOn = on;
-            foreach (var b in playOnlyBehaviours)
-                if (b != null)
-                    b.enabled = on;
-            foreach (var go in playOnlyObjects)
-                if (go != null)
-                    go.SetActive(on);
+            bool hud = _dismissed || (_clock.Phase == MatchPhase.Playing && Picker == ClassPicker.None);
+            bool controls = hud && !MenuOpen;
+            if (hud != _playOnlyOn)
+            {
+                _playOnlyOn = hud;
+                foreach (var go in playOnlyObjects)
+                    if (go != null)
+                        go.SetActive(hud);
+            }
+            if (controls != _controlsOn)
+            {
+                _controlsOn = controls;
+                foreach (var b in playOnlyBehaviours)
+                    if (b != null)
+                        b.enabled = controls;
+                foreach (var go in controlObjects)
+                    if (go != null)
+                        go.SetActive(controls);
+            }
         }
 
         void RegisterPilots()

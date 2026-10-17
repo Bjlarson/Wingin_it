@@ -23,7 +23,7 @@ namespace WingingIt.Tests
         {
             yield return SceneManager.LoadSceneAsync("Island", LoadSceneMode.Single);
             yield return null;
-            Object.FindAnyObjectByType<MatchManager>()?.Dismiss(); // free flight: no lobby, no match clock
+            Object.FindAnyObjectByType<MatchManager>()?.Dismiss(); // free flight: no menu, no match clock
             yield return null; // the roster starts filling
             var go = GameObject.Find("Player Plane");
             Assert.IsNotNull(go, "Island scene has no Player Plane");

@@ -3,124 +3,356 @@ using System.Text;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using WingingIt.Bots;
+using WingingIt.CameraSystem;
 using WingingIt.Flight;
 using WingingIt.Match;
+using WingingIt.Settings;
+using static WingingIt.UI.GlassGUI;
 
 namespace WingingIt.UI
 {
     /// <summary>
-    /// Prototype match screens drawn with IMGUI, over the <see cref="MatchManager"/>: the pre-match lobby (both
-    /// rosters, bot difficulty, Start), class select, the 3-2-1, the match clock + team score bar in play, and the
-    /// end-of-match scoreboard. In play it also draws the class picker (while dead, and parked + repaired at home
-    /// with Tab or the CHANGE PLANE button). Buttons work with mouse and touch; Enter / Esc and 1-4 work on the keyboard.
-    /// Styled to Design/06-UI-UX/glass-menu-style-guide.html (dark tinted glass, DIN type, rail selection).
+    /// Every screen outside the cockpit, drawn with IMGUI over the <see cref="MatchManager"/>
+    /// (Design/06-UI-UX/front-end-menus.md): the main menu over the player's plane in its hangar, the game mode cards,
+    /// class select, the 3-2-1, the clock + team score bar in play, the in-match menu (Esc / Start /
+    /// ☰, the match keeps running) with the live scoreboard, Settings, and the end-of-match scoreboard. In play it also
+    /// draws the class picker (while dead, and parked + repaired at home with Tab or CHANGE PLANE). Everything works
+    /// with mouse, keyboard (arrows, Enter, Esc, Q / E), gamepad (D-pad / stick, A, B, LB / RB) and touch, through
+    /// <see cref="MenuNav"/>. Styled to Design/06-UI-UX/glass-menu-style-guide.html through <see cref="GlassGUI"/>.
     /// </summary>
     public class MatchScreens : MonoBehaviour
     {
         [SerializeField] MatchManager match;
+        [Tooltip("Circles the parked plane in the hangar; pulls back through the doors on PLAY.")]
+        [SerializeField] MenuCamera menuCamera;
+        [Tooltip("For the read-only bindings list in Settings.")]
+        [SerializeField] InputActionAsset actions;
 
         const float ReferenceHeight = 1080f;
-        const float Radius = 14f;
-        const float GlowRest = 0.07f, GlowOpen = 0.14f, GlowSettle = 0.18f;
-
-        // Palette from the style guide.
-        static readonly Color Glow = new(0.863f, 0.922f, 1f);          // #DCEBFF, edges only
-        static readonly Color Steel = new(0.541f, 0.573f, 0.612f);     // #8A929C secondary text
-        static readonly Color Body = new(0.706f, 0.729f, 0.761f);      // #B4BAC2
-        static readonly Color White = new(0.949f, 0.957f, 0.969f);     // #F2F4F7
-        static readonly Color Dim = new(0f, 0f, 0f, 0.45f);
         static readonly string[] DifficultyNames = { "Easy", "Normal", "Hard" };
 
-        GUIStyle _title, _huge, _item, _hint, _body, _numeral;
-        Texture2D _white, _ramp;
-        Font _din, _inter;
-        readonly Dictionary<int, Texture2D> _glass = new();
-        readonly Dictionary<(GUIStyle, int, char), float> _advance = new();
-        MatchPhase _lastPhase = (MatchPhase)(-1);
-        float _phaseShownAt;
+        /// <summary>Which screen of the menu phase is up.</summary>
+        enum Front
+        {
+            Main,
+            GameMode,
+        }
+
+        // Main menu rows (keyboard / gamepad focus): PLAY, then the gear and QUIT in the corner.
+        const int MainPlay = 0, MainSettings = 1, MainQuit = 2;
+        // In-match menu rows.
+        const int MenuResume = 0, MenuSettings = 1, MenuLeave = 2;
+
+        readonly GlassGUI _g = new();
+        readonly MenuNav _nav = new();
+        SettingsPanel _settings;
+        bool _settingsOpen;
+        Front _front;
+        int _focus;
+        int _mode;           // highlighted game mode card
+        int _modeRow;        // 0 = the card, 1 = its BOTS row
+        int _highlight = -1; // highlighted class card on class select
+        bool _leaveArmed;    // LEAVE MATCH pressed once: the next press confirms
+        object _screen;
+        float _shownAt;
+
+        static bool CanQuit => !Application.isMobilePlatform && Application.platform != RuntimePlatform.WebGLPlayer;
+
+        void Awake() => _settings = new SettingsPanel(_g, actions);
+
+        void OnDestroy() => _g.Dispose();
+
+        // ---------- Input ----------
 
         void Update()
         {
-            var keyboard = Keyboard.current;
-            if (match == null || keyboard == null)
+            if (match == null || match.IsDismissed)
                 return;
-            if (match.Phase != _lastPhase)
+            _nav.Read();
+            var screen = ScreenKey();
+            if (!Equals(screen, _screen))
             {
-                _lastPhase = match.Phase;
-                _phaseShownAt = Time.unscaledTime;
+                _screen = screen;
+                _shownAt = Time.unscaledTime;
             }
+
+            if (_settingsOpen && match.Phase != MatchPhase.Menu && !match.MenuOpen)
+                _settingsOpen = false; // time ran out with Settings open over the match
+            if (_settingsOpen)
+            {
+                if (_settings.HandleInput(_nav))
+                    CloseSettings();
+                return;
+            }
+
             switch (match.Phase)
             {
-                case MatchPhase.Lobby:
-                    if (keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame)
-                        match.OpenClassSelect();
+                case MatchPhase.Menu: MenuInput(); break;
+                case MatchPhase.ClassSelect: ClassSelectInput(); break;
+                case MatchPhase.Countdown:
+                case MatchPhase.Playing: PlayInput(); break;
+                case MatchPhase.Ended: ScoreboardInput(); break;
+            }
+        }
+
+        /// <summary>What's on screen, to re-run the open glow when it changes.</summary>
+        object ScreenKey() => (match.Phase, _front, _settingsOpen, match.MenuOpen, match.Picker);
+
+        void MenuInput()
+        {
+            if (menuCamera != null && menuCamera.IsMoving && (_nav.Confirm || _nav.Back))
+            {
+                menuCamera.Skip(); // the pull-back is skippable
+                return;
+            }
+            if (_front == Front.Main)
+            {
+                int rows = CanQuit ? 3 : 2;
+                if (_nav.Up) _focus = MenuMath.Step(_focus, -1, rows);
+                if (_nav.Down) _focus = MenuMath.Step(_focus, 1, rows);
+                if (_nav.Confirm)
+                    ActivateMain(_focus);
+                return;
+            }
+
+            var modes = GameModeInfo.All;
+            var mode = modes[Mathf.Clamp(_mode, 0, modes.Count - 1)];
+            if (_nav.Up || _nav.Down)
+                _modeRow = mode.HasBotDifficulty ? 1 - _modeRow : 0;
+            int dir = _nav.Left ? -1 : _nav.Right ? 1 : 0;
+            if (dir != 0)
+            {
+                if (_modeRow == 1 || modes.Count == 1)
+                    StepDifficulty(dir);
+                else
+                    _mode = Mathf.Clamp(_mode + dir, 0, modes.Count - 1);
+            }
+            if (_nav.Confirm)
+                ConfirmMode();
+            else if (_nav.Back)
+                BackToMain();
+        }
+
+        void ActivateMain(int row)
+        {
+            switch (row)
+            {
+                case MainPlay:
+                    _front = Front.GameMode;
+                    _mode = 0;
+                    _modeRow = 0;
+                    if (menuCamera != null)
+                        menuCamera.PullBack();
                     break;
-                case MatchPhase.ClassSelect:
-                    if (keyboard.escapeKey.wasPressedThisFrame)
-                        match.BackToLobby();
-                    else if (keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame)
-                        match.SelectClass(match.SelectedClass);
-                    for (int i = 0; i < 4; i++)
-                        if (keyboard[Key.Digit1 + i].wasPressedThisFrame)
-                            match.SelectClass(i);
+                case MainSettings:
+                    OpenSettings();
                     break;
-                case MatchPhase.Playing:
-                    if (match.Picker == ClassPicker.None)
-                    {
-                        if (keyboard.tabKey.wasPressedThisFrame)
-                            match.OpenAirfieldPicker();
-                        break;
-                    }
-                    if (match.Picker == ClassPicker.Airfield && (keyboard.escapeKey.wasPressedThisFrame || keyboard.tabKey.wasPressedThisFrame))
-                    {
-                        match.CloseAirfieldPicker();
-                        break;
-                    }
-                    for (int i = 0; i < 4; i++)
-                        if (keyboard[Key.Digit1 + i].wasPressedThisFrame)
-                        {
-                            if (match.Picker == ClassPicker.Respawn)
-                                match.ChooseRespawnClass(i);
-                            else
-                                match.ChangeClassAtAirfield(i);
-                        }
-                    break;
-                case MatchPhase.Ended:
-                    if (keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame)
-                        match.PlayAgain();
+                case MainQuit:
+                    Quit();
                     break;
             }
         }
 
-        void OnDestroy()
+        void BackToMain()
         {
-            foreach (var t in _glass.Values)
-                if (t != null)
-                    Destroy(t);
-            if (_ramp != null)
-                Destroy(_ramp);
+            _front = Front.Main;
+            _focus = MainPlay;
+            if (menuCamera != null)
+                menuCamera.ReturnToHangar();
         }
+
+        void ConfirmMode()
+        {
+            _highlight = match.SelectedClass;
+            match.OpenClassSelect();
+        }
+
+        void StepDifficulty(int dir) => match.Difficulty = (BotDifficulty)Mathf.Clamp((int)match.Difficulty + dir, 0, DifficultyNames.Length - 1);
+
+        void ClassSelectInput()
+        {
+            int n = match.Classes.Count;
+            if (_highlight < 0)
+                _highlight = match.SelectedClass;
+            if (_nav.Left) _highlight = MenuMath.Step(_highlight, -1, n);
+            if (_nav.Right) _highlight = MenuMath.Step(_highlight, 1, n);
+            if (_nav.Back)
+            {
+                _front = Front.GameMode;
+                match.BackToMenu();
+            }
+            else if (_nav.Confirm)
+                match.SelectClass(_highlight);
+            var keyboard = Keyboard.current;
+            if (keyboard != null)
+                for (int i = 0; i < n && i < 4; i++)
+                    if (keyboard[Key.Digit1 + i].wasPressedThisFrame)
+                        match.SelectClass(i);
+        }
+
+        void PlayInput()
+        {
+            bool toggle = _nav.Back || _nav.MenuButton;
+            if (!match.MenuOpen)
+            {
+                if (toggle)
+                {
+                    // Esc closes an open airfield picker first; a second Esc opens the menu.
+                    if (_nav.Back && match.Picker == ClassPicker.Airfield)
+                        match.CloseAirfieldPicker();
+                    else
+                        OpenMenu();
+                    return;
+                }
+                PickerInput();
+                return;
+            }
+
+            if (_nav.Up || _nav.Down)
+            {
+                _focus = MenuMath.Step(_focus, _nav.Up ? -1 : 1, 3);
+                _leaveArmed = false;
+            }
+            if (_nav.Confirm)
+                ActivateMenu(_focus);
+            else if (toggle)
+            {
+                if (_leaveArmed && !_nav.MenuButton)
+                    _leaveArmed = false;
+                else
+                    match.CloseMenu();
+            }
+        }
+
+        void OpenMenu()
+        {
+            match.OpenMenu();
+            _focus = MenuResume;
+            _leaveArmed = false;
+        }
+
+        void ActivateMenu(int row)
+        {
+            _focus = row;
+            switch (row)
+            {
+                case MenuResume:
+                    match.CloseMenu();
+                    break;
+                case MenuSettings:
+                    _leaveArmed = false;
+                    OpenSettings();
+                    break;
+                case MenuLeave:
+                    if (_leaveArmed)
+                        match.ReturnToMainMenu();
+                    else
+                        _leaveArmed = true;
+                    break;
+            }
+        }
+
+        void PickerInput()
+        {
+            var keyboard = Keyboard.current;
+            if (keyboard == null || match.Phase != MatchPhase.Playing)
+                return;
+            if (match.Picker == ClassPicker.None)
+            {
+                if (keyboard.tabKey.wasPressedThisFrame)
+                    match.OpenAirfieldPicker();
+                return;
+            }
+            if (match.Picker == ClassPicker.Airfield && keyboard.tabKey.wasPressedThisFrame)
+            {
+                match.CloseAirfieldPicker();
+                return;
+            }
+            for (int i = 0; i < 4; i++)
+                if (keyboard[Key.Digit1 + i].wasPressedThisFrame)
+                    PickInPlay(i);
+        }
+
+        void PickInPlay(int index)
+        {
+            if (match.Picker == ClassPicker.Respawn)
+                match.ChooseRespawnClass(index);
+            else
+                match.ChangeClassAtAirfield(index);
+        }
+
+        void ScoreboardInput()
+        {
+            if (_nav.Left || _nav.Right || _nav.Up || _nav.Down)
+                _focus = 1 - Mathf.Clamp(_focus, 0, 1);
+            if (_nav.Confirm)
+            {
+                if (_focus == 1)
+                    match.ReturnToMainMenu();
+                else
+                    match.PlayAgain();
+            }
+            else if (_nav.Back)
+                match.ReturnToMainMenu();
+        }
+
+        void OpenSettings()
+        {
+            _settings.Open();
+            _settingsOpen = true;
+        }
+
+        void CloseSettings() => _settingsOpen = false;
+
+        static void Quit()
+        {
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.isPlaying = false;
+#else
+            Application.Quit();
+#endif
+        }
+
+        // ---------- Drawing ----------
 
         void OnGUI()
         {
             if (match == null || match.IsDismissed)
                 return;
-            EnsureStyles();
+            _g.EnsureStyles();
             float scale = Screen.height / ReferenceHeight;
             GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
             float width = Screen.width / scale;
 
             switch (match.Phase)
             {
-                case MatchPhase.Lobby: DrawLobby(width); break;
+                case MatchPhase.Menu:
+                    if (_settingsOpen)
+                        DrawSettings(width, true);
+                    else if (_front == Front.Main)
+                        DrawMainMenu(width);
+                    else
+                        DrawGameModes(width);
+                    break;
                 case MatchPhase.ClassSelect: DrawClassSelect(width); break;
-                case MatchPhase.Countdown: DrawCountdown(width); break;
+                case MatchPhase.Countdown:
                 case MatchPhase.Playing:
-                    if (match.Picker != ClassPicker.None)
+                    if (match.Phase == MatchPhase.Countdown)
+                        DrawCountdown(width);
+                    else if (match.Picker != ClassPicker.None)
                         DrawPicker(width);
-                    else if (match.CanChangeClassAtAirfield)
+                    else if (match.CanChangeClassAtAirfield && !match.MenuOpen)
                         DrawSwapPrompt(width);
                     DrawScoreBar(width);
+                    if (match.MenuOpen)
+                    {
+                        if (_settingsOpen)
+                            DrawSettings(width, true);
+                        else
+                            DrawInMatchMenu(width);
+                    }
+                    else if (ShowMenuButton)
+                        DrawMenuButton(width);
                     break;
                 case MatchPhase.Ended: DrawScoreboard(width); break;
             }
@@ -129,83 +361,223 @@ namespace WingingIt.UI
         /// <summary>Outer glow: 14% when a screen opens, settling to 7% over 180 ms.</summary>
         float OpenGlow()
         {
-            float t = Mathf.Clamp01((Time.unscaledTime - _phaseShownAt) / 0.18f);
+            float t = Mathf.Clamp01((Time.unscaledTime - _shownAt) / 0.18f);
             return Mathf.Lerp(GlowOpen, GlowRest, t);
         }
 
-        // ---------- Lobby ----------
-
-        void DrawLobby(float width)
+        /// <summary>Focus follows the mouse when it moves over a row.</summary>
+        void HoverFocus(Rect r, int row, ref int focus)
         {
-            Fill(new Rect(0f, 0f, width, ReferenceHeight), Dim);
-            var panel = Centered(width, 1000f, 740f, 150f);
-            Panel(panel, OpenGlow());
-            Header(panel, "TEAMS", "8 V 8  ·  5:00");
-            GUI.color = Body;
-            GUI.Label(new Rect(panel.x + 36f, panel.y + 94f, panel.width - 72f, 28f), "Highest team score when time runs out wins. A tie is a draw.", _body);
-            GUI.color = Color.white;
+            if (_nav.MouseMoved && Event.current.type == EventType.Repaint && r.Contains(Event.current.mousePosition))
+                focus = row;
+        }
 
-            float colW = (panel.width - 72f - 40f) / 2f;
-            for (int team = 0; team < 2; team++)
+        /// <summary>The bottom hint strip, in the last device's glyphs (nothing on touch).</summary>
+        void HintStrip(float width, string keys, string pad)
+        {
+            string text = _nav.Glyph(keys, pad);
+            if (string.IsNullOrEmpty(text))
+                return;
+            _g.Shadowed(new Rect(0f, ReferenceHeight - 52f, width, 28f), text, _g.Hint, 3f, TextAnchor.MiddleCenter, Alpha(White, 0.75f));
+        }
+
+        void DrawSettings(float width, bool dim)
+        {
+            if (dim)
+                _g.Fill(new Rect(0f, 0f, width, ReferenceHeight), Dim);
+            if (_settings.Draw(width, ReferenceHeight, _nav, OpenGlow()))
+                CloseSettings();
+        }
+
+        // ---------- Main menu ----------
+
+        void DrawMainMenu(float width)
+        {
+            // Left third: the title, then a one-row glass panel. The hangar and the plane fill the rest.
+            float x = Mathf.Max(60f, width * 0.08f);
+            _g.Shadowed(new Rect(x, 300f, 700f, 90f), "WINGING IT", _g.Huge, 8f, TextAnchor.MiddleLeft, Color.white, 0.55f);
+            _g.Shadowed(new Rect(x + 4f, 392f, 700f, 30f), "ARCADE DOGFIGHTS", _g.Hint, 6f, TextAnchor.MiddleLeft, Alpha(White, 0.8f));
+
+            var panel = new Rect(x, 460f, 420f, 56f + 40f);
+            _g.Panel(panel, OpenGlow());
+            var play = new Rect(panel.x, panel.y + 20f, panel.width, 56f);
+            HoverFocus(play, MainPlay, ref _focus);
+            if (_g.Button(play, "PLAY", _nav.Glyph("ENTER", "A"), _focus == MainPlay, false, false))
+                ActivateMain(MainPlay);
+
+            // Corner: the gear (Settings) and, on PC, QUIT. The build version bottom left.
+            var gear = new Rect(width - 92f, ReferenceHeight - 92f, 56f, 56f);
+            HoverFocus(gear, MainSettings, ref _focus);
+            if (IconButton(gear, _focus == MainSettings, DrawGear))
+                ActivateMain(MainSettings);
+            if (CanQuit)
             {
-                float x = panel.x + 36f + team * (colW + 40f);
-                var head = new Rect(x, panel.y + 140f, colW, 34f);
-                Tracked(new Rect(head.x + 16f, head.y, head.width - 32f, head.height), match.TeamName(team).ToUpperInvariant(), _hint, 3.6f, TextAnchor.MiddleLeft, match.TeamColor(team));
-                Fill(new Rect(x, head.yMax, colW, 1f), Alpha(Color.white, 0.14f));
-                float y = head.yMax + 2f;
-                foreach (string line in RosterLines(team))
+                var quit = new Rect(gear.x - 120f, gear.y, 108f, 56f);
+                HoverFocus(quit, MainQuit, ref _focus);
+                bool on = _focus == MainQuit || quit.Contains(Event.current.mousePosition);
+                _g.Shadowed(quit, "QUIT", _g.Item, 3f, TextAnchor.MiddleCenter, on ? Color.white : Alpha(White, 0.6f), 0.85f);
+                if (_focus == MainQuit)
+                    _g.Fill(new Rect(quit.x + 24f, quit.yMax - 10f, quit.width - 48f, 2f), Color.white);
+                if (GUI.Button(quit, GUIContent.none, GUIStyle.none))
+                    ActivateMain(MainQuit);
+            }
+            _g.Shadowed(new Rect(28f, ReferenceHeight - 52f, 400f, 28f), $"V{Application.version}", _g.Hint, 2f, TextAnchor.MiddleLeft, Alpha(White, 0.5f));
+            HintStrip(width, "ARROWS  MOVE    ENTER  SELECT", "D-PAD  MOVE    A  SELECT");
+        }
+
+        /// <summary>A small round glass button holding an icon. True when clicked.</summary>
+        bool IconButton(Rect r, bool focused, System.Action<Rect, Color> icon)
+        {
+            bool hover = r.Contains(Event.current.mousePosition);
+            _g.RoundFill(r, r.width / 2f, new Color(0.12f, 0.13f, 0.15f, 0.72f));
+            _g.RoundStroke(r, r.width / 2f, focused ? 2f : 1f, Alpha(Color.white, focused ? 0.9f : hover ? 0.5f : 0.22f));
+            icon(r, focused || hover ? Color.white : Alpha(White, 0.75f));
+            return GUI.Button(r, GUIContent.none, GUIStyle.none);
+        }
+
+        /// <summary>A cog: eight rounded teeth round a thick ring.</summary>
+        void DrawGear(Rect r, Color c)
+        {
+            Vector2 center = r.center;
+            for (int i = 0; i < 8; i++)
+            {
+                float a = i * Mathf.PI / 4f;
+                var tooth = center + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * 11.5f;
+                _g.RoundFill(new Rect(tooth.x - 3.5f, tooth.y - 3.5f, 7f, 7f), 2f, c);
+            }
+            _g.RoundStroke(new Rect(center.x - 10f, center.y - 10f, 20f, 20f), 10f, 5f, c);
+        }
+
+        // ---------- Game mode select ----------
+
+        const float CardW = 316f, CardH = 470f, CardGap = 24f;
+
+        void DrawGameModes(float width)
+        {
+            _g.Fill(new Rect(0f, 0f, width, ReferenceHeight), Alpha(Dim, 0.25f));
+            _g.Shadowed(new Rect(0f, 110f, width, 60f), "GAME MODE", _g.Title, 8f, TextAnchor.MiddleCenter, Color.white);
+
+            var modes = GameModeInfo.All;
+            float total = modes.Count * CardW + (modes.Count - 1) * CardGap;
+            float x0 = (width - total) / 2f;
+            float glow = OpenGlow();
+            for (int i = 0; i < modes.Count; i++)
+            {
+                var mode = modes[i];
+                var card = new Rect(x0 + i * (CardW + CardGap), 230f, CardW, CardH + 100f);
+                bool selected = i == _mode;
+                _g.Panel(card, selected ? Mathf.Max(glow, GlowSettle) : glow * 0.5f);
+
+                var head = new Rect(card.x, card.y + 22f, card.width, 44f);
+                if (selected && _modeRow == 0)
+                    _g.Lit(head, 1f, true);
+                _g.Tracked(new Rect(card.x + 28f, head.y, card.width - 56f, head.height), mode.Name.ToUpperInvariant(), _g.Item, 3.4f, TextAnchor.MiddleLeft, Color.white);
+                _g.Fill(new Rect(card.x + 28f, head.yMax + 8f, card.width - 56f, 1f), Alpha(Color.white, 0.14f));
+
+                DrawModeSketch(new Rect(card.x + 28f, head.yMax + 24f, card.width - 56f, 120f));
+                GUI.color = Body;
+                GUI.Label(new Rect(card.x + 28f, head.yMax + 158f, card.width - 56f, 96f), mode.Pitch, _g.BodyText);
+                GUI.color = Color.white;
+
+                float y = head.yMax + 262f;
+                Fact(card, y, "PLAYERS", mode.Players);
+                Fact(card, y + 34f, "LENGTH", $"{Mathf.RoundToInt(mode.Length / 60f)}:00");
+
+                if (mode.HasBotDifficulty)
                 {
-                    bool you = line == "You";
-                    var row = new Rect(x, y, colW, 42f);
-                    if (you)
-                        Lit(row, 1f, true);
-                    Tracked(new Rect(row.x + 16f, row.y, row.width - 32f, row.height), line.ToUpperInvariant(), _hint, 2.2f, TextAnchor.MiddleLeft,
-                        you ? Color.white : Alpha(White, 0.88f), 1.2f);
-                    y += 42f;
-                    Fill(new Rect(x, y - 1f, colW, 1f), Alpha(Color.white, 0.05f));
+                    // BOTS, then the three levels as chips across the card
+                    _g.Tracked(new Rect(card.x + 28f, y + 70f, card.width - 56f, 26f), "BOTS", _g.Hint, 2.4f, TextAnchor.MiddleLeft, Steel);
+                    var row = new Rect(card.x, y + 96f, card.width, 48f);
+                    if (selected && _modeRow == 1)
+                        _g.Lit(row, 1f, true);
+                    float bw = (card.width - 56f) / DifficultyNames.Length;
+                    for (int d = 0; d < DifficultyNames.Length; d++)
+                    {
+                        var chip = new Rect(row.x + 28f + d * bw, row.y + 6f, bw - 8f, row.height - 12f);
+                        bool on = (int)match.Difficulty == d;
+                        if (on)
+                            _g.RoundFill(chip, 6f, Alpha(Color.white, 0.14f));
+                        _g.RoundStroke(chip, 6f, 1f, Alpha(Color.white, on ? 0.6f : 0.12f));
+                        _g.Tracked(chip, DifficultyNames[d].ToUpperInvariant(), _g.Hint, 1.6f, TextAnchor.MiddleCenter, on ? Color.white : Alpha(White, 0.6f));
+                        if (GUI.Button(chip, GUIContent.none, GUIStyle.none))
+                        {
+                            _mode = i;
+                            _modeRow = 1;
+                            match.Difficulty = (BotDifficulty)d;
+                        }
+                    }
+                }
+
+                var play = new Rect(card.x, card.yMax - 78f, card.width, 56f);
+                if (_g.Button(play, "PLAY", _nav.Glyph("ENTER", "A"), selected && _modeRow == 0, false, true))
+                {
+                    _mode = i;
+                    ConfirmMode();
                 }
             }
 
-            float by = panel.y + 590f;
-            Tracked(new Rect(panel.x + 36f, by, 90f, 56f), "BOTS", _hint, 3.6f, TextAnchor.MiddleLeft, Steel);
-            for (int d = 0; d < DifficultyNames.Length; d++)
-            {
-                var r = new Rect(panel.x + 130f + d * 150f, by, 140f, 56f);
-                if (Item(r, DifficultyNames[d].ToUpperInvariant(), null, (int)match.Difficulty == d, false, false, TextAnchor.MiddleCenter))
-                    match.Difficulty = (BotDifficulty)d;
-            }
-            if (Item(new Rect(panel.xMax - 320f, by, 284f, 56f), "START", "ENTER", true, false, false))
-                match.OpenClassSelect();
-            Foot(panel, "YOU FLY FOR WEST  ·  EMPTY SLOTS ARE BOTS", "ENTER  START");
+            if (BackButton(new Rect(width / 2f - 130f, 230f + CardH + 100f + 36f, 260f, 56f)))
+                BackToMain();
+            HintStrip(width, "ARROWS  BOTS    ENTER  PLAY    ESC  BACK", "D-PAD  BOTS    A  PLAY    B  BACK");
         }
 
-        /// <summary>The lobby's lines for a team: "You" if the player's on it, then each planned bot and its class.</summary>
-        List<string> RosterLines(int team)
+        void Fact(Rect card, float y, string label, string value)
         {
-            var lines = new List<string>();
-            if (match.Player != null && match.PlayerTeam == team)
-                lines.Add("You");
-            var roster = match.Roster;
-            if (roster == null)
-                return lines;
-            var planned = roster.PlannedBots(team);
-            for (int i = 0; i < planned.Count; i++)
-                lines.Add($"Bot {i + 1}  ·  {planned[i].displayName}");
-            return lines;
+            _g.Tracked(new Rect(card.x + 28f, y, card.width - 56f, 30f), label, _g.Hint, 2.4f, TextAnchor.MiddleLeft, Steel);
+            _g.Tracked(new Rect(card.x + 28f, y, card.width - 56f, 30f), value, _g.Numeral, 1f, TextAnchor.MiddleRight, White, 0.7f);
+        }
+
+        /// <summary>Teams' card picture: two lines of team-coloured planes, nose to nose, over a faint island.</summary>
+        void DrawModeSketch(Rect r)
+        {
+            _g.RoundFill(r, 8f, new Color(0f, 0f, 0f, 0.25f));
+            _g.RoundFill(new Rect(r.x + r.width * 0.3f, r.y + r.height * 0.2f, r.width * 0.4f, r.height * 0.6f), 30f, Alpha(Color.white, 0.05f));
+            for (int team = 0; team < 2; team++)
+            {
+                Color c = match.TeamColor(team);
+                for (int k = 0; k < 4; k++)
+                {
+                    float y = r.y + 18f + k * 24f;
+                    float x = team == 0 ? r.x + 26f + (k % 2) * 16f : r.xMax - 42f - (k % 2) * 16f;
+                    // a tiny plane: wing bar + fuselage, pointing at the other team
+                    _g.Fill(new Rect(x + 4f, y, 4f, 16f), c);
+                    _g.Fill(new Rect(team == 0 ? x : x - 4f, y + 6f, 16f, 4f), c);
+                }
+            }
+            _g.Tracked(r, "VS", _g.Hint, 4f, TextAnchor.MiddleCenter, Alpha(White, 0.5f));
+        }
+
+        bool BackButton(Rect r)
+        {
+            _g.Panel(r, GlowRest, false);
+            return _g.Button(r, "BACK", _nav.Glyph("ESC", "B"), false, false, false, TextAnchor.MiddleCenter);
         }
 
         // ---------- Class select ----------
 
         void DrawClassSelect(float width)
         {
-            Fill(new Rect(0f, 0f, width, ReferenceHeight), Dim);
-            Tracked(new Rect(0f, 110f, width, 60f), "CHOOSE YOUR PLANE", _title, 8f, TextAnchor.MiddleCenter, Color.white);
-            Tracked(new Rect(0f, 176f, width, 24f), "1 – 4 OR CLICK  ·  ENTER KEEPS THE HIGHLIGHTED ONE  ·  ESC BACK", _hint, 3.4f, TextAnchor.MiddleCenter, Steel);
-            int picked = ClassCards(width, 250f, "FLY", match.SelectedClass);
+            _g.Fill(new Rect(0f, 0f, width, ReferenceHeight), Dim);
+            if (_highlight < 0)
+                _highlight = match.SelectedClass;
+            int n = match.Classes.Count;
+            float cardsW = n * CardW + (n - 1) * CardGap;
+            float s = Mathf.Min(1f, (width - 80f) / cardsW); // narrow screens: shrink to fit
+            var old = GUI.matrix;
+            float left = (width - cardsW * s) / 2f;
+            GUI.matrix = old * Matrix4x4.TRS(new Vector3(left, 0f, 0f), Quaternion.identity, new Vector3(s, s, 1f));
+
+            _g.Shadowed(new Rect(0f, 110f / s, cardsW, 60f), "CHOOSE YOUR PLANE", _g.Title, 8f, TextAnchor.MiddleCenter, Color.white);
+            int picked = ClassCards(0f, 230f / s, "FLY", _highlight, true);
             if (picked >= 0)
                 match.SelectClass(picked);
-            if (Item(new Rect(width / 2f - 130f, 250f + CardH + 36f, 260f, 56f), "BACK", "ESC", false, false, false, TextAnchor.MiddleCenter))
-                match.BackToLobby();
+            if (BackButton(new Rect(cardsW / 2f - 130f, 230f / s + CardH + 36f, 260f, 56f)))
+            {
+                _front = Front.GameMode;
+                match.BackToMenu();
+            }
+            GUI.matrix = old;
+            HintStrip(width, "ARROWS  MOVE    ENTER  FLY    1 – 4  PICK    ESC  BACK", "D-PAD  MOVE    A  FLY    B  BACK");
         }
 
         /// <summary>
@@ -214,46 +586,40 @@ namespace WingingIt.UI
         /// </summary>
         void DrawPicker(float width)
         {
-            Fill(new Rect(0f, 0f, width, ReferenceHeight), Dim);
+            _g.Fill(new Rect(0f, 0f, width, ReferenceHeight), Dim);
             bool respawn = match.Picker == ClassPicker.Respawn;
             string title = respawn ? $"RESPAWN IN {Mathf.CeilToInt(match.RespawnTimeLeft)}" : "CHANGE PLANE";
             string hint = respawn ? "1 – 4 OR CLICK TO PICK YOUR NEXT PLANE" : $"AT {match.SwapAirfield?.DisplayName.ToUpperInvariant()}  ·  1 – 4 OR CLICK  ·  ESC OR TAB KEEP THIS ONE";
-            Tracked(new Rect(0f, 110f, width, 60f), title, _title, 8f, TextAnchor.MiddleCenter, Color.white);
-            Tracked(new Rect(0f, 176f, width, 24f), hint, _hint, 3.4f, TextAnchor.MiddleCenter, Steel);
-            int picked = ClassCards(width, 250f, respawn ? "PICK" : "SWAP", match.SelectedClass);
-            if (picked >= 0)
-            {
-                if (respawn)
-                    match.ChooseRespawnClass(picked);
-                else
-                    match.ChangeClassAtAirfield(picked);
-            }
-            if (!respawn && Item(new Rect(width / 2f - 130f, 250f + CardH + 36f, 260f, 56f), "KEEP", "ESC", false, false, false, TextAnchor.MiddleCenter))
+            _g.Tracked(new Rect(0f, 110f, width, 60f), title, _g.Title, 8f, TextAnchor.MiddleCenter, Color.white);
+            _g.Tracked(new Rect(0f, 176f, width, 24f), hint, _g.Hint, 3.4f, TextAnchor.MiddleCenter, Steel);
+            int n = match.Classes.Count;
+            float cardsW = n * CardW + (n - 1) * CardGap;
+            int picked = ClassCards((width - cardsW) / 2f, 250f, respawn ? "PICK" : "SWAP", match.SelectedClass, false);
+            if (picked >= 0 && !match.MenuOpen)
+                PickInPlay(picked);
+            if (!respawn && !match.MenuOpen && _g.Button(new Rect(width / 2f - 130f, 250f + CardH + 36f, 260f, 56f), "KEEP", "ESC", false, false, false, TextAnchor.MiddleCenter))
                 match.CloseAirfieldPicker();
         }
 
         /// <summary>Parked and repaired at home: a small clickable (and touchable) "change plane" prompt above the HUD's bottom edge.</summary>
         void DrawSwapPrompt(float width)
         {
-            var r = new Rect(width / 2f - 170f, ReferenceHeight - 200f, 340f, 56f);
-            Panel(r, GlowRest, false);
-            if (Item(r, "CHANGE PLANE", "TAB", false, false, false, TextAnchor.MiddleCenter))
+            var r = new Rect(width / 2f - 170f, ReferenceHeight - 270f, 340f, 56f);
+            _g.Panel(r, GlowRest, false);
+            if (_g.Button(r, "CHANGE PLANE", "TAB", false, false, false, TextAnchor.MiddleCenter))
                 match.OpenAirfieldPicker();
         }
 
-        const float CardH = 470f;
-
         /// <summary>
         /// One card per class (stats, loadout, ability, how many teammates fly it) with a <paramref name="button"/> row.
-        /// Returns the index whose button was pressed this frame, or -1.
+        /// Returns the index whose button was pressed this frame, or -1. With <paramref name="hover"/>, the mouse moves
+        /// the highlight.
         /// </summary>
-        int ClassCards(float width, float top, string button, int selectedIndex)
+        int ClassCards(float x0, float top, string button, int selectedIndex, bool hover)
         {
             var classes = match.Classes;
             int n = classes.Count;
             int[] team = match.TeamComposition();
-            const float cardW = 340f, gap = 36f;
-            float x0 = (width - (n * cardW + (n - 1) * gap)) / 2f;
             float glow = OpenGlow();
             int pressed = -1;
             for (int i = 0; i < n; i++)
@@ -261,29 +627,31 @@ namespace WingingIt.UI
                 var stats = classes[i];
                 if (stats == null)
                     continue;
-                var card = new Rect(x0 + i * (cardW + gap), top, cardW, CardH);
+                var card = new Rect(x0 + i * (CardW + CardGap), top, CardW, CardH);
+                if (hover)
+                    HoverFocus(card, i, ref _highlight);
                 bool selected = i == selectedIndex;
-                Panel(card, selected ? Mathf.Max(glow, GlowSettle) : glow * 0.5f);
+                _g.Panel(card, selected ? Mathf.Max(glow, GlowSettle) : glow * 0.5f);
 
                 var head = new Rect(card.x, card.y + 22f, card.width, 44f);
                 if (selected)
-                    Lit(head, 1f, true);
-                Fill(new Rect(card.x + 36f, head.y + 17f, 10f, 10f), stats.bodyColor);
-                Tracked(new Rect(card.x + 58f, head.y, card.width - 110f, head.height), stats.displayName.ToUpperInvariant(), _item, 2.8f,
+                    _g.Lit(head, 1f, true);
+                _g.Fill(new Rect(card.x + 28f, head.y + 17f, 10f, 10f), stats.bodyColor);
+                _g.Tracked(new Rect(card.x + 50f, head.y, card.width - 100f, head.height), stats.displayName.ToUpperInvariant(), _g.Item, 2.8f,
                     TextAnchor.MiddleLeft, selected ? Color.white : Alpha(White, 0.88f));
-                Kbd(new Rect(card.xMax - 36f, head.y, 0f, head.height), (i + 1).ToString());
-                Fill(new Rect(card.x + 36f, head.yMax + 8f, card.width - 72f, 1f), Alpha(Color.white, 0.14f));
+                _g.Kbd(new Rect(card.xMax - 28f, head.y, 0f, head.height), (i + 1).ToString());
+                _g.Fill(new Rect(card.x + 28f, head.yMax + 8f, card.width - 56f, 1f), Alpha(Color.white, 0.14f));
 
                 GUI.color = Body;
-                GUI.Label(new Rect(card.x + 36f, head.yMax + 22f, card.width - 72f, 250f), Describe(stats), _body);
+                GUI.Label(new Rect(card.x + 28f, head.yMax + 22f, card.width - 56f, 250f), Describe(stats), _g.BodyText);
                 GUI.color = Color.white;
 
                 int mates = i < team.Length ? team[i] : 0;
-                Tracked(new Rect(card.x + 36f, card.yMax - 124f, card.width - 72f, 30f), "ON YOUR TEAM", _hint, 2.4f, TextAnchor.MiddleLeft, Steel);
-                Tracked(new Rect(card.x + 36f, card.yMax - 124f, card.width - 72f, 30f), mates.ToString(), _numeral, 0f, TextAnchor.MiddleRight,
+                _g.Tracked(new Rect(card.x + 28f, card.yMax - 124f, card.width - 56f, 30f), "ON YOUR TEAM", _g.Hint, 2.4f, TextAnchor.MiddleLeft, Steel);
+                _g.Tracked(new Rect(card.x + 28f, card.yMax - 124f, card.width - 56f, 30f), mates.ToString(), _g.Numeral, 0f, TextAnchor.MiddleRight,
                     mates == 0 ? Alpha(White, 0.5f) : White, 0.75f);
 
-                if (Item(new Rect(card.x, card.yMax - 78f, card.width, 56f), button, null, selected, false, true))
+                if (_g.Button(new Rect(card.x, card.yMax - 78f, card.width, 56f), button, null, selected, false, true))
                     pressed = i;
             }
             return pressed;
@@ -318,29 +686,28 @@ namespace WingingIt.UI
             string text = n > 0 ? n.ToString() : "GO";
             // faint halo: the guide keeps glows low and edge-only, so just a ring of offset copies
             foreach (var o in new[] { new Vector2(-3, 0), new Vector2(3, 0), new Vector2(0, -3), new Vector2(0, 3) })
-                Tracked(new Rect(big.x + o.x, big.y + o.y, big.width, big.height), text, _huge, 10f, TextAnchor.MiddleCenter, Alpha(Glow, 0.10f));
-            Tracked(big, text, _huge, 10f, TextAnchor.MiddleCenter, Color.white);
-            Tracked(new Rect(0f, big.yMax + 4f, width, 30f), "GET READY", _hint, 5f, TextAnchor.MiddleCenter, Steel);
-            DrawScoreBar(width);
+                _g.Tracked(new Rect(big.x + o.x, big.y + o.y, big.width, big.height), text, _g.Huge, 10f, TextAnchor.MiddleCenter, Alpha(Glow, 0.10f));
+            _g.Tracked(big, text, _g.Huge, 10f, TextAnchor.MiddleCenter, Color.white);
+            _g.Tracked(new Rect(0f, big.yMax + 4f, width, 30f), "GET READY", _g.Hint, 5f, TextAnchor.MiddleCenter, Steel);
         }
 
         void DrawScoreBar(float width)
         {
             var bar = new Rect(width / 2f - 240f, 16f, 480f, 64f);
-            Panel(bar, GlowRest, false);
+            _g.Panel(bar, GlowRest, false);
             DrawTeamScore(new Rect(bar.x + 22f, bar.y, 150f, bar.height), 0, TextAnchor.MiddleLeft);
             DrawTeamScore(new Rect(bar.xMax - 172f, bar.y, 150f, bar.height), 1, TextAnchor.MiddleRight);
             float t = match.Phase == MatchPhase.Countdown ? match.MatchLength : match.TimeLeft;
-            bool pulse = match.Phase == MatchPhase.Playing && t <= 30f && Mathf.Repeat(Time.unscaledTime, 1f) < 0.5f;
-            Tracked(new Rect(bar.x + 170f, bar.y, 140f, bar.height), Clock(t), _numeral, 1.5f, TextAnchor.MiddleCenter,
+            bool pulse = match.Phase == MatchPhase.Playing && t <= 30f && GameSettings.Blink(Time.unscaledTime, 1f, 0.5f);
+            _g.Tracked(new Rect(bar.x + 170f, bar.y, 140f, bar.height), Clock(t), _g.Numeral, 1.5f, TextAnchor.MiddleCenter,
                 pulse ? Glow : Color.white);
         }
 
         void DrawTeamScore(Rect r, int team, TextAnchor anchor)
         {
             // team name in its colour (the one functional use of colour on the glass), score in white
-            Tracked(new Rect(r.x, r.y - 12f, r.width, r.height), match.TeamName(team).ToUpperInvariant(), _hint, 3f, anchor, match.TeamColor(team));
-            Tracked(new Rect(r.x, r.y + 10f, r.width, r.height), match.Score.TeamScore(team).ToString(), _numeral, 1f, anchor, Color.white);
+            _g.Tracked(new Rect(r.x, r.y - 12f, r.width, r.height), match.TeamName(team).ToUpperInvariant(), _g.Hint, 3f, anchor, match.TeamColor(team));
+            _g.Tracked(new Rect(r.x, r.y + 10f, r.width, r.height), match.Score.TeamScore(team).ToString(), _g.Numeral, 1f, anchor, Color.white);
         }
 
         static string Clock(float seconds)
@@ -349,32 +716,101 @@ namespace WingingIt.UI
             return $"{s / 60}:{s % 60:00}";
         }
 
+        /// <summary>Touch screens get a ☰ button (top right, above the kill feed): there's no Esc.</summary>
+        bool ShowMenuButton => Application.isMobilePlatform || Touchscreen.current != null || _nav.Device == MenuDevice.Touch;
+
+        void DrawMenuButton(float width)
+        {
+            var r = new Rect(width - 96f, 196f, 72f, 64f);
+            if (IconButton(new Rect(r.x + 4f, r.y, 64f, 64f), false, DrawBurger))
+                OpenMenu();
+        }
+
+        void DrawBurger(Rect r, Color c)
+        {
+            for (int i = -1; i <= 1; i++)
+                _g.RoundFill(new Rect(r.center.x - 13f, r.center.y + i * 8f - 1.5f, 26f, 3f), 1.5f, c);
+        }
+
+        // ---------- In-match menu ----------
+
+        /// <summary>
+        /// Esc / Start / ☰ in play: RESUME, SETTINGS, LEAVE MATCH (press twice), and the live scoreboard beside it.
+        /// The match keeps running behind it.
+        /// </summary>
+        void DrawInMatchMenu(float width)
+        {
+            _g.Fill(new Rect(0f, 0f, width, ReferenceHeight), Alpha(Dim, 0.3f));
+            // Below the minimap and score bar, above the instrument cluster.
+            const float panelW = 460f, tableW = 1100f, gap = 28f;
+            float total = panelW + gap + tableW;
+            float s = Mathf.Min(1f, (width - 60f) / total);
+            var old = GUI.matrix;
+            float left = (width - total * s) / 2f;
+            GUI.matrix = old * Matrix4x4.TRS(new Vector3(left, 300f, 0f), Quaternion.identity, new Vector3(s, s, 1f));
+
+            var panel = new Rect(0f, 0f, panelW, 96f + 3f * 56f + 24f + 70f);
+            _g.Panel(panel, OpenGlow());
+            _g.Header(panel, "MATCH", match.Phase == MatchPhase.Countdown ? "STARTING" : $"{Clock(match.TimeLeft)} LEFT");
+            string[] labels = { "RESUME", "SETTINGS", _leaveArmed ? "LEAVE? TEAM PLAYS ON WITH A BOT" : "LEAVE MATCH" };
+            for (int i = 0; i < labels.Length; i++)
+            {
+                var row = new Rect(panel.x, panel.y + 96f + i * 56f, panel.width, 56f);
+                HoverFocus(row, i, ref _focus);
+                if (_g.Button(row, labels[i], i == MenuLeave && _leaveArmed ? _nav.Glyph("ENTER", "A") : null, i == _focus, false, i > 0))
+                    ActivateMenu(i);
+            }
+            _g.Foot(panel, "THE MATCH KEEPS RUNNING", _nav.Glyph("ESC  RESUME", "B  RESUME") ?? "");
+
+            var table = new Rect(panelW + gap, 0f, tableW, 96f + 8f * 42f + 40f);
+            _g.Panel(table, GlowRest);
+            string line = $"{match.TeamName(0)}  {match.Score.TeamScore(0)}  –  {match.Score.TeamScore(1)}  {match.TeamName(1)}";
+            _g.Header(table, "SCOREBOARD", line.ToUpperInvariant());
+            DrawPilotTables(table, table.y + 90f);
+            GUI.matrix = old;
+        }
+
         // ---------- Scoreboard ----------
 
         void DrawScoreboard(float width)
         {
-            Fill(new Rect(0f, 0f, width, ReferenceHeight), Dim);
+            _g.Fill(new Rect(0f, 0f, width, ReferenceHeight), Dim);
             var panel = Centered(width, 1100f, 860f, 110f);
-            Panel(panel, OpenGlow());
+            _g.Panel(panel, OpenGlow());
 
             int winner = match.Score.Winner();
             string result = winner == MatchScore.Draw ? "DRAW" : winner == match.PlayerTeam ? "VICTORY" : "DEFEAT";
-            Header(panel, result, "FINAL SCORE");
+            _g.Header(panel, result, "FINAL SCORE");
             string line = $"{match.TeamName(0)}  {match.Score.TeamScore(0)}  –  {match.Score.TeamScore(1)}  {match.TeamName(1)}";
-            Tracked(new Rect(panel.x, panel.y + 100f, panel.width, 44f), line.ToUpperInvariant(), _numeral, 3f, TextAnchor.MiddleCenter, Color.white);
+            _g.Tracked(new Rect(panel.x, panel.y + 100f, panel.width, 44f), line.ToUpperInvariant(), _g.Numeral, 3f, TextAnchor.MiddleCenter, Color.white);
+            DrawPilotTables(panel, panel.y + 170f);
 
+            var again = new Rect(panel.x + panel.width / 2f - 400f, panel.yMax - 112f, 380f, 56f);
+            var menu = new Rect(panel.x + panel.width / 2f + 20f, panel.yMax - 112f, 380f, 56f);
+            HoverFocus(again, 0, ref _focus);
+            HoverFocus(menu, 1, ref _focus);
+            if (_g.Button(again, "PLAY AGAIN", _nav.Glyph("ENTER", "A"), _focus != 1, false, false, TextAnchor.MiddleCenter))
+                match.PlayAgain();
+            if (_g.Button(menu, "MAIN MENU", _nav.Glyph("ESC", "B"), _focus == 1, false, false, TextAnchor.MiddleCenter))
+                match.ReturnToMainMenu();
+            _g.Foot(panel, "WINNER IS THE HIGHEST TEAM SCORE", "");
+        }
+
+        /// <summary>Both teams' pilots side by side (K / A / D / score, best first), from <paramref name="top"/> down.</summary>
+        void DrawPilotTables(Rect panel, float top)
+        {
             float colW = (panel.width - 72f - 40f) / 2f;
             for (int team = 0; team < 2; team++)
             {
                 float x = panel.x + 36f + team * (colW + 40f);
-                var head = new Rect(x, panel.y + 170f, colW, 34f);
-                Tracked(new Rect(head.x + 16f, head.y, head.width - 236f, head.height), match.TeamName(team).ToUpperInvariant(), _hint, 3.6f,
+                var head = new Rect(x, top, colW, 34f);
+                _g.Tracked(new Rect(head.x + 16f, head.y, head.width - 236f, head.height), match.TeamName(team).ToUpperInvariant(), _g.Hint, 3.6f,
                     TextAnchor.MiddleLeft, match.TeamColor(team));
-                Tracked(new Rect(head.xMax - 226f, head.y, 40f, head.height), "K", _hint, 3.6f, TextAnchor.MiddleRight, Steel);
-                Tracked(new Rect(head.xMax - 186f, head.y, 40f, head.height), "A", _hint, 3.6f, TextAnchor.MiddleRight, Steel);
-                Tracked(new Rect(head.xMax - 146f, head.y, 40f, head.height), "D", _hint, 3.6f, TextAnchor.MiddleRight, Steel);
-                Tracked(new Rect(head.xMax - 96f, head.y, 80f, head.height), "SCORE", _hint, 3.6f, TextAnchor.MiddleRight, Steel);
-                Fill(new Rect(x, head.yMax, colW, 1f), Alpha(Color.white, 0.14f));
+                _g.Tracked(new Rect(head.xMax - 226f, head.y, 40f, head.height), "K", _g.Hint, 3.6f, TextAnchor.MiddleRight, Steel);
+                _g.Tracked(new Rect(head.xMax - 186f, head.y, 40f, head.height), "A", _g.Hint, 3.6f, TextAnchor.MiddleRight, Steel);
+                _g.Tracked(new Rect(head.xMax - 146f, head.y, 40f, head.height), "D", _g.Hint, 3.6f, TextAnchor.MiddleRight, Steel);
+                _g.Tracked(new Rect(head.xMax - 96f, head.y, 80f, head.height), "SCORE", _g.Hint, 3.6f, TextAnchor.MiddleRight, Steel);
+                _g.Fill(new Rect(x, head.yMax, colW, 1f), Alpha(Color.white, 0.14f));
 
                 var pilots = new List<PilotScore>();
                 foreach (var p in match.Score.Pilots)
@@ -389,291 +825,17 @@ namespace WingingIt.UI
                     bool you = p.Name == "You";
                     var row = new Rect(x, y, colW, 42f);
                     if (you)
-                        Lit(row, 1f, true);
+                        _g.Lit(row, 1f, true);
                     var tint = you ? Color.white : Alpha(White, 0.88f);
-                    Tracked(new Rect(row.x + 16f, row.y, row.width - 236f, row.height), p.Name.ToUpperInvariant(), _hint, 2.4f, TextAnchor.MiddleLeft, tint, 1.15f);
-                    Tracked(new Rect(row.xMax - 226f, row.y, 40f, row.height), p.Kills.ToString(), _numeral, 0f, TextAnchor.MiddleRight, tint, 0.75f);
-                    Tracked(new Rect(row.xMax - 186f, row.y, 40f, row.height), p.Assists.ToString(), _numeral, 0f, TextAnchor.MiddleRight, Alpha(tint, 0.75f), 0.75f);
-                    Tracked(new Rect(row.xMax - 146f, row.y, 40f, row.height), p.Deaths.ToString(), _numeral, 0f, TextAnchor.MiddleRight, Alpha(tint, 0.6f), 0.75f);
-                    Tracked(new Rect(row.xMax - 96f, row.y, 80f, row.height), p.Points.ToString(), _numeral, 0f, TextAnchor.MiddleRight, tint, 0.75f);
+                    _g.Tracked(new Rect(row.x + 16f, row.y, row.width - 236f, row.height), p.Name.ToUpperInvariant(), _g.Hint, 1.8f, TextAnchor.MiddleLeft, tint, 1f);
+                    _g.Tracked(new Rect(row.xMax - 226f, row.y, 40f, row.height), p.Kills.ToString(), _g.Numeral, 0f, TextAnchor.MiddleRight, tint, 0.75f);
+                    _g.Tracked(new Rect(row.xMax - 186f, row.y, 40f, row.height), p.Assists.ToString(), _g.Numeral, 0f, TextAnchor.MiddleRight, Alpha(tint, 0.75f), 0.75f);
+                    _g.Tracked(new Rect(row.xMax - 146f, row.y, 40f, row.height), p.Deaths.ToString(), _g.Numeral, 0f, TextAnchor.MiddleRight, Alpha(tint, 0.6f), 0.75f);
+                    _g.Tracked(new Rect(row.xMax - 96f, row.y, 80f, row.height), p.Points.ToString(), _g.Numeral, 0f, TextAnchor.MiddleRight, tint, 0.75f);
                     y += 42f;
-                    Fill(new Rect(x, y - 1f, colW, 1f), Alpha(Color.white, 0.05f));
+                    _g.Fill(new Rect(x, y - 1f, colW, 1f), Alpha(Color.white, 0.05f));
                 }
             }
-
-            if (Item(new Rect(panel.x + panel.width / 2f - 190f, panel.yMax - 112f, 380f, 56f), "PLAY AGAIN", "ENTER", true, false, false, TextAnchor.MiddleCenter))
-                match.PlayAgain();
-            Foot(panel, "WINNER IS THE HIGHEST TEAM SCORE", "ENTER  PLAY AGAIN");
-        }
-
-        // ---------- Glass components ----------
-
-        /// <summary>Title row: big DIN title on the left, small steel caption on the right, then the fading rule.</summary>
-        void Header(Rect panel, string title, string caption)
-        {
-            Tracked(new Rect(panel.x + 36f, panel.y + 24f, panel.width - 72f, 48f), title, _title, 5.6f, TextAnchor.MiddleLeft, Color.white);
-            Tracked(new Rect(panel.x + 36f, panel.y + 24f, panel.width - 72f, 48f), caption, _hint, 2.4f, TextAnchor.MiddleRight, Steel);
-            Rule(new Rect(panel.x + 36f, panel.y + 80f, panel.width - 72f, 1f));
-        }
-
-        void Foot(Rect panel, string left, string right)
-        {
-            Tracked(new Rect(panel.x + 36f, panel.yMax - 40f, panel.width * 0.6f, 24f), left, _hint, 1.7f, TextAnchor.MiddleLeft, Steel);
-            Tracked(new Rect(panel.xMax - 36f - panel.width * 0.3f, panel.yMax - 40f, panel.width * 0.3f, 24f), right, _hint, 1.7f, TextAnchor.MiddleRight, Steel);
-        }
-
-        /// <summary>The tinted-glass body: soft drop shadow, a low edge glow, then the baked panel texture.</summary>
-        void Panel(Rect r, float glow, bool shadow = true)
-        {
-            if (shadow)
-                for (int i = 0; i < 7; i++)
-                    RoundFill(Inflate(r, i * 5f - 6f, 26f), Radius + i * 5f, new Color(0f, 0f, 0f, 0.075f));
-            for (int i = 0; i < 6; i++)
-            {
-                float k = 1f - i / 6f;
-                RoundStroke(Inflate(r, 1f + i * 4.5f, 0f), Radius + i * 4.5f, 4.5f, Alpha(Glow, glow * k * 0.55f));
-            }
-            var c = GUI.color;
-            GUI.color = Color.white;
-            GUI.DrawTexture(r, GlassTexture(Mathf.RoundToInt(r.width), Mathf.RoundToInt(r.height)));
-            GUI.color = c;
-        }
-
-        /// <summary>A menu row: 56 px, DIN caps. Selected (or hovered) rows get the white rail and fading fill.</summary>
-        bool Item(Rect r, string label, string kbd, bool selected, bool dim, bool divider, TextAnchor align = TextAnchor.MiddleLeft)
-        {
-            bool hover = !dim && r.Contains(Event.current.mousePosition);
-            if (divider)
-                Fill(new Rect(r.x, r.y, r.width, 1f), Alpha(Color.white, 0.05f));
-            if (selected || hover)
-                Lit(r, selected ? 1f : 0.55f, true);
-            var tint = dim ? Alpha(White, 0.38f) : selected ? Color.white : Alpha(White, hover ? 1f : 0.88f);
-            float pad = align == TextAnchor.MiddleLeft ? 36f : 12f;
-            float kbdRoom = kbd != null && align != TextAnchor.MiddleLeft ? 70f : 0f;
-            Tracked(new Rect(r.x + pad, r.y, r.width - pad * 2f - kbdRoom, r.height), label, _item, 3.0f, align, tint);
-            if (kbd != null)
-                Kbd(new Rect(r.xMax - 20f, r.y, 0f, r.height), kbd);
-            return GUI.Button(r, GUIContent.none, GUIStyle.none);
-        }
-
-        /// <summary>The selection look: left-to-right white fade (11% to 2%) and the 2 px glowing rail.</summary>
-        void Lit(Rect r, float strength, bool rail)
-        {
-            var c = GUI.color;
-            GUI.color = new Color(1f, 1f, 1f, 0.11f * strength);
-            GUI.DrawTexture(r, _ramp);
-            GUI.color = c;
-            if (rail)
-            {
-                var bar = new Rect(r.x, r.y + 10f, 2f, r.height - 20f);
-                Fill(Inflate(bar, 9f, 0f), Alpha(Glow, 0.05f * strength));
-                Fill(Inflate(bar, 5f, 0f), Alpha(Glow, 0.10f * strength));
-                Fill(Inflate(bar, 2f, 0f), Alpha(Glow, 0.25f * strength));
-                Fill(bar, Alpha(Color.white, strength));
-            }
-        }
-
-        /// <summary>A key-cap hint with its right edge at the rect's x.</summary>
-        void Kbd(Rect at, string text)
-        {
-            float w = TrackedWidth(text, _hint, 1.5f) + 16f;
-            var box = new Rect(at.x - w, at.y + (at.height - 22f) / 2f, w, 22f);
-            RoundStroke(box, 4f, 1f, Alpha(Color.white, 0.14f));
-            Tracked(box, text, _hint, 1.5f, TextAnchor.MiddleCenter, Steel);
-        }
-
-        void Rule(Rect r)
-        {
-            var c = GUI.color;
-            GUI.color = new Color(1f, 1f, 1f, 0.28f);
-            GUI.DrawTexture(r, _ramp);
-            GUI.color = c;
-        }
-
-        // ---------- Text ----------
-
-        float TrackedWidth(string text, GUIStyle style, float tracking, float scale = 1f)
-        {
-            int size = Mathf.RoundToInt(style.fontSize * scale);
-            float w = 0f;
-            foreach (char ch in text)
-                w += Advance(style, size, ch) + tracking * scale;
-            return Mathf.Max(0f, w - tracking * scale);
-        }
-
-        float Advance(GUIStyle style, int size, char ch)
-        {
-            if (_advance.TryGetValue((style, size, ch), out float w))
-                return w;
-            if (ch == ' ')
-                w = size * 0.3f;
-            else
-            {
-                int old = style.fontSize;
-                style.fontSize = size;
-                w = style.CalcSize(new GUIContent(ch.ToString())).x;
-                style.fontSize = old;
-            }
-            _advance[(style, size, ch)] = w;
-            return w;
-        }
-
-        /// <summary>
-        /// Letter-spaced text (IMGUI has no tracking): each glyph is placed by hand. <paramref name="scale"/> scales the
-        /// font size and tracking together, for sizes derived from a base style.
-        /// </summary>
-        void Tracked(Rect r, string text, GUIStyle style, float tracking, TextAnchor anchor, Color color, float scale = 1f)
-        {
-            int size = Mathf.RoundToInt(style.fontSize * scale);
-            float total = TrackedWidth(text, style, tracking, scale);
-            float x = anchor switch
-            {
-                TextAnchor.MiddleCenter or TextAnchor.UpperCenter => r.x + (r.width - total) / 2f,
-                TextAnchor.MiddleRight or TextAnchor.UpperRight => r.xMax - total,
-                _ => r.x,
-            };
-            var c = GUI.color;
-            GUI.color = color;
-            int oldSize = style.fontSize;
-            style.fontSize = size;
-            foreach (char ch in text)
-            {
-                float adv = Advance(style, size, ch);
-                if (ch != ' ')
-                    GUI.Label(new Rect(x, r.y, adv + 8f, r.height), ch.ToString(), style);
-                x += adv + tracking * scale;
-            }
-            style.fontSize = oldSize;
-            GUI.color = c;
-        }
-
-        // ---------- Drawing helpers ----------
-
-        static Rect Centered(float width, float w, float h, float top) => new((width - w) / 2f, top, w, h);
-
-        static Rect Inflate(Rect r, float by, float dy) => new(r.x - by, r.y - by + dy, r.width + by * 2f, r.height + by * 2f);
-
-        static Color Alpha(Color c, float a) => new(c.r, c.g, c.b, a);
-
-        void Fill(Rect r, Color color)
-        {
-            var c = GUI.color;
-            GUI.color = color;
-            GUI.DrawTexture(r, _white);
-            GUI.color = c;
-        }
-
-        void RoundFill(Rect r, float radius, Color color) =>
-            GUI.DrawTexture(r, _white, ScaleMode.StretchToFill, true, 0f, color, Vector4.zero, new Vector4(radius, radius, radius, radius));
-
-        void RoundStroke(Rect r, float radius, float thickness, Color color) =>
-            GUI.DrawTexture(r, _white, ScaleMode.StretchToFill, true, 0f, color, new Vector4(thickness, thickness, thickness, thickness),
-                new Vector4(radius, radius, radius, radius));
-
-        // ---------- Setup ----------
-
-        void EnsureStyles()
-        {
-            if (_item != null)
-                return;
-            _white = Texture2D.whiteTexture;
-            _ramp = new Texture2D(64, 1, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
-            for (int i = 0; i < 64; i++)
-                _ramp.SetPixel(i, 0, new Color(1f, 1f, 1f, Mathf.Lerp(1f, 0.15f, i / 63f)));
-            _ramp.Apply();
-
-            // DIN-like signage face: Bahnschrift on Windows, falling back through similar faces. Body face: Inter / Segoe UI.
-            _din = Font.CreateDynamicFontFromOSFont(new[] { "Bahnschrift", "DIN Alternate", "D-DIN", "Segoe UI Semibold", "Arial" }, 28);
-            _inter = Font.CreateDynamicFontFromOSFont(new[] { "Inter", "Segoe UI Variable", "Segoe UI", "Arial" }, 15);
-
-            _title = Style(_din, 36, FontStyle.Bold);
-            _item = Style(_din, 20, FontStyle.Normal);
-            _hint = Style(_din, 15, FontStyle.Normal);
-            _numeral = Style(_din, 28, FontStyle.Normal);
-            _huge = Style(_din, 150, FontStyle.Bold);
-            _body = Style(_inter, 17, FontStyle.Normal);
-            _body.alignment = TextAnchor.UpperLeft;
-            _body.wordWrap = true;
-        }
-
-        static GUIStyle Style(Font font, int size, FontStyle fontStyle)
-        {
-            var s = new GUIStyle(GUI.skin.label) { font = font, fontSize = size, fontStyle = fontStyle, alignment = TextAnchor.MiddleLeft, wordWrap = false };
-            s.normal.textColor = Color.white;
-            s.hover.textColor = Color.white;
-            return s;
-        }
-
-        /// <summary>
-        /// Bakes the guide's glass panel 1:1: graphite tint, top sheen, two static reflection streaks (115°), the 160°
-        /// body gradient, 1 px outer stroke, top bevel (+30% white), bottom bevel (-55% black) and rounded corners.
-        /// IMGUI has no backdrop blur, so the tint is denser than the guide's 55% to keep text legible over the scene.
-        /// </summary>
-        Texture2D GlassTexture(int w, int h)
-        {
-            int key = w * 10000 + h;
-            if (_glass.TryGetValue(key, out var cached) && cached != null)
-                return cached;
-
-            var px = new Color[w * h];
-            float r = Radius;
-            // CSS gradient geometry (y down)
-            Vector2 d160 = new(Mathf.Sin(160f * Mathf.Deg2Rad), -Mathf.Cos(160f * Mathf.Deg2Rad));
-            Vector2 d115 = new(Mathf.Sin(115f * Mathf.Deg2Rad), -Mathf.Cos(115f * Mathf.Deg2Rad));
-            float len160 = Mathf.Abs(w * d160.x) + Mathf.Abs(h * d160.y);
-            float len115 = Mathf.Abs(w * d115.x) + Mathf.Abs(h * d115.y);
-            for (int y = 0; y < h; y++)
-            {
-                int yy = h - 1 - y; // texture rows run bottom-up; the maths is top-down
-                for (int x = 0; x < w; x++)
-                {
-                    float fx = x + 0.5f, fy = yy + 0.5f;
-                    float qx = Mathf.Abs(fx - w / 2f) - (w / 2f - r), qy = Mathf.Abs(fy - h / 2f) - (h / 2f - r);
-                    float dist = new Vector2(Mathf.Max(qx, 0f), Mathf.Max(qy, 0f)).magnitude + Mathf.Min(Mathf.Max(qx, qy), 0f) - r;
-                    float cover = Mathf.Clamp01(0.5f - dist);
-                    if (cover <= 0f)
-                        continue;
-
-                    float cr = 32f / 255f, cg = 35f / 255f, cb = 40f / 255f, ca = 0.68f;
-                    float t160 = ((fx - w / 2f) * d160.x + (fy - h / 2f) * d160.y) / len160 + 0.5f;
-                    float body = t160 < 0.38f ? Mathf.Lerp(0.10f, 0.025f, t160 / 0.38f) : t160 < 0.6f ? Mathf.Lerp(0.025f, 0f, (t160 - 0.38f) / 0.22f) : 0f;
-                    float t115 = ((fx - w / 2f) * d115.x + (fy - h / 2f) * d115.y) / len115 + 0.5f;
-                    float streak = Tri(t115, 0.26f, 0.33f, 0.41f, 0.075f) + Tri(t115, 0.58f, 0.62f, 0.66f, 0.035f);
-                    float sx = (fx - 0.18f * w) / (1.2f * w), sy = fy / (0.9f * 0.46f * h);
-                    float sheen = 0.09f * Mathf.Clamp01(1f - new Vector2(sx, sy).magnitude / 0.6f);
-
-                    Over(ref cr, ref cg, ref cb, ref ca, 1f, 1f, 1f, body + streak + sheen);
-                    if (dist > -1f)
-                        Over(ref cr, ref cg, ref cb, ref ca, 1f, 1f, 1f, 0.14f);
-                    bool straight = fx > r * 0.6f && fx < w - r * 0.6f;
-                    if (yy == 1 && straight)
-                        Over(ref cr, ref cg, ref cb, ref ca, 1f, 1f, 1f, 0.30f);
-                    if (yy == h - 2 && straight)
-                        Over(ref cr, ref cg, ref cb, ref ca, 0f, 0f, 0f, 0.55f);
-
-                    px[y * w + x] = new Color(cr, cg, cb, ca * cover);
-                }
-            }
-            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
-            tex.SetPixels(px);
-            tex.Apply(false, true);
-            _glass[key] = tex;
-            return tex;
-        }
-
-        static float Tri(float t, float a, float peak, float b, float amp) =>
-            t <= a || t >= b ? 0f : amp * (t < peak ? (t - a) / (peak - a) : (b - t) / (b - peak));
-
-        /// <summary>Source-over of a colour at <paramref name="oa"/> onto the running colour and alpha.</summary>
-        static void Over(ref float r, ref float g, ref float b, ref float a, float sr, float sg, float sb, float oa)
-        {
-            if (oa <= 0f)
-                return;
-            float na = oa + a * (1f - oa);
-            r = (sr * oa + r * a * (1f - oa)) / na;
-            g = (sg * oa + g * a * (1f - oa)) / na;
-            b = (sb * oa + b * a * (1f - oa)) / na;
-            a = na;
         }
     }
 }

@@ -11,28 +11,38 @@ A minimal HUD that supports the core decision of fight or retreat. The pilot sho
 
 | Element | Purpose | Notes |
 |---|---|---|
-| Plane damage diagram | Top-down plane silhouette with each part colored by HP (green / yellow / red); missing parts greyed out | Body HP drives the overall state color; flashes in Critical |
-| Invulnerability indicator | Shown while repairing | Shield icon + repair countdown. Prototype: gold bubble on the plane (visible to attackers) + "SHIELDED" line under the debug-HUD repair bar |
-| Speed / throttle | Current speed, throttle setting | |
-| Boost meter | Remaining boost | |
-| Ammo | Rockets / missiles / bombs remaining | Gun overheat bar |
-| Ability icon | Cooldown state | Prototype: an ABL bar with the ability's name, READY / ON / seconds left |
-| Crosshair + lead pipper | Aiming | |
-| Lock-on indicator | Missile lock progress | Prototype: a bracket closing in on the target, red **LOCK** when ready |
-| Incoming missile warning | Directional, loud | Critical for "easy to avoid if spotted". Prototype: LOCK WARNING / LOCKED ON / flashing MISSILE + distance, an arrow toward the missile, and an EVADING bar while you turn hard. No sound yet |
+| Plane damage diagram | Top-down plane silhouette with each part colored by HP (green / yellow / red); missing parts greyed out | Body HP drives the overall state color; flashes in Critical. **Built:** left panel of the cluster, nose up; lost wings and tail are grey outlines, a dead engine is grey; HEALTHY / DAMAGED / CRITICAL under it |
+| Invulnerability indicator | Shown while repairing | Shield icon + repair countdown. Prototype: gold bubble on the plane (visible to attackers), a pulsing gold ring around the damage diagram labeled SHIELDED (also for the Heavy's Armor Shield), and the repair countdown in the debug overlay |
+| Speed / throttle | Current speed, throttle setting | **Built:** big km/h numeral (green / yellow against the touchdown limit on approach or with the gear out), altitude, THR bar, class name, flashing LOW SPEED |
+| Boost meter | Remaining boost | **Built:** BST bar, orange while boosting |
+| Ammo | Rockets / missiles / bombs remaining | Gun overheat bar. **Built:** right panel, only the weapons the class carries: GUN heat (HOT / JAM, guns left), RKT / MSL / BMB count (EMPTY, LOCK) |
+| Ability icon | Cooldown state | **Built:** an ABL bar with the ability's name under it, READY / ON / seconds left |
+| Crosshair + lead pipper | Aiming | **Built:** gapped boresight cross, green mouse-aim circle, a bracket on every visible plane in gun range (team-tinted for friendlies), a red pipper on enemies, an orange rocket diamond, hit marker, the bomb impact circle, and a readout of the enemy nearest the nose under the score bar |
+| Lock-on indicator | Missile lock progress | **Built:** a bracket closing in on the target, red **LOCK** when ready |
+| Incoming missile warning | Directional, loud | Critical for "easy to avoid if spotted". **Built:** LOCK WARNING / LOCKED ON / flashing MISSILE + distance, an arrow around the crosshair toward the missile, and an EVADING bar while you turn hard. No sound yet |
 | AA fire warning | Top center, flashing | Prototype: "AA FIRE — GET OUT FAST OR LOW" while an enemy airfield's AA gun is shooting at you. No direction arrow or sound yet |
 | Cloud cover | Shows you're in cloud and whether you're hidden | Prototype: white screen wash that thickens deeper in; **IN CLOUD: HIDDEN FROM LOCKS AND AA** or **CLOUD EDGE: STILL VISIBLE**. Enemies behind or deep in cloud lose their bracket, pipper and readout (radar diamonds still show) |
-| Minimap | Map, objectives, friendlies, radar-revealed enemies | Prototype: no minimap yet; radar-revealed enemies get a green diamond + distance in view |
-| **Nearest airfield marker** | Arrow + distance to the closest friendly repair zone | Key to the retreat loop |
+| Minimap | Map, objectives, friendlies, radar-revealed enemies | **Built:** top left, north up, the whole level inside the boundary ring: a top-down photo taken when the match starts (no clouds, fog or planes), airfields as team-colored squares (home fields outlined), friendlies and radar-revealed enemies as team-colored arrows, you as a white arrow. Radar-revealed enemies also get a green diamond + distance in view. Objectives come with Phase 8 |
+| **Nearest airfield marker** | Arrow + distance to the closest friendly repair zone | Key to the retreat loop. **Built:** a chevron over the zone with the field's name and distance, or an arrow on the screen edge when it's out of view; bright, pulsing and labeled REPAIR once you're Damaged or missing a part (and its minimap square gets a pulsing ring). Hidden on approach (the landing assist takes over) and on the ground |
 | Match timer + team score | Teams mode | Prototype (`MatchScreens`): a top-center bar, WEST score · clock · EAST score, the clock flashing gold in the last 30 s |
-| Score popups | "+50 Kill", "+20 Assist", "WING SHOT OFF!" | The coin summary is shown after the match. The points are live (kill 50, assist 20); `MatchScore.Awarded` is the hook for the popups |
+| Score popups | "+50 Kill", "+20 Assist", "WING SHOT OFF!" | The coin summary is shown after the match. **Built:** under the crosshair, rising and fading over 1.8 s, up to 4: your own awards from `MatchScore.Awarded` (+50 KILL, +20 ASSIST, objectives), and WING / TAIL / FIN SHOT OFF! or ENGINE KNOCKED OUT! when your hit takes a part off an enemy |
+
+## Layout (built 2026-10-17)
+
+`FlightHUD`, IMGUI in the glass style (shared with the match screens through `GlassGUI`), at 1080 px reference height:
+
+- **Top left:** minimap. **Top center:** match clock + team score (`MatchScreens`), the target readout under it. **Top right:** kill feed (below the touch CLASS button when touch controls are on).
+- **Center:** crosshair, pippers, lock bracket, missile warning, popups under the crosshair, the home marker or its edge arrow.
+- **Bottom center:** the instrument cluster, three glass panels: damage diagram · speed / altitude / throttle / boost / gear · weapons + ability. With touch controls on it sits in the gap between the stick and the buttons, shrinking (never below half size) on narrow screens (`HudMath.ClusterRect`).
+- **Above the cluster:** RETURN TO BASE when Critical (`DamageFeedback`, see [Damage Feedback](#damage-feedback)).
+- Still in the prototype overlay (`FlightDebugHUD`), to move over later: the landing assist, approach-lane gates, center messages (death, boundary, AA fire, touchdown, repair), the cloud wash, the F1 help (hidden when a match starts) and the dev readouts (bottom left).
 
 ## Post-Match Screen
 
 - Scoreboard → personal score → **coins earned** (base + score + win bonus breakdown)
 - "Watch ad to double coins" button (mobile, optional)
 - Shortcut to the prize machine → requeue
-| Kill feed | Recent kills | |
+| Kill feed | Recent kills | **Built:** top right, the last 5 for 8 s: KILLER DOWNED VICTIM in team colors (an AA kill names the team's AA, an uncredited crash says CRASHED, bombed ground targets say DESTROYED); lines with you in them get the selection rail. Keeps counting while you're dead |
 | Score / objective status | Mode-specific | |
 
 ## Landing Assist (proposed)
@@ -59,6 +69,18 @@ When on approach to a friendly runway:
 - Healthy: none
 - Damaged: light screen-edge smoke, warning tone
 - Critical: red vignette, alarm, sputtering audio, "RETURN TO BASE" prompt
+
+**Built (2026-10-17), `DamageFeedback` on the Flight HUD object** (hides with it, so the alarm stops under the class picker). The level follows the **repair tiers** (`DamageFeedbackMath.Alert`), so what the pilot feels matches how long the fix takes:
+
+| Level | When | Feedback |
+|---|---|---|
+| None | Light repair tier (body 60%+, nothing lost) | none |
+| Warning | Heavy tier: body Damaged, a stabilizer lost, or the engine dead | dark smoke drifting in from the screen edges (two noisy masks breathing out of step); a two-beep tone when it starts |
+| Critical | Critical tier: body Critical **or a wing lost** | the smoke plus a red edge vignette pulsing like a heartbeat (two beats every 0.9 s); a looping hi-lo alarm; flashing **RETURN TO BASE** above the instrument cluster with REPAIR AT *field* *distance* (the nearest friendly field) |
+
+- **Every hit** flashes the screen edges red for 0.35 s, harder for bigger hits (25–75%), full strength when a part is shot off. Losing a part also beeps, unless it made the plane Critical (then the alarm says it).
+- The alarm and prompt are off on the ground, while dead, and **on approach to a friendly runway** (the landing assist takes over; the pilot is already going home). The vignette stays.
+- Sounds are synthesized placeholders (`HudTones`) until the audio pass. **Not yet:** sputtering engine audio (there's no engine sound at all yet).
 
 ## Open Questions
 

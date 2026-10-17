@@ -8,11 +8,13 @@ using WingingIt.Bots;
 using WingingIt.Flight;
 using WingingIt.Input;
 using WingingIt.Match;
+using WingingIt.Settings;
 using WingingIt.UI;
+using WingingIt.World;
 
 namespace WingingIt.Tests
 {
-    /// <summary>The Island's Teams match flow: lobby → class select → countdown → play → scoreboard.</summary>
+    /// <summary>The Island's Teams match flow: menu → class select → countdown → play (and the in-match menu) → scoreboard.</summary>
     public class MatchFlowTests
     {
         MatchManager _match;
@@ -22,6 +24,7 @@ namespace WingingIt.Tests
         [UnitySetUp]
         public IEnumerator LoadScene()
         {
+            GameSettings.UseForTests(new GameSettings(false, null)); // defaults, nothing saved
             yield return SceneManager.LoadSceneAsync("Island", LoadSceneMode.Single);
             yield return null;
             _match = Object.FindAnyObjectByType<MatchManager>();
@@ -31,7 +34,11 @@ namespace WingingIt.Tests
         }
 
         [TearDown]
-        public void ResetTime() => Time.timeScale = 1f;
+        public void ResetTime()
+        {
+            Time.timeScale = 1f;
+            GameSettings.UseForTests(null);
+        }
 
         /// <summary>Picks <paramref name="cls"/> with a short countdown and waits for play.</summary>
         IEnumerator StartPlaying(int cls = 0, float matchLength = 300f)
@@ -47,15 +54,105 @@ namespace WingingIt.Tests
         }
 
         [Test]
-        public void Lobby_FreezesTheWorld_WithNoBots_AndNoControls()
+        public void Menu_FreezesTheWorld_WithNoBots_AndNoControls()
         {
-            Assert.AreEqual(MatchPhase.Lobby, _match.Phase);
+            Assert.AreEqual(MatchPhase.Menu, _match.Phase);
             Assert.AreEqual(0f, Time.timeScale);
             Assert.AreEqual(0, _roster.Bots.Count, "bots join when the match starts");
             Assert.IsFalse(_player.GetComponent<PlayerFlightInput>().enabled);
             Assert.IsNull(Object.FindAnyObjectByType<FlightDebugHUD>(), "flight HUD hidden");
-            Assert.AreEqual(7, _roster.PlannedBots(0).Count, "lobby shows 7 bots beside the player");
+            Assert.AreEqual(7, _roster.PlannedBots(0).Count, "class select shows 7 bots beside the player");
             Assert.AreEqual(8, _roster.PlannedBots(1).Count);
+        }
+
+        [Test]
+        public void Menu_ParksThePlayer_InsideTheHomeHangar()
+        {
+            var spot = _match.HangarSpot;
+            Assert.IsNotNull(spot, "the home airfield has a hangar spot");
+            Assert.AreEqual(Airfield.HomeOf(0).HangarSpot, spot);
+            Assert.IsTrue(_player.IsGrounded, "parked on its wheels");
+            Assert.Less(Vector3.Distance(Flat(_player.Position), Flat(spot.position)), 0.5f);
+            Assert.Greater(Vector3.Dot(_player.transform.forward, spot.forward), 0.99f, "nose to the doors");
+            Assert.AreEqual(_match.Classes[_match.SelectedClass], _player.Stats);
+            // under a roof
+            Assert.IsTrue(Physics.Raycast(_player.Position + Vector3.up * 3f, Vector3.up, 30f, ~0, QueryTriggerInteraction.Ignore), "a roof overhead");
+        }
+
+        static Vector3 Flat(Vector3 v) => new(v.x, 0f, v.z);
+
+        [UnityTest]
+        public IEnumerator ClassSelect_BacksOutToTheMenu_AndThePlaneStaysParked()
+        {
+            _match.OpenClassSelect();
+            Assert.AreEqual(MatchPhase.ClassSelect, _match.Phase);
+            _match.BackToMenu();
+            Assert.AreEqual(MatchPhase.Menu, _match.Phase);
+            yield return null;
+            Assert.IsTrue(_player.IsGrounded);
+            Assert.AreEqual(0f, Time.timeScale);
+        }
+
+        [UnityTest]
+        public IEnumerator InMatchMenu_LetsGoOfTheControls_ButTheMatchRunsOn()
+        {
+            yield return StartPlaying();
+            var input = _player.GetComponent<PlayerFlightInput>();
+            var touch = GameObject.Find("Touch Controls");
+            Assert.IsNotNull(touch);
+
+            _match.OpenMenu();
+            Assert.IsTrue(_match.MenuOpen);
+            Assert.AreEqual(1f, Time.timeScale, "never pauses");
+            Assert.IsFalse(input.enabled, "controls let go");
+            Assert.IsFalse(touch.activeSelf, "taps go to the menu");
+            Assert.IsNotNull(Object.FindAnyObjectByType<FlightHUD>(), "the HUD stays up behind it");
+            float left = _match.TimeLeft;
+            yield return new WaitForSeconds(0.3f);
+            Assert.Less(_match.TimeLeft, left, "the clock runs on");
+            Assert.IsTrue(_player.IsAlive);
+
+            _match.CloseMenu();
+            Assert.IsFalse(_match.MenuOpen);
+            Assert.IsTrue(input.enabled);
+            Assert.IsTrue(touch.activeSelf);
+        }
+
+        [UnityTest]
+        public IEnumerator InMatchMenu_ClosesWhenTimeRunsOut()
+        {
+            yield return StartPlaying(0, 0.5f);
+            _match.OpenMenu();
+            float t = Time.realtimeSinceStartup;
+            while (_match.Phase == MatchPhase.Playing && Time.realtimeSinceStartup - t < 3f)
+                yield return null;
+            Assert.AreEqual(MatchPhase.Ended, _match.Phase);
+            Assert.IsFalse(_match.MenuOpen, "the scoreboard takes over");
+            _match.OpenMenu();
+            Assert.IsFalse(_match.MenuOpen, "no in-match menu on the scoreboard");
+        }
+
+        [UnityTest]
+        public IEnumerator PlayAgain_ReloadsStraightToClassSelect_AndMainMenu_ToTheMenu()
+        {
+            yield return StartPlaying(1, 0.2f);
+            float t = Time.realtimeSinceStartup;
+            while (_match.Phase != MatchPhase.Ended && Time.realtimeSinceStartup - t < 3f)
+                yield return null;
+
+            _match.PlayAgain();
+            yield return null;
+            yield return null;
+            var again = Object.FindAnyObjectByType<MatchManager>();
+            Assert.AreNotEqual(_match, again, "the level reloaded");
+            Assert.AreEqual(MatchPhase.ClassSelect, again.Phase, "a rematch skips the menu");
+            Assert.AreEqual(1, again.SelectedClass, "keeps the class");
+
+            again.ReturnToMainMenu();
+            yield return null;
+            yield return null;
+            var menu = Object.FindAnyObjectByType<MatchManager>();
+            Assert.AreEqual(MatchPhase.Menu, menu.Phase);
         }
 
         [UnityTest]
@@ -135,7 +232,7 @@ namespace WingingIt.Tests
         [UnityTest]
         public IEnumerator Objectives_OnlyScoreInPlay()
         {
-            Assert.IsFalse(_match.AwardObjective(0, 100, "Convoy destroyed"), "not in the lobby");
+            Assert.IsFalse(_match.AwardObjective(0, 100, "Convoy destroyed"), "not in the menu");
             yield return StartPlaying();
             Assert.IsTrue(_match.AwardObjective(1, 100, "Convoy destroyed"));
             var east = PlaneController.All.First(p => p.Team == 1);

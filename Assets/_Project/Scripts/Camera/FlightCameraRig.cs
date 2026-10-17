@@ -1,6 +1,7 @@
 using Unity.Cinemachine;
 using UnityEngine;
 using WingingIt.Flight;
+using WingingIt.Settings;
 
 namespace WingingIt.CameraSystem
 {
@@ -9,6 +10,7 @@ namespace WingingIt.CameraSystem
     /// this rig decides where it sits and owns the mouse-aim direction.
     /// <para>Mouse-aim: the mouse turns the camera and the plane chases where the camera looks.
     /// Direct: the camera trails the plane with a little lag and partial roll.</para>
+    /// Sensitivities are scaled, and the base FOV set, by <see cref="GameSettings"/>; Speed FOV off holds the base FOV.
     /// </summary>
     [DefaultExecutionOrder(-100)]
     public class FlightCameraRig : MonoBehaviour
@@ -55,6 +57,8 @@ namespace WingingIt.CameraSystem
         Vector2 _stickLook;
         float _fov;
         float _deathBlend; // 0 = chase framing, 1 = fully pulled back
+        float _aimScale = 1f, _lookScale = 1f, _fovOffset;
+        bool _speedFov = true;
 
         public PlaneController Target => target;
         public bool MouseAimMode { get; set; }
@@ -66,7 +70,9 @@ namespace WingingIt.CameraSystem
 
         void OnEnable()
         {
-            _fov = baseFov;
+            GameSettings.Current.Changed += ReadSettings;
+            ReadSettings();
+            _fov = baseFov + _fovOffset;
             if (target != null)
             {
                 target.Respawned += OnRespawned;
@@ -76,8 +82,18 @@ namespace WingingIt.CameraSystem
 
         void OnDisable()
         {
+            GameSettings.Current.Changed -= ReadSettings;
             if (target != null)
                 target.Respawned -= OnRespawned;
+        }
+
+        void ReadSettings()
+        {
+            var s = GameSettings.Current.Data;
+            _aimScale = s.mouseAimSensitivity;
+            _lookScale = s.freeLookSensitivity;
+            _fovOffset = s.fieldOfView - baseFov; // the speed and boost widening keep their offsets
+            _speedFov = s.speedFov;
         }
 
         public void SetTarget(PlaneController plane)
@@ -99,13 +115,13 @@ namespace WingingIt.CameraSystem
         {
             if (FreeLookHeld)
             {
-                _lookYaw += delta.x * freeLookMouseSensitivity;
-                _lookPitch = Mathf.Clamp(_lookPitch + delta.y * freeLookMouseSensitivity, -70f, 70f);
+                _lookYaw += delta.x * freeLookMouseSensitivity * _lookScale;
+                _lookPitch = Mathf.Clamp(_lookPitch + delta.y * freeLookMouseSensitivity * _lookScale, -70f, 70f);
             }
             else if (MouseAimMode)
             {
-                _aimYaw += delta.x * mouseAimSensitivity;
-                _aimPitch = Mathf.Clamp(_aimPitch + delta.y * mouseAimSensitivity, -aimPitchLimit, aimPitchLimit);
+                _aimYaw += delta.x * mouseAimSensitivity * _aimScale;
+                _aimPitch = Mathf.Clamp(_aimPitch + delta.y * mouseAimSensitivity * _aimScale, -aimPitchLimit, aimPitchLimit);
             }
         }
 
@@ -148,8 +164,8 @@ namespace WingingIt.CameraSystem
             // Free look: stick or held button; otherwise spring back to center.
             if (_stickLook.sqrMagnitude > 0.01f)
             {
-                _lookYaw = Mathf.Clamp(_lookYaw + _stickLook.x * stickLookSpeed * dt, -160f, 160f);
-                _lookPitch = Mathf.Clamp(_lookPitch + _stickLook.y * stickLookSpeed * dt, -70f, 70f);
+                _lookYaw = Mathf.Clamp(_lookYaw + _stickLook.x * stickLookSpeed * _lookScale * dt, -160f, 160f);
+                _lookPitch = Mathf.Clamp(_lookPitch + _stickLook.y * stickLookSpeed * _lookScale * dt, -70f, 70f);
             }
             else if (!FreeLookHeld)
             {
@@ -184,9 +200,10 @@ namespace WingingIt.CameraSystem
         {
             if (cinemachineCamera == null)
                 return;
-            float targetFov = target.IsBoosting
-                ? boostFov
+            float targetFov = !_speedFov ? baseFov
+                : target.IsBoosting ? boostFov
                 : Mathf.Lerp(baseFov, topSpeedFov, Mathf.Clamp01(target.NormalizedSpeed));
+            targetFov += _fovOffset;
             _fov = Mathf.Lerp(_fov, targetFov, 1f - Mathf.Exp(-fovSmoothing * dt));
             cinemachineCamera.Lens.FieldOfView = _fov;
         }

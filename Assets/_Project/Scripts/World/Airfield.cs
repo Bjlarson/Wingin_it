@@ -43,6 +43,8 @@ namespace WingingIt.World
         [Tooltip("The start of the runway, for a takeoff spawn (levels pick air or runway spawns in LevelSettings).")]
         [SerializeField] Transform runwaySpawn;
         [SerializeField] RepairZone repairZone;
+        [Tooltip("Where a plane parks inside the hangar, nose toward the doors (the main menu backdrop).")]
+        [SerializeField] Transform hangarSpot;
         [Tooltip("The landing approach the landing-assist guide shows.")]
         [SerializeField] GlideSlope glideSlope = new();
 
@@ -54,6 +56,7 @@ namespace WingingIt.World
         public Transform AirSpawn => airSpawn;
         public Transform RunwaySpawn => runwaySpawn;
         public RepairZone RepairZone => repairZone;
+        public Transform HangarSpot => hangarSpot;
         public GlideSlope GlideSlope => glideSlope;
         /// <summary>The landing and takeoff heading.</summary>
         public Vector3 RunwayDirection => transform.forward;
@@ -70,6 +73,17 @@ namespace WingingIt.World
             airSpawn = air;
             runwaySpawn = runway;
             repairZone = zone;
+        }
+
+        public void SetHangarSpot(Transform spot) => hangarSpot = spot;
+
+        /// <summary><paramref name="team"/>'s home airfield, or null.</summary>
+        public static Airfield HomeOf(int team)
+        {
+            foreach (var field in s_all)
+                if (field.isHome && field.team == team)
+                    return field;
+            return null;
         }
 
         /// <summary>
