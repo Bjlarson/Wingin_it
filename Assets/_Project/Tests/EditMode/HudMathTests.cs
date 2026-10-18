@@ -3,6 +3,7 @@ using UnityEngine;
 using WingingIt.Flight;
 using WingingIt.Match;
 using WingingIt.UI;
+using WingingIt.World;
 
 namespace WingingIt.Tests
 {
@@ -92,6 +93,22 @@ namespace WingingIt.Tests
         }
 
         [Test]
+        public void MapPoint_HeadingUp_PutsWhereWeAreFlyingAtTheTop()
+        {
+            var map = new Rect(30f, 30f, 240f, 240f);
+            var center = Vector2.zero;
+            const float radius = 2000f;
+            // Flying east (heading 90): the map turns -90, so east is up and north is left.
+            Vector2 east = HudMath.MapPoint(new Vector3(radius, 0f, 0f), center, radius, map, -90f);
+            Assert.AreEqual(map.center.x, east.x, 1e-3f);
+            Assert.AreEqual(map.yMin, east.y, 1e-3f);
+            Vector2 north = HudMath.MapPoint(new Vector3(0f, 0f, radius), center, radius, map, -90f);
+            Assert.AreEqual(map.xMin, north.x, 1e-3f);
+            Assert.AreEqual(map.center.y, north.y, 1e-3f);
+            Assert.AreEqual(map.center, HudMath.MapPoint(Vector3.zero, center, radius, map, -90f));
+        }
+
+        [Test]
         public void Heading_IsClockwiseFromNorth()
         {
             Assert.AreEqual(0f, HudMath.Heading(Vector3.forward), 1e-3f);
@@ -176,5 +193,24 @@ namespace WingingIt.Tests
             Assert.Less(DamageFeedbackMath.HitFlashAlpha(0.2f, big), big);
             Assert.AreEqual(0f, DamageFeedbackMath.HitFlashAlpha(DamageFeedbackMath.HitFlashTime, big));
         }
+
+        [Test]
+        public void Death_NamesTheKiller_OrTheCrashFault()
+        {
+            Assert.AreEqual("SHOT DOWN BY EAST FIGHTER 2", HudText.Death(true, null, "EAST FIGHTER 2"));
+            Assert.AreEqual("SHOT DOWN", HudText.Death(true, null, null));
+            Assert.AreEqual("CRASHED: TOO FAST", HudText.Death(false, TouchdownFault.TooFast, null));
+            Assert.AreEqual("CRASHED  (WEST AA GETS THE KILL)", HudText.Death(false, null, "WEST AA"));
+        }
+
+        [Test]
+        public void ApproachHint_SaysWhichWayToFix_OrOnPath()
+        {
+            Assert.AreEqual("ON GLIDE PATH", HudText.ApproachHint(new ApproachGuide(true, 800f, 0f, 40f, 2f, 10f)));
+            Assert.AreEqual("HIGH 25 M", HudText.ApproachHint(new ApproachGuide(true, 800f, 0f, 40f, 25f, 10f)));
+            Assert.AreEqual("LOW 15 M  FLY LEFT", HudText.ApproachHint(new ApproachGuide(true, 800f, 30f, 40f, -15f, 10f)));
+            Assert.AreEqual("FLY RIGHT", HudText.ApproachHint(new ApproachGuide(true, 800f, -30f, 40f, 0f, 10f)));
+        }
     }
 }
+

@@ -60,7 +60,7 @@ namespace WingingIt.Tests
             Assert.AreEqual(0f, Time.timeScale);
             Assert.AreEqual(0, _roster.Bots.Count, "bots join when the match starts");
             Assert.IsFalse(_player.GetComponent<PlayerFlightInput>().enabled);
-            Assert.IsNull(Object.FindAnyObjectByType<FlightDebugHUD>(), "flight HUD hidden");
+            Assert.IsNull(Object.FindAnyObjectByType<FlightHUD>(), "flight HUD hidden");
             Assert.AreEqual(7, _roster.PlannedBots(0).Count, "class select shows 7 bots beside the player");
             Assert.AreEqual(8, _roster.PlannedBots(1).Count);
         }
@@ -80,6 +80,25 @@ namespace WingingIt.Tests
         }
 
         static Vector3 Flat(Vector3 v) => new(v.x, 0f, v.z);
+
+        [Test]
+        public void ClassSelect_ParksTheHighlightedClassInTheHangar_UntilBack()
+        {
+            int picked = _match.SelectedClass, other = (picked + 2) % _match.Classes.Count;
+            _match.PreviewClass(other);
+            Assert.AreEqual(_match.Classes[picked], _player.Stats, "no preview from the main menu");
+
+            _match.OpenClassSelect();
+            _match.PreviewClass(other);
+            Assert.AreEqual(_match.Classes[other], _player.Stats);
+            Assert.AreEqual(picked, _match.SelectedClass, "previewing picks nothing");
+            Assert.AreEqual(MatchPhase.ClassSelect, _match.Phase);
+            Assert.IsTrue(_player.IsGrounded, "still parked");
+            Assert.Less(Vector3.Distance(Flat(_player.Position), Flat(_match.HangarSpot.position)), 0.5f);
+
+            _match.BackToMenu();
+            Assert.AreEqual(_match.Classes[picked], _player.Stats, "the menu shows the class picked last");
+        }
 
         [UnityTest]
         public IEnumerator ClassSelect_BacksOutToTheMenu_AndThePlaneStaysParked()
@@ -176,7 +195,7 @@ namespace WingingIt.Tests
             Assert.AreEqual(MatchPhase.Playing, _match.Phase);
             Assert.AreEqual(1f, Time.timeScale);
             Assert.IsTrue(_player.GetComponent<PlayerFlightInput>().enabled);
-            Assert.IsNotNull(Object.FindAnyObjectByType<FlightDebugHUD>(), "flight HUD back");
+            Assert.IsNotNull(Object.FindAnyObjectByType<FlightHUD>(), "flight HUD back");
             Assert.AreEqual(16, _match.Score.Pilots.Count, "everyone on the scoreboard");
         }
 
@@ -270,7 +289,7 @@ namespace WingingIt.Tests
             yield return null;
             Assert.AreEqual(ClassPicker.Respawn, _match.Picker);
             Assert.IsFalse(input.enabled, "controls off (mouse free) while picking");
-            Assert.IsNull(Object.FindAnyObjectByType<FlightDebugHUD>(), "flight HUD hidden under the picker");
+            Assert.IsNull(Object.FindAnyObjectByType<FlightHUD>(), "flight HUD hidden under the picker");
             Assert.AreEqual(1f, Time.timeScale, "the match keeps running");
             Assert.Greater(_match.RespawnTimeLeft, 0f);
 
@@ -281,7 +300,7 @@ namespace WingingIt.Tests
             Assert.AreEqual(_match.Classes[3], _player.Stats);
             Assert.AreEqual(ClassPicker.None, _match.Picker);
             Assert.IsTrue(input.enabled);
-            Assert.IsNotNull(Object.FindAnyObjectByType<FlightDebugHUD>());
+            Assert.IsNotNull(Object.FindAnyObjectByType<FlightHUD>());
         }
 
         [UnityTest]

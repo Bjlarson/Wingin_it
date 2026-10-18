@@ -14,6 +14,12 @@ namespace WingingIt.UI
     /// <summary>Focus and value maths for the menus. Pure, so it's EditMode-testable.</summary>
     public static class MenuMath
     {
+        /// <summary>How long a newly shown panel takes to fade in (style guide: panel changes cross-fade in 120 ms).</summary>
+        public const float PanelFadeTime = 0.12f;
+
+        /// <summary>A panel's opacity <paramref name="age"/> seconds after it was shown: 0 → 1 over <see cref="PanelFadeTime"/>.</summary>
+        public static float PanelFade(float age) => Mathf.Clamp01(age / PanelFadeTime);
+
         /// <summary>The row <paramref name="delta"/> steps from <paramref name="index"/>, wrapping around <paramref name="count"/> rows.</summary>
         public static int Step(int index, int delta, int count)
         {

@@ -1,6 +1,7 @@
 using UnityEngine;
 using WingingIt.Flight;
 using WingingIt.Match;
+using WingingIt.World;
 
 namespace WingingIt.UI
 {
@@ -56,6 +57,21 @@ namespace WingingIt.UI
             float ty = Mathf.Abs(direction.y) > 1e-6f ? inset.height * 0.5f / Mathf.Abs(direction.y) : float.MaxValue;
             edge = center + direction * Mathf.Min(tx, ty);
             return true;
+        }
+
+        /// <summary><see cref="MapPoint(Vector3, Vector2, float, Rect)"/> on a map turned clockwise by <paramref name="rotationDeg"/>
+        /// about its center (heading up: minus the plane's heading).</summary>
+        public static Vector2 MapPoint(Vector3 world, Vector2 mapCenter, float mapRadius, Rect map, float rotationDeg)
+        {
+            Vector2 north = MapPoint(world, mapCenter, mapRadius, map);
+            return map.center + Rotate(north - map.center, rotationDeg);
+        }
+
+        /// <summary>Turns a GUI-space offset (y down) clockwise by <paramref name="degrees"/>.</summary>
+        public static Vector2 Rotate(Vector2 v, float degrees)
+        {
+            float r = degrees * Mathf.Deg2Rad, c = Mathf.Cos(r), s = Mathf.Sin(r);
+            return new Vector2(v.x * c - v.y * s, v.x * s + v.y * c);
         }
 
         /// <summary>
@@ -170,5 +186,40 @@ namespace WingingIt.UI
 
         /// <summary>A distance for a marker: metres up close, then kilometres to one decimal.</summary>
         public static string Distance(float metres) => metres < 1000f ? $"{metres:0} M" : $"{metres / 1000f:0.0} KM";
+
+        /// <summary>Why a touchdown went wrong: "GEAR NOT DOWN", "TOO FAST".</summary>
+        public static string Fault(TouchdownFault fault) => fault switch
+        {
+            TouchdownFault.GearNotLocked => "GEAR NOT DOWN",
+            TouchdownFault.BadAngle => "BAD ANGLE",
+            TouchdownFault.SinkTooFast => "DESCENDING TOO FAST",
+            TouchdownFault.HardSink => "SINKING TOO FAST",
+            TouchdownFault.TooFast => "TOO FAST",
+            TouchdownFault.Ditched => "DITCHED IN THE SEA",
+            _ => "",
+        };
+
+        /// <summary>
+        /// "SHOT DOWN BY EAST FIGHTER 2", "CRASHED: TOO FAST", "CRASHED  (WEST AA GETS THE KILL)". The crash fault is
+        /// given when the plane died landing badly; the killer when someone gets the credit.
+        /// </summary>
+        public static string Death(bool shotDown, TouchdownFault? crashFault, string killer)
+        {
+            string death = shotDown ? "SHOT DOWN" : "CRASHED";
+            if (!shotDown && crashFault is TouchdownFault fault)
+                death += $": {Fault(fault)}";
+            if (killer != null)
+                death += shotDown ? $" BY {killer}" : $"  ({killer} GETS THE KILL)";
+            return death;
+        }
+
+        /// <summary>What to do on the glide path: "ON GLIDE PATH", "HIGH 12 M", "LOW 8 M  FLY LEFT".</summary>
+        public static string ApproachHint(ApproachGuide guide)
+        {
+            string vertical = guide.IsHigh ? $"HIGH {guide.HeightError:0} M" : guide.IsLow ? $"LOW {-guide.HeightError:0} M" : null;
+            string lateral = guide.IsOffCenter ? (guide.Lateral > 0f ? "FLY LEFT" : "FLY RIGHT") : null;
+            return vertical == null && lateral == null ? "ON GLIDE PATH"
+                : vertical != null && lateral != null ? $"{vertical}  {lateral}" : vertical ?? lateral;
+        }
     }
 }

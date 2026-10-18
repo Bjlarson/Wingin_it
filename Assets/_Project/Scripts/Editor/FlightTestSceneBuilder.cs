@@ -906,7 +906,7 @@ namespace WingingIt.Editor
             SetArray(switcher, "classes", classes);
             planeGo.AddComponent<DamageTester>();
 
-            // HUD: the real one, plus the debug overlay (landing assist, messages, help)
+            // HUD: the real one, plus the dev overlay (dev readouts, F1 help)
             var hud = new GameObject("Flight HUD").AddComponent<FlightHUD>();
             SetField(hud, "plane", plane);
             SetField(hud, "player", input);
@@ -919,6 +919,7 @@ namespace WingingIt.Editor
             SetField(hud, "ability", planeGo.GetComponent<PlaneAbility>());
             SetField(hud, "gear", planeGo.GetComponent<LandingGear>());
             SetField(hud, "repair", planeGo.GetComponent<PlaneRepair>());
+            SetField(hud, "respawner", respawner);
             SetField(hud, "viewCamera", mainCam);
             var feedback = hud.gameObject.AddComponent<DamageFeedback>();
             SetField(feedback, "plane", plane);
@@ -928,10 +929,6 @@ namespace WingingIt.Editor
             var debugHud = new GameObject("Flight Debug HUD").AddComponent<FlightDebugHUD>();
             SetField(debugHud, "plane", plane);
             SetField(debugHud, "player", input);
-            SetField(debugHud, "respawner", respawner);
-            SetField(debugHud, "health", planeGo.GetComponent<PlaneHealth>());
-            SetField(debugHud, "repair", planeGo.GetComponent<PlaneRepair>());
-            SetField(debugHud, "viewCamera", mainCam);
 
             BuildTouchControls(input, switcher, planeGo);
         }

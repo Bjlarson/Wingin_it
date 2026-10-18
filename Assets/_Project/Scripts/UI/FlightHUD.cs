@@ -14,11 +14,12 @@ namespace WingingIt.UI
     /// The player's flight HUD (Design/06-UI-UX/hud.md), drawn with IMGUI in the glass style: a bottom instrument
     /// cluster (damage diagram, speed / altitude / throttle / boost / gear, guns, ammo, ability), the crosshair, gun and
     /// rocket pippers, the missile lock bracket and incoming-missile warning, the bomb impact preview, a north-up minimap,
-    /// an arrow to the nearest friendly repair zone, score popups and the kill feed. The match clock and team score are
-    /// <see cref="MatchScreens"/>; the landing assist, center messages and dev readouts are still <see cref="FlightDebugHUD"/>.
+    /// an arrow to the nearest friendly repair zone, score popups and the kill feed; the landing assist and approach lanes
+    /// (FlightHUD.Landing.cs); center messages, the status toast and the cloud wash (FlightHUD.Messages.cs). The match
+    /// clock and team score are <see cref="MatchScreens"/>; the dev readouts and F1 help are <see cref="FlightDebugHUD"/>.
     /// With touch controls on, the cluster sits in the gap between the stick and the buttons.
     /// </summary>
-    public class FlightHUD : MonoBehaviour
+    public partial class FlightHUD : MonoBehaviour
     {
         [SerializeField] PlaneController plane;
         [SerializeField] PlayerFlightInput player;
@@ -31,6 +32,7 @@ namespace WingingIt.UI
         [SerializeField] PlaneAbility ability;
         [SerializeField] LandingGear gear;
         [SerializeField] PlaneRepair repair;
+        [SerializeField] PlaneRespawner respawner;
         [SerializeField] Camera viewCamera;
         [Tooltip("The match, for score popups and team colours. Empty in the sandbox.")]
         [SerializeField] MatchManager match;
@@ -54,9 +56,12 @@ namespace WingingIt.UI
         readonly GlassGUI _g = new();
         Texture2D _arrow;
         RenderTexture _map;
+        RenderTexture _mapView; // heading up: the photo turned to the plane's heading, redrawn every frame
+        float _mapTurn;         // how far the map is turned (clockwise degrees; 0 = north up)
         Vector2 _mapCenter;
         float _mapRadius;
         MatchScore _score;
+        Rect _clusterRect; // where the cluster was drawn this frame, in HUD space
 
         float _lastHitTime = -1f;
         bool _lastHitDestroyedPart;
@@ -107,6 +112,14 @@ namespace WingingIt.UI
         // is up (dead), and the kill feed should still have the kills from that time.
         void Awake()
         {
+            _feedback = GetComponent<DamageFeedback>();
+            if (plane != null)
+                plane.TouchedDown += OnTouchedDown;
+            if (repair != null)
+            {
+                repair.Completed += OnRepairCompleted;
+                repair.Cancelled += OnRepairCancelled;
+            }
             if (guns != null)
                 guns.HitPlane += OnHitPlane;
             if (rockets != null)
@@ -136,6 +149,13 @@ namespace WingingIt.UI
 
         void OnDestroy()
         {
+            if (plane != null)
+                plane.TouchedDown -= OnTouchedDown;
+            if (repair != null)
+            {
+                repair.Completed -= OnRepairCompleted;
+                repair.Cancelled -= OnRepairCancelled;
+            }
             if (guns != null)
                 guns.HitPlane -= OnHitPlane;
             if (rockets != null)
@@ -160,6 +180,18 @@ namespace WingingIt.UI
                 _map.Release();
                 Destroy(_map);
             }
+            if (_mapView != null)
+            {
+                _mapView.Release();
+                Destroy(_mapView);
+            }
+        }
+
+        void LateUpdate()
+        {
+            _mapTurn = GameSettings.Current.Data.minimapHeadingUp && plane != null && plane.IsAlive ? -HudMath.Heading(plane.transform.forward) : 0f;
+            if (_mapTurn != 0f && _map != null)
+                TurnMap(_mapTurn);
         }
 
         // ---------- Events ----------
@@ -265,6 +297,10 @@ namespace WingingIt.UI
             _height = Screen.height / scale;
             float width = Screen.width / scale;
 
+            DrawCloudWash(width);
+            UpdateApproach();
+            DrawLandingAssist(scale, width);
+            DrawApproachLane(scale);
             DrawTargets(scale, width);
             DrawMissileLock(scale);
             DrawBombImpact(scale);
@@ -275,6 +311,10 @@ namespace WingingIt.UI
             DrawMinimap();
             DrawKillFeed(width);
             DrawCluster(width);
+            DrawCenterWarning(width);
+            DrawStatusToast(width);
+            DrawCloudStatus(width);
+            DrawMouseCaptureHint(width);
         }
 
         bool Crippled => health != null && (health.BodyState != BodyDamageState.Healthy || health.LostPartsMask != 0);
@@ -288,6 +328,7 @@ namespace WingingIt.UI
         {
             bool touch = player != null && player.TouchControlsActive;
             var r = HudMath.ClusterRect(width, _height, ClusterSize, touch, 20f, out float s);
+            _clusterRect = r;
             var old = GUI.matrix;
             GUI.matrix = old * Matrix4x4.TRS(new Vector3(r.x, r.y, 0f), Quaternion.identity, new Vector3(s, s, 1f));
             DrawDamageDiagram(new Rect(0f, 0f, DiagramW, ClusterSize.y));
@@ -457,16 +498,7 @@ namespace WingingIt.UI
             _g.Tracked(new Rect(r.x + 18f, r.y, r.width - 18f, r.height), "GEAR", _g.Hint, 1.6f, TextAnchor.MiddleLeft, Steel, 0.85f);
         }
 
-        bool IsLanding
-        {
-            get
-            {
-                if (gear != null && gear.State != GearState.Up)
-                    return true;
-                var field = Airfield.NearestFriendly(plane.Position, plane.Team);
-                return field != null && field.GetApproach(plane.Position, plane.Velocity).OnApproach;
-            }
-        }
+        bool IsLanding => (gear != null && gear.State != GearState.Up) || _approach.OnApproach;
 
         /// <summary>The fastest touchdown that still lands cleanly for our class.</summary>
         float MaxTouchdownSpeed => plane.Stats != null ? plane.LandingRules.MaxTouchdownSpeed(plane.Stats.minSpeed) : float.MaxValue;
@@ -708,8 +740,8 @@ namespace WingingIt.UI
         {
             if (viewCamera == null || !plane.IsAlive || plane.IsGrounded)
                 return;
-            var field = Airfield.NearestFriendly(plane.Position, plane.Team);
-            if (field == null || field.GetApproach(plane.Position, plane.Velocity).OnApproach)
+            var field = _approachField;
+            if (field == null || _approach.OnApproach)
                 return;
             Vector3 zone = field.RepairZone != null ? field.RepairZone.transform.position : field.transform.position;
             float distance = Vector3.Distance(plane.Position, zone);
@@ -764,7 +796,7 @@ namespace WingingIt.UI
             cam.nearClipPlane = 1f;
             cam.farClipPlane = 5000f;
             cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = new Color(0.12f, 0.3f, 0.42f);
+            cam.backgroundColor = MapSea;
             cam.transform.SetPositionAndRotation(new Vector3(_mapCenter.x, 3000f, _mapCenter.y), Quaternion.Euler(90f, 0f, 0f));
             cam.targetTexture = _map;
             cam.Render();
@@ -775,6 +807,25 @@ namespace WingingIt.UI
             foreach (var r in hidden)
                 if (r != null)
                     r.enabled = true;
+        }
+
+        static readonly Color MapSea = new(0.12f, 0.3f, 0.42f);
+
+        /// <summary>Redraws the level photo into <see cref="_mapView"/> turned clockwise by <paramref name="degrees"/>, sea round the corners.</summary>
+        void TurnMap(float degrees)
+        {
+            if (_mapView == null)
+                _mapView = new RenderTexture(MapResolution, MapResolution, 0) { name = "Minimap View" };
+            var old = RenderTexture.active;
+            RenderTexture.active = _mapView;
+            GL.Clear(false, true, MapSea);
+            GL.PushMatrix();
+            GL.LoadPixelMatrix(0f, MapResolution, MapResolution, 0f); // y down, like GUI space
+            var pivot = new Vector3(MapResolution * 0.5f, MapResolution * 0.5f, 0f);
+            GL.MultMatrix(Matrix4x4.Translate(pivot) * Matrix4x4.Rotate(Quaternion.Euler(0f, 0f, degrees)) * Matrix4x4.Translate(-pivot));
+            Graphics.DrawTexture(new Rect(0f, 0f, MapResolution, MapResolution), _map);
+            GL.PopMatrix();
+            RenderTexture.active = old;
         }
 
         static void Hide(Renderer[] renderers, List<Renderer> hidden)
@@ -788,8 +839,8 @@ namespace WingingIt.UI
         }
 
         /// <summary>
-        /// Top-left, north up: the level photo, the boundary, airfields (team colours; home fields outlined), friendly
-        /// planes, enemies on our Support's radar, and us (white, bigger) with our heading.
+        /// Top-left, north up (or turned to our heading, by setting): the level photo, the boundary, airfields (team
+        /// colours; home fields outlined), friendly planes, enemies on our Support's radar, and us (white, bigger).
         /// </summary>
         void DrawMinimap()
         {
@@ -798,20 +849,21 @@ namespace WingingIt.UI
             var panel = new Rect(20f, 20f, MapSize, MapSize);
             _g.Panel(panel, GlowRest, false);
             var map = new Rect(panel.x + MapPad, panel.y + MapPad, MapSize - MapPad * 2f, MapSize - MapPad * 2f);
-            GUI.DrawTexture(map, _map, ScaleMode.StretchToFill, false, 0f, new Color(0.78f, 0.8f, 0.84f, 1f), Vector4.zero, new Vector4(8f, 8f, 8f, 8f));
+            float turn = _mapTurn;
+            GUI.DrawTexture(map, turn != 0f && _mapView != null ? _mapView : _map, ScaleMode.StretchToFill, false, 0f, new Color(0.78f, 0.8f, 0.84f, 1f), Vector4.zero, new Vector4(8f, 8f, 8f, 8f));
 
             var boundary = FlightBoundary.Active;
             if (boundary != null)
             {
                 float r = boundary.radius / (_mapRadius * 2f) * map.width;
-                Vector2 c = HudMath.MapPoint(boundary.transform.position, _mapCenter, _mapRadius, map);
+                Vector2 c = HudMath.MapPoint(boundary.transform.position, _mapCenter, _mapRadius, map, turn);
                 _g.RoundStroke(new Rect(c.x - r, c.y - r, r * 2f, r * 2f), r, 1f, Alpha(Color.white, 0.3f));
             }
 
             var home = plane.IsAlive ? Airfield.NearestFriendly(plane.Position, plane.Team) : null;
             foreach (var field in Airfield.All)
             {
-                Vector2 p = HudMath.MapPoint(field.transform.position, _mapCenter, _mapRadius, map);
+                Vector2 p = HudMath.MapPoint(field.transform.position, _mapCenter, _mapRadius, map, turn);
                 Color c = field.IsNeutral ? Alpha(Body, 0.8f) : TeamColor(field.Team);
                 float s = field.IsHome ? 11f : 9f;
                 if (field.IsHome)
@@ -831,19 +883,26 @@ namespace WingingIt.UI
                 bool friend = other.Team == plane.Team;
                 if (!friend && !PlaneAbility.IsRevealedTo(other, plane.Team))
                     continue;
-                Vector2 p = HudMath.MapPoint(other.Position, _mapCenter, _mapRadius, map);
+                Vector2 p = HudMath.MapPoint(other.Position, _mapCenter, _mapRadius, map, turn);
                 if (map.Contains(p))
-                    MapArrow(p, HudMath.Heading(other.transform.forward), 11f, TeamColor(other.Team));
+                    MapArrow(p, HudMath.Heading(other.transform.forward) + turn, 11f, TeamColor(other.Team));
             }
 
             if (plane.IsAlive)
             {
-                Vector2 me = HudMath.MapPoint(plane.Position, _mapCenter, _mapRadius, map);
-                float heading = HudMath.Heading(plane.transform.forward);
+                Vector2 me = HudMath.MapPoint(plane.Position, _mapCenter, _mapRadius, map, turn);
+                float heading = HudMath.Heading(plane.transform.forward) + turn;
                 MapArrow(me, heading, 19f, new Color(0f, 0f, 0f, 0.7f));
                 MapArrow(me, heading, 15f, Color.white);
             }
-            _g.Tracked(new Rect(map.x + 6f, map.y + 4f, 20f, 16f), "N", _g.Hint, 0f, TextAnchor.MiddleLeft, Alpha(White, 0.7f), 0.8f);
+            if (turn == 0f)
+                _g.Tracked(new Rect(map.x + 6f, map.y + 4f, 20f, 16f), "N", _g.Hint, 0f, TextAnchor.MiddleLeft, Alpha(White, 0.7f), 0.8f);
+            else
+            {
+                // Heading up: N rides the rim where north is.
+                Vector2 n = map.center + HudMath.Rotate(new Vector2(0f, -(map.width * 0.5f - 12f)), turn);
+                _g.Shadowed(new Rect(n.x - 10f, n.y - 8f, 20f, 16f), "N", _g.Hint, 0f, TextAnchor.MiddleCenter, Alpha(White, 0.85f), 0.8f);
+            }
         }
 
         void MapArrow(Vector2 at, float headingDeg, float size, Color color) => Rotated(_arrow, new Rect(at.x - size / 2f, at.y - size / 2f, size, size), headingDeg, color);

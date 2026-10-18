@@ -113,6 +113,7 @@ namespace WingingIt.Tests
                 s.renderScale = 0.5f;
                 s.masterVolume = 0.1f;
                 s.reduceFlashing = true;
+                s.minimapHeadingUp = true;
             });
             settings.ResetTab(SettingsTab.Graphics);
             Assert.AreEqual(0.8f, settings.Data.renderScale, 1e-5f, "back to the phone default");
@@ -126,6 +127,7 @@ namespace WingingIt.Tests
             Assert.IsFalse(settings.Data.invertPitch);
             Assert.AreEqual(0.8f, settings.Data.masterVolume, 1e-5f);
             Assert.IsFalse(settings.Data.reduceFlashing);
+            Assert.IsFalse(settings.Data.minimapHeadingUp, "north up by default");
         }
     }
 }

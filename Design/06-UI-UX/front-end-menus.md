@@ -79,7 +79,7 @@ Online (Phase 7) this same screen is where the player picks what to queue for, a
 The existing four cards (stats, loadout, ability, ON YOUR TEAM n), restyled to the game mode screen's card layout. Adds:
 
 - The cards are centred on screen; no roster column (team lineups show on the in-match scoreboard).
-- **(Later)** the highlighted class's plane replaces the one parked in the hangar, so the pick is seen in the world, not just on a card.
+- The highlighted class's plane replaces the one parked in the hangar, so the pick is seen in the world, not just on a card. **Built:** the cards sit in the lower half (shorter than the in-play picker's, no dark wash) and the camera eases in to 26 m and tilts down so the plane shows above them; BACK puts the class picked last back in the hangar.
 - Esc / B goes back to the game mode screen.
 
 The respawn and home-airfield pickers stay exactly as built ([aircraft-classes](../02-Mechanics/aircraft-classes.md#class-selection)).
@@ -144,7 +144,7 @@ One panel, four tabs (Q / E or LB / RB switch tabs). Every change **applies imme
 | Damage screen effects | 100% | 0–100% | Smoke, vignette and hit flash strength (`DamageFeedback`). The alarm and RETURN TO BASE always stay |
 | Reduce flashing | Off | On / Off | Steady instead of flashing: Critical diagram, clock, LOCK WARNING, RETURN TO BASE, heartbeat vignette |
 | Team colors | Default | Default / High contrast (blue vs orange) | Colorblind-safe pair everywhere team color appears (HUD, minimap, kill feed, plane markers) |
-| Minimap | North up | North up / Heading up | |
+| Minimap | North up | North up / Heading up | Heading up turns the whole-level photo about its center; N rides the rim |
 | Developer (dev builds only) | — | F1 help, debug overlay, dev keys on / off | Not in release builds |
 
 ## Post-Match Screen
@@ -183,8 +183,10 @@ Everything above is in, with these differences and leftovers:
 - **Display changes:** a resolution / window mode change adds a KEEP row on top of the Graphics tab and reverts after 10 s; leaving the tab keeps it.
 - **Settings in the Editor:** resolution, window mode and render scale only apply in builds (the URP asset is a project file); quality only changes once the player picks one. Quality lists the project's levels (Mobile, PC); there is no Low level yet.
 - **Audio:** Master drives `AudioListener.volume`; Alerts scales the damage tones; Effects and Music are saved but have nothing to drive yet (no game audio / music).
-- **Developer:** hides the dev panel, F1 help and damage keys (5–9); the landing assist and center messages stay.
-- **Not built yet:** heading-up minimap (the setting is left out until the minimap can rotate inside its frame), the picked class shown in the hangar during class select, the 120 ms panel cross-fade (IMGUI text draws its own colour), and interactive key rebinding (Bindings is a read-only list).
+- **Developer:** hides the dev panel, F1 help and damage keys (5–9); the landing assist and center messages are part of the real HUD and stay.
+- **Panel change:** the new screen fades in over 120 ms (`GlassGUI.Opacity`); the old one cuts, since IMGUI can't keep drawing a screen that's gone. The dark backdrop, score bar and ☰ button don't fade.
+- **Heading-up minimap:** the photo is redrawn turned each frame into a second render texture (`FlightHUD.TurnMap`), so it stays inside its rounded frame.
+- **Not built yet:** interactive key rebinding (Bindings is a read-only list).
 
 ## Technical Notes
 
@@ -200,7 +202,7 @@ Everything above is in, with these differences and leftovers:
 | Presses from launch to flying | 3 | PLAY, confirm the game mode, confirm the highlighted class |
 | Menu orbit camera | ~12 m from the parked plane, inside the hangar, 1 lap / 60 s | Pull-back through the doors on PLAY: under 2 s |
 | Row height | 56 px @ 1080p | Style guide |
-| Panel cross-fade | 120 ms | |
+| Panel cross-fade | 120 ms | Fade-in of the new panel (`MenuMath.PanelFadeTime`) |
 | Slider step | 5% | |
 | Leave-match confirm | Inline second press | No modal dialog |
 

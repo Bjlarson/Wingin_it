@@ -35,7 +35,11 @@ A minimal HUD that supports the core decision of fight or retreat. The pilot sho
 - **Center:** crosshair, pippers, lock bracket, missile warning, popups under the crosshair, the home marker or its edge arrow.
 - **Bottom center:** the instrument cluster, three glass panels: damage diagram · speed / altitude / throttle / boost / gear · weapons + ability. With touch controls on it sits in the gap between the stick and the buttons, shrinking (never below half size) on narrow screens (`HudMath.ClusterRect`).
 - **Above the cluster:** RETURN TO BASE when Critical (`DamageFeedback`, see [Damage Feedback](#damage-feedback)).
-- Still in the prototype overlay (`FlightDebugHUD`), to move over later: the landing assist, approach-lane gates, center messages (death, boundary, AA fire, touchdown, repair), the cloud wash, the F1 help (hidden when a match starts) and the dev readouts (bottom left).
+- **Under the score bar:** the center warning (death + respawn timer, combat area edge, altitude limit, AA fire), flashing; the missile warning under it.
+- **Above the cluster:** a glass status toast: LANDED / BOUNCED, READY FOR TAKEOFF, REPAIRING with a bar and SHIELDED, REPAIRED / REPAIR CANCELLED. It moves up while RETURN TO BASE is showing.
+- **Right of the crosshair on approach:** the ILS panel; the glide rings, aim bar and repair zone outline are drawn in the world (FlightHUD.Landing.cs). Approach-lane gates get a diamond with the lane name and distance.
+- **Cloud:** the white wash under everything, and IN CLOUD / CLOUD EDGE under the crosshair.
+- Only the dev readouts (bottom left) and the F1 help (hidden when a match starts) are still in the dev overlay (`FlightDebugHUD`), both behind the Developer setting.
 
 ## Post-Match Screen
 
@@ -47,21 +51,21 @@ A minimal HUD that supports the core decision of fight or retreat. The pilot sho
 
 ## Landing Assist (proposed)
 
-Gear status icon is always visible when the gear is deploying or deployed: red = up, yellow = deploying, green = locked (safe to land). The prototype debug HUD always shows it as a GEAR light beside the throttle bar, flashing while deploying.
+Gear status icon is always visible when the gear is deploying or deployed: red = up, yellow = deploying, green = locked (safe to land). The flight panel always shows it as a GEAR light beside the throttle bar, flashing while deploying.
 
-Touchdown feedback (prototype debug HUD): a short "LANDED" (green) or "BOUNCED: TOO FAST / SINKING TOO FAST" (yellow) message on touchdown, and the crash message names the reason ("CRASHED: GEAR NOT DOWN", "BAD ANGLE"). While the gear is out, vertical speed (V/S) shows under the gear light; on the runway it says GROUND.
+Touchdown feedback (status toast): a short "LANDED" (green) or "BOUNCED: TOO FAST / SINKING TOO FAST" (yellow) message on touchdown, and the crash message names the reason ("CRASHED: GEAR NOT DOWN", "BAD ANGLE"). While the gear is out, vertical speed (V/S) shows under the gear light; on the runway it says GROUND.
 
 When on approach to a friendly runway:
 - Glide-slope guide (target lines or rings onto the runway)
 - Speed indicator turns green when slow enough to land
 - Repair zone highlighted on the ground
 
-**Prototype (debug HUD, `GlideSlope` + `Airfield.GetApproach`):** the guide shows while the plane is **on approach**, not only once the gear is locked: the gear only locks ~30 m up, too late to line up. On approach means within 3 km of the aim point (or over the runway past it), inside a 30° cone widening from the runway edges, heading within 60° of the runway direction, and no more than 150 m above the glide path (so a high overflight or the air spawn doesn't trigger it).
+**Built (`FlightHUD`, `GlideSlope` + `Airfield.GetApproach`):** the guide shows while the plane is **on approach**, not only once the gear is locked: the gear only locks ~30 m up, too late to line up. On approach means within 3 km of the aim point (or over the runway past it), inside a 30° cone widening from the runway edges, heading within 60° of the runway direction, and no more than 150 m above the glide path (so a high overflight or the air spawn doesn't trigger it).
 - **Glide path:** 3° down to an aim point 60 m past the threshold (per airfield, on the `Airfield` component). On-path tolerance is ±6 m at the aim point, growing 2.5 m per 100 m out.
 - **Rings:** the next six glide-path rings ahead, every 150 m, standing across the approach. Green while on the path, yellow when off it.
 - **Aim bar:** a green dotted bar across the runway at the aim point, labeled AIM.
 - **Repair zone:** a pulsing yellow outline labeled REPAIR on the approach and during the rollout, until the repair starts.
-- **ILS box** right of the crosshair: the dot is where the path is (dot low = you're high, dot left = you're right of the centerline), the inner square is the tolerance. Under it: ON GLIDE PATH / HIGH 40 m / LOW 12 m / FLY LEFT, the distance to the aim point, and SPEED OK or SLOW DOWN against the class's max touchdown speed.
+- **ILS panel** (glass) right of the crosshair: the dot is where the path is (dot low = you're high, dot left = you're right of the centerline), the inner square is the tolerance. Under it: ON GLIDE PATH / HIGH 40 m / LOW 12 m / FLY LEFT, the distance to the aim point, and SPEED OK or SLOW DOWN against the class's max touchdown speed.
 - **Speed indicator:** the SPD readout turns green at or below the max touchdown speed, yellow above it, while on approach or with the gear out. V/S turns green below the bounce sink rate, yellow for a bounce, red for a crash.
 
 ## Damage Feedback

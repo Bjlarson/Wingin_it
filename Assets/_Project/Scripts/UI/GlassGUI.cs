@@ -21,6 +21,8 @@ namespace WingingIt.UI
         public static readonly Color Dim = new(0f, 0f, 0f, 0.45f);
 
         public GUIStyle Title, Huge, Item, Hint, BodyText, Numeral;
+        /// <summary>Multiplies the alpha of everything drawn: 0..1, for fading a whole panel in.</summary>
+        public float Opacity = 1f;
         Texture2D _white, _ramp;
         Font _din, _inter;
         readonly Dictionary<int, Texture2D> _glass = new();
@@ -64,7 +66,7 @@ namespace WingingIt.UI
                 RoundStroke(Inflate(r, 1f + i * 4.5f, 0f), Radius + i * 4.5f, 4.5f, Alpha(Glow, glow * k * 0.55f));
             }
             var c = GUI.color;
-            GUI.color = Color.white;
+            GUI.color = Faded(Color.white);
             GUI.DrawTexture(r, GlassTexture(Mathf.RoundToInt(r.width), Mathf.RoundToInt(r.height)));
             GUI.color = c;
         }
@@ -90,7 +92,7 @@ namespace WingingIt.UI
         public void Lit(Rect r, float strength, bool rail)
         {
             var c = GUI.color;
-            GUI.color = new Color(1f, 1f, 1f, 0.11f * strength);
+            GUI.color = Faded(new Color(1f, 1f, 1f, 0.11f * strength));
             GUI.DrawTexture(r, _ramp);
             GUI.color = c;
             if (rail)
@@ -115,7 +117,7 @@ namespace WingingIt.UI
         public void Rule(Rect r)
         {
             var c = GUI.color;
-            GUI.color = new Color(1f, 1f, 1f, 0.28f);
+            GUI.color = Faded(new Color(1f, 1f, 1f, 0.28f));
             GUI.DrawTexture(r, _ramp);
             GUI.color = c;
         }
@@ -163,7 +165,7 @@ namespace WingingIt.UI
                 _ => r.x,
             };
             var c = GUI.color;
-            GUI.color = color;
+            GUI.color = Faded(color);
             int oldSize = style.fontSize;
             style.fontSize = size;
             foreach (char ch in text)
@@ -196,19 +198,22 @@ namespace WingingIt.UI
 
         public static Color Alpha(Color c, float a) => new(c.r, c.g, c.b, a);
 
+        /// <summary><paramref name="c"/> with <see cref="Opacity"/> applied, for raw GUI draws.</summary>
+        public Color Faded(Color c) => Opacity >= 1f ? c : new Color(c.r, c.g, c.b, c.a * Opacity);
+
         public void Fill(Rect r, Color color)
         {
             var c = GUI.color;
-            GUI.color = color;
+            GUI.color = Faded(color);
             GUI.DrawTexture(r, _white);
             GUI.color = c;
         }
 
         public void RoundFill(Rect r, float radius, Color color) =>
-            GUI.DrawTexture(r, _white, ScaleMode.StretchToFill, true, 0f, color, Vector4.zero, new Vector4(radius, radius, radius, radius));
+            GUI.DrawTexture(r, _white, ScaleMode.StretchToFill, true, 0f, Faded(color), Vector4.zero, new Vector4(radius, radius, radius, radius));
 
         public void RoundStroke(Rect r, float radius, float thickness, Color color) =>
-            GUI.DrawTexture(r, _white, ScaleMode.StretchToFill, true, 0f, color, new Vector4(thickness, thickness, thickness, thickness),
+            GUI.DrawTexture(r, _white, ScaleMode.StretchToFill, true, 0f, Faded(color), new Vector4(thickness, thickness, thickness, thickness),
                 new Vector4(radius, radius, radius, radius));
 
         // ---------- Setup ----------

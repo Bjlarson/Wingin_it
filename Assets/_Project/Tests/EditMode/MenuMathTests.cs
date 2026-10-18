@@ -30,6 +30,15 @@ namespace WingingIt.Tests
         }
 
         [Test]
+        public void PanelFade_RisesOverTheFadeTime()
+        {
+            Assert.AreEqual(0f, MenuMath.PanelFade(0f));
+            Assert.AreEqual(0.5f, MenuMath.PanelFade(MenuMath.PanelFadeTime / 2f), 1e-5f);
+            Assert.AreEqual(1f, MenuMath.PanelFade(MenuMath.PanelFadeTime));
+            Assert.AreEqual(1f, MenuMath.PanelFade(10f));
+        }
+
+        [Test]
         public void Fraction_IsTheSliderPosition()
         {
             Assert.AreEqual(0.5f, MenuMath.Fraction(65f, 50f, 80f), 1e-5f);

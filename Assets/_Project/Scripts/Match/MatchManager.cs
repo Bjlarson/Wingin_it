@@ -355,11 +355,29 @@ namespace WingingIt.Match
                 ApplyPhase();
         }
 
-        /// <summary>Class select → menu (the game mode screen).</summary>
+        /// <summary>Class select → menu (the game mode screen). The hangar shows the class picked last again.</summary>
         public void BackToMenu()
         {
-            if (_clock.BackToMenu())
-                ApplyPhase();
+            if (!_clock.BackToMenu())
+                return;
+            if (_parked)
+                ParkInHangar();
+            ApplyPhase();
+        }
+
+        /// <summary>
+        /// Class select: parks <see cref="Classes"/>[<paramref name="index"/>] in the hangar in place of the plane there,
+        /// so the highlighted card is seen in the world. Nothing is picked until <see cref="SelectClass"/>.
+        /// </summary>
+        public void PreviewClass(int index)
+        {
+            if (_dismissed || !_parked || _clock.Phase != MatchPhase.ClassSelect || !IsClass(index) || player.Stats == classes[index])
+                return;
+            var spot = HangarSpot;
+            if (spot == null)
+                return;
+            player.SetStats(classes[index]);
+            player.SpawnOnGround(spot.position, spot.rotation);
         }
 
         /// <summary>

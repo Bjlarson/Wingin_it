@@ -69,12 +69,7 @@ namespace WingingIt.UI
             if (match == null || match.IsDismissed)
                 return;
             _nav.Read();
-            var screen = ScreenKey();
-            if (!Equals(screen, _screen))
-            {
-                _screen = screen;
-                _shownAt = Time.unscaledTime;
-            }
+            TrackScreen();
 
             if (_settingsOpen && match.Phase != MatchPhase.Menu && !match.MenuOpen)
                 _settingsOpen = false; // time ran out with Settings open over the match
@@ -97,6 +92,17 @@ namespace WingingIt.UI
 
         /// <summary>What's on screen, to re-run the open glow when it changes.</summary>
         object ScreenKey() => (match.Phase, _front, _settingsOpen, match.MenuOpen, match.Picker);
+
+        /// <summary>Notes when the screen changes, for the open glow and the fade-in. Checked in OnGUI too, so a screen
+        /// opened by input this frame starts faded out rather than flashing in for a frame.</summary>
+        void TrackScreen()
+        {
+            var screen = ScreenKey();
+            if (Equals(screen, _screen))
+                return;
+            _screen = screen;
+            _shownAt = Time.unscaledTime;
+        }
 
         void MenuInput()
         {
@@ -176,6 +182,7 @@ namespace WingingIt.UI
                 _highlight = match.SelectedClass;
             if (_nav.Left) _highlight = MenuMath.Step(_highlight, -1, n);
             if (_nav.Right) _highlight = MenuMath.Step(_highlight, 1, n);
+            match.PreviewClass(_highlight); // the highlighted plane waits in the hangar
             if (_nav.Back)
             {
                 _front = Front.GameMode;
@@ -320,9 +327,12 @@ namespace WingingIt.UI
             if (match == null || match.IsDismissed)
                 return;
             _g.EnsureStyles();
+            TrackScreen();
             float scale = Screen.height / ReferenceHeight;
             GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
             float width = Screen.width / scale;
+            // A new screen fades in (the backdrop, score bar and menu button stay put; IMGUI can't keep the old one up).
+            _g.Opacity = MenuMath.PanelFade(Time.unscaledTime - _shownAt);
 
             switch (match.Phase)
             {
@@ -343,7 +353,9 @@ namespace WingingIt.UI
                         DrawPicker(width);
                     else if (match.CanChangeClassAtAirfield && !match.MenuOpen)
                         DrawSwapPrompt(width);
+                    _g.Opacity = 1f;
                     DrawScoreBar(width);
+                    _g.Opacity = MenuMath.PanelFade(Time.unscaledTime - _shownAt);
                     if (match.MenuOpen)
                     {
                         if (_settingsOpen)
@@ -352,10 +364,23 @@ namespace WingingIt.UI
                             DrawInMatchMenu(width);
                     }
                     else if (ShowMenuButton)
+                    {
+                        _g.Opacity = 1f;
                         DrawMenuButton(width);
+                    }
                     break;
                 case MatchPhase.Ended: DrawScoreboard(width); break;
             }
+            _g.Opacity = 1f;
+        }
+
+        /// <summary>The dark wash behind a screen, at full strength while the screen itself fades in.</summary>
+        void Backdrop(float width)
+        {
+            float fade = _g.Opacity;
+            _g.Opacity = 1f;
+            _g.Fill(new Rect(0f, 0f, width, ReferenceHeight), Dim);
+            _g.Opacity = fade;
         }
 
         /// <summary>Outer glow: 14% when a screen opens, settling to 7% over 180 ms.</summary>
@@ -384,7 +409,7 @@ namespace WingingIt.UI
         void DrawSettings(float width, bool dim)
         {
             if (dim)
-                _g.Fill(new Rect(0f, 0f, width, ReferenceHeight), Dim);
+                Backdrop(width);
             if (_settings.Draw(width, ReferenceHeight, _nav, OpenGlow()))
                 CloseSettings();
         }
@@ -475,7 +500,7 @@ namespace WingingIt.UI
                 _g.Fill(new Rect(card.x + 28f, head.yMax + 8f, card.width - 56f, 1f), Alpha(Color.white, 0.14f));
 
                 DrawModeSketch(new Rect(card.x + 28f, head.yMax + 24f, card.width - 56f, 120f));
-                GUI.color = Body;
+                GUI.color = _g.Faded(Body);
                 GUI.Label(new Rect(card.x + 28f, head.yMax + 158f, card.width - 56f, 96f), mode.Pitch, _g.BodyText);
                 GUI.color = Color.white;
 
@@ -555,9 +580,12 @@ namespace WingingIt.UI
 
         // ---------- Class select ----------
 
+        /// <summary>Class select's cards: shorter than the in-play picker's, low on the screen, so the highlighted
+        /// plane shows in the hangar above them (no dark wash either).</summary>
+        const float SelectCardH = 420f;
+
         void DrawClassSelect(float width)
         {
-            _g.Fill(new Rect(0f, 0f, width, ReferenceHeight), Dim);
             if (_highlight < 0)
                 _highlight = match.SelectedClass;
             int n = match.Classes.Count;
@@ -567,11 +595,12 @@ namespace WingingIt.UI
             float left = (width - cardsW * s) / 2f;
             GUI.matrix = old * Matrix4x4.TRS(new Vector3(left, 0f, 0f), Quaternion.identity, new Vector3(s, s, 1f));
 
-            _g.Shadowed(new Rect(0f, 110f / s, cardsW, 60f), "CHOOSE YOUR PLANE", _g.Title, 8f, TextAnchor.MiddleCenter, Color.white);
-            int picked = ClassCards(0f, 230f / s, "FLY", _highlight, true);
+            _g.Shadowed(new Rect(0f, 40f / s, cardsW, 60f), "CHOOSE YOUR PLANE", _g.Title, 8f, TextAnchor.MiddleCenter, Color.white);
+            float top = (ReferenceHeight - 140f) / s - SelectCardH; // the bottom edge stays put as the cards shrink
+            int picked = ClassCards(0f, top, SelectCardH, "FLY", _highlight, true);
             if (picked >= 0)
                 match.SelectClass(picked);
-            if (BackButton(new Rect(cardsW / 2f - 130f, 230f / s + CardH + 36f, 260f, 56f)))
+            if (BackButton(new Rect(cardsW / 2f - 130f, top + SelectCardH + 18f, 260f, 56f)))
             {
                 _front = Front.GameMode;
                 match.BackToMenu();
@@ -586,7 +615,7 @@ namespace WingingIt.UI
         /// </summary>
         void DrawPicker(float width)
         {
-            _g.Fill(new Rect(0f, 0f, width, ReferenceHeight), Dim);
+            Backdrop(width);
             bool respawn = match.Picker == ClassPicker.Respawn;
             string title = respawn ? $"RESPAWN IN {Mathf.CeilToInt(match.RespawnTimeLeft)}" : "CHANGE PLANE";
             string hint = respawn ? "1 – 4 OR CLICK TO PICK YOUR NEXT PLANE" : $"AT {match.SwapAirfield?.DisplayName.ToUpperInvariant()}  ·  1 – 4 OR CLICK  ·  ESC OR TAB KEEP THIS ONE";
@@ -594,7 +623,7 @@ namespace WingingIt.UI
             _g.Tracked(new Rect(0f, 176f, width, 24f), hint, _g.Hint, 3.4f, TextAnchor.MiddleCenter, Steel);
             int n = match.Classes.Count;
             float cardsW = n * CardW + (n - 1) * CardGap;
-            int picked = ClassCards((width - cardsW) / 2f, 250f, respawn ? "PICK" : "SWAP", match.SelectedClass, false);
+            int picked = ClassCards((width - cardsW) / 2f, 250f, CardH, respawn ? "PICK" : "SWAP", match.SelectedClass, false);
             if (picked >= 0 && !match.MenuOpen)
                 PickInPlay(picked);
             if (!respawn && !match.MenuOpen && _g.Button(new Rect(width / 2f - 130f, 250f + CardH + 36f, 260f, 56f), "KEEP", "ESC", false, false, false, TextAnchor.MiddleCenter))
@@ -615,7 +644,7 @@ namespace WingingIt.UI
         /// Returns the index whose button was pressed this frame, or -1. With <paramref name="hover"/>, the mouse moves
         /// the highlight.
         /// </summary>
-        int ClassCards(float x0, float top, string button, int selectedIndex, bool hover)
+        int ClassCards(float x0, float top, float height, string button, int selectedIndex, bool hover)
         {
             var classes = match.Classes;
             int n = classes.Count;
@@ -627,7 +656,7 @@ namespace WingingIt.UI
                 var stats = classes[i];
                 if (stats == null)
                     continue;
-                var card = new Rect(x0 + i * (CardW + CardGap), top, CardW, CardH);
+                var card = new Rect(x0 + i * (CardW + CardGap), top, CardW, height);
                 if (hover)
                     HoverFocus(card, i, ref _highlight);
                 bool selected = i == selectedIndex;
@@ -642,7 +671,7 @@ namespace WingingIt.UI
                 _g.Kbd(new Rect(card.xMax - 28f, head.y, 0f, head.height), (i + 1).ToString());
                 _g.Fill(new Rect(card.x + 28f, head.yMax + 8f, card.width - 56f, 1f), Alpha(Color.white, 0.14f));
 
-                GUI.color = Body;
+                GUI.color = _g.Faded(Body);
                 GUI.Label(new Rect(card.x + 28f, head.yMax + 22f, card.width - 56f, 250f), Describe(stats), _g.BodyText);
                 GUI.color = Color.white;
 
@@ -774,7 +803,7 @@ namespace WingingIt.UI
 
         void DrawScoreboard(float width)
         {
-            _g.Fill(new Rect(0f, 0f, width, ReferenceHeight), Dim);
+            Backdrop(width);
             var panel = Centered(width, 1100f, 860f, 110f);
             _g.Panel(panel, OpenGlow());
 

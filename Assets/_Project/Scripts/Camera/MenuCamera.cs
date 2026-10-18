@@ -28,10 +28,18 @@ namespace WingingIt.CameraSystem
         [SerializeField] float outsideHeight = 5.5f;
         [SerializeField] float pullBackTime = 1.6f;
 
+        [Header("Class select")]
+        [Tooltip("Closer in for class select, so the highlighted plane reads above the cards.")]
+        [SerializeField] float selectDistance = 26f;
+        [Tooltip("Looks this far lower, putting the plane in the top half of the screen.")]
+        [SerializeField] float selectLookDrop = 8f;
+        [SerializeField] float selectEaseTime = 0.5f;
+
         CinemachineBrain _brain;
         float _blend;       // 0 = orbiting inside, 1 = outside
         float _blendTarget; // where _blend is heading
         float _orbitAngle;  // degrees from the plane's nose, around it
+        float _select;      // 0 = outside framing, 1 = class select framing
         bool _driving;
 
         public bool IsPulledBack => _blendTarget > 0.5f;
@@ -86,11 +94,14 @@ namespace WingingIt.CameraSystem
             float angle = Mathf.LerpAngle(_orbitAngle, 0f, swing);
             float radius = Mathf.Lerp(orbitRadius, outsideDistance, outward);
             float height = Mathf.Lerp(orbitHeight, outsideHeight, outward);
+            _select = Mathf.MoveTowards(_select, match.Phase == MatchPhase.ClassSelect ? 1f : 0f, dt / Mathf.Max(0.01f, selectEaseTime));
+            float select = Smooth(_select);
+            radius = Mathf.Lerp(radius, selectDistance, select);
 
             Vector3 pivot = match.Player != null ? match.Player.Position : spot.position;
             Vector3 dir = Quaternion.AngleAxis(angle, Vector3.up) * Vector3.ProjectOnPlane(spot.forward, Vector3.up).normalized;
             Vector3 eye = pivot + dir * radius + Vector3.up * height;
-            Vector3 look = pivot + Vector3.up * Mathf.Lerp(1.2f, 2.5f, outward);
+            Vector3 look = pivot + Vector3.up * (Mathf.Lerp(1.2f, 2.5f, outward) - selectLookDrop * select);
             view.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye, Vector3.up));
             view.fieldOfView = fieldOfView;
         }

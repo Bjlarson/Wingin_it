@@ -74,6 +74,8 @@ namespace WingingIt.Settings
         public float damageEffects = 1f;
         public bool reduceFlashing;
         public TeamColorMode teamColors = TeamColorMode.Default;
+        /// <summary>The minimap turns with the plane (heading up) instead of keeping north up.</summary>
+        public bool minimapHeadingUp;
         /// <summary>Dev builds only: the F1 help, debug overlay and dev keys.</summary>
         public bool devTools = true;
 
@@ -209,6 +211,7 @@ namespace WingingIt.Settings
                         s.damageEffects = d.damageEffects;
                         s.reduceFlashing = d.reduceFlashing;
                         s.teamColors = d.teamColors;
+                        s.minimapHeadingUp = d.minimapHeadingUp;
                         s.devTools = d.devTools;
                         break;
                 }

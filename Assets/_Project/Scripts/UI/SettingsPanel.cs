@@ -308,6 +308,7 @@ namespace WingingIt.UI
                     rows.Add(Percent("DAMAGE SCREEN EFFECTS", () => D.damageEffects, v => S.Set(s => s.damageEffects = v)));
                     rows.Add(Toggle("REDUCE FLASHING", () => D.reduceFlashing, v => S.Set(s => s.reduceFlashing = v)));
                     rows.Add(Choice("TEAM COLORS", new[] { "DEFAULT", "HIGH CONTRAST" }, () => (int)D.teamColors, i => S.Set(s => s.teamColors = (TeamColorMode)i)));
+                    rows.Add(Choice("MINIMAP", new[] { "NORTH UP", "HEADING UP" }, () => D.minimapHeadingUp ? 1 : 0, i => S.Set(s => s.minimapHeadingUp = i == 1)));
                     if (Debug.isDebugBuild)
                         rows.Add(Toggle("DEVELOPER TOOLS", () => D.devTools, v => S.Set(s => s.devTools = v)));
                     break;
@@ -432,7 +433,7 @@ namespace WingingIt.UI
                 string kb = action.GetBindingDisplayString(InputBinding.MaskByGroup("Keyboard&Mouse"));
                 string pad = action.GetBindingDisplayString(InputBinding.MaskByGroup("Gamepad"));
                 _g.Tracked(new Rect(x + 16f, y, w * 0.36f - 16f, h), Nice(action.name), _g.Hint, 1.6f, TextAnchor.MiddleLeft, White);
-                GUI.color = Body;
+                GUI.color = _g.Faded(Body);
                 GUI.Label(new Rect(x + w * 0.36f, y + 6f, w * 0.38f - 12f, h), Short(kb), _g.BodyText);
                 GUI.Label(new Rect(x + w * 0.74f, y + 6f, w * 0.26f, h), Short(pad), _g.BodyText);
                 GUI.color = Color.white;
