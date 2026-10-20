@@ -112,6 +112,7 @@ namespace WingingIt.UI
         // is up (dead), and the kill feed should still have the kills from that time.
         void Awake()
         {
+            useGUILayout = false; // no GUILayout here: skips IMGUI's layout pass
             _feedback = GetComponent<DamageFeedback>();
             if (plane != null)
                 plane.TouchedDown += OnTouchedDown;
@@ -123,7 +124,10 @@ namespace WingingIt.UI
             if (guns != null)
                 guns.HitPlane += OnHitPlane;
             if (rockets != null)
+            {
                 rockets.HitPlane += OnRocketHit;
+                rockets.HitGroundTarget += OnRocketHitGround;
+            }
             if (missiles != null)
                 missiles.HitPlane += OnMissileHit;
             if (bombs != null)
@@ -138,12 +142,7 @@ namespace WingingIt.UI
 
         void Start()
         {
-            // The match makes its score in Awake; by the time the HUD first shows (in play) it's there.
-            if (match != null && match.Score != null)
-            {
-                _score = match.Score;
-                _score.Awarded += OnAwarded;
-            }
+            FollowScore();
             RenderMap();
         }
 
@@ -159,7 +158,10 @@ namespace WingingIt.UI
             if (guns != null)
                 guns.HitPlane -= OnHitPlane;
             if (rockets != null)
+            {
                 rockets.HitPlane -= OnRocketHit;
+                rockets.HitGroundTarget -= OnRocketHitGround;
+            }
             if (missiles != null)
                 missiles.HitPlane -= OnMissileHit;
             if (bombs != null)
@@ -187,8 +189,23 @@ namespace WingingIt.UI
             }
         }
 
+        /// <summary>Listens to the match's score (picking a game mode makes a fresh one).</summary>
+        void FollowScore()
+        {
+            var score = match != null ? match.Score : null;
+            if (score == _score)
+                return;
+            if (_score != null)
+                _score.Awarded -= OnAwarded;
+            _score = score;
+            if (_score != null)
+                _score.Awarded += OnAwarded;
+        }
+
         void LateUpdate()
         {
+            FollowScore();
+            RenderMap(); // again only if a mode's arena moved the boundary
             _mapTurn = GameSettings.Current.Data.minimapHeadingUp && plane != null && plane.IsAlive ? -HudMath.Heading(plane.transform.forward) : 0f;
             if (_mapTurn != 0f && _map != null)
                 TurnMap(_mapTurn);
@@ -201,7 +218,10 @@ namespace WingingIt.UI
         void OnMissileHit(PlaneMissiles _, PlaneHealth target, PartDamageInfo info) => ShowHitMarker(info);
         void OnBombHit(PlaneBombs _, PlaneHealth target, PartDamageInfo info) => ShowHitMarker(info);
 
-        void OnBombHitGround(PlaneBombs _, GroundTarget target, float damage)
+        void OnRocketHitGround(PlaneRockets _, GroundTarget target, float damage) => ShowGroundHitMarker(target);
+        void OnBombHitGround(PlaneBombs _, GroundTarget target, float damage) => ShowGroundHitMarker(target);
+
+        void ShowGroundHitMarker(GroundTarget target)
         {
             _lastHitTime = Time.time;
             _lastHitDestroyedPart = target.IsDestroyed;
@@ -289,6 +309,9 @@ namespace WingingIt.UI
         {
             if (plane == null)
                 return;
+            // Only draws: every touch or mouse event would otherwise redraw the whole thing once more this frame.
+            if (Event.current.type != EventType.Repaint)
+                return;
             _g.EnsureStyles();
             EnsureArrow();
             // HUD scale: a bigger scale is a smaller virtual screen, so everything anchored to its edges stays put.
@@ -307,9 +330,13 @@ namespace WingingIt.UI
             DrawCrosshair(scale);
             DrawHomeMarker(scale, width);
             DrawMissileWarning(scale, width);
-            DrawPopups(width);
+            var widgets = match != null && !match.IsDismissed && match.Mode != null ? match.Mode.Widgets : MatchWidgets.All;
+            if ((widgets & MatchWidgets.ScorePopups) != 0)
+                DrawPopups(width);
             DrawMinimap();
-            DrawKillFeed(width);
+            DrawBanners(scale, width);
+            if ((widgets & MatchWidgets.KillFeed) != 0)
+                DrawKillFeed(width);
             DrawCluster(width);
             DrawCenterWarning(width);
             DrawStatusToast(width);
@@ -769,14 +796,24 @@ namespace WingingIt.UI
         /// <summary>
         /// Photographs the level once from straight above, north up, out to the flight boundary: terrain, sea, city and
         /// airfields, without clouds, fog or planes. Needs a <see cref="FlightBoundary"/>; without one there's no minimap.
+        /// Taken again when a mode's arena changes the boundary (a smaller map for a smaller arena).
         /// </summary>
         void RenderMap()
         {
             var boundary = FlightBoundary.Active;
-            if (boundary == null || _map != null)
+            if (boundary == null)
                 return;
-            _mapCenter = new Vector2(boundary.transform.position.x, boundary.transform.position.z);
-            _mapRadius = boundary.radius * 1.06f;
+            var center = new Vector2(boundary.transform.position.x, boundary.transform.position.z);
+            float radius = boundary.radius * 1.06f;
+            if (_map != null && center == _mapCenter && Mathf.Approximately(radius, _mapRadius))
+                return;
+            if (_map != null)
+            {
+                _map.Release();
+                Destroy(_map);
+            }
+            _mapCenter = center;
+            _mapRadius = radius;
 
             var hidden = new List<Renderer>();
             foreach (var cloud in FindObjectsByType<CloudBank>(FindObjectsSortMode.None))
@@ -863,6 +900,8 @@ namespace WingingIt.UI
             var home = plane.IsAlive ? Airfield.NearestFriendly(plane.Position, plane.Team) : null;
             foreach (var field in Airfield.All)
             {
+                if (!field.IsOpen)
+                    continue;
                 Vector2 p = HudMath.MapPoint(field.transform.position, _mapCenter, _mapRadius, map, turn);
                 Color c = field.IsNeutral ? Alpha(Body, 0.8f) : TeamColor(field.Team);
                 float s = field.IsHome ? 11f : 9f;
@@ -876,6 +915,7 @@ namespace WingingIt.UI
                 }
             }
 
+            DrawBannerMapMarks(map, turn);
             foreach (var other in PlaneController.All)
             {
                 if (other == plane || !other.IsAlive)

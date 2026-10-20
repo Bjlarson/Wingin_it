@@ -140,6 +140,11 @@ namespace WingingIt.Bots
             fightAreas = new List<Vector3>(areas);
         }
 
+        /// <summary>
+        /// Swaps the points bots patrol (a mode's arena). Bots already flying keep their routes; set it before they join.
+        /// </summary>
+        public void SetFightAreas(IEnumerable<Vector3> areas) => fightAreas = new List<Vector3>(areas);
+
         void Start() => Refresh();
 
         void Update()
@@ -245,6 +250,7 @@ namespace WingingIt.Bots
             go.AddComponent<BotPilot>();
             var brain = go.AddComponent<BotBrain>();
             brain.Difficulty = difficulty;
+            brain.BannerRole = BannerPlan.RoleForSlot(index); // only used while a Capture the Banner match is on
             if (go.TryGetComponent<PlaneRespawner>(out var respawner))
                 respawner.SpawnNow();
             brain.SetPatrol(PatrolRoute(home.transform.position, index));

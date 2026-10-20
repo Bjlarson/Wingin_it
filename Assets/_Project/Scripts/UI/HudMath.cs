@@ -184,6 +184,47 @@ namespace WingingIt.UI
             _ => null,
         };
 
+        /// <summary>Tone of a banner callout: good news for the viewer's team, bad news, or neither.</summary>
+        public enum Tone { Neutral, Good, Bad }
+
+        /// <summary>
+        /// What a banner event says to a pilot on <paramref name="viewerTeam"/>: "WEST HAS YOUR BANNER", "CAPTURED!".
+        /// <paramref name="pilot"/> is the carrier or returner's name ("YOU", a callsign), or null.
+        /// </summary>
+        public static string BannerCallout(BannerEventKind kind, int bannerTeam, int pilotTeam, int viewerTeam, string pilot, string pilotTeamName,
+            out Tone tone)
+        {
+            bool ours = bannerTeam == viewerTeam;
+            tone = Tone.Neutral;
+            switch (kind)
+            {
+                case BannerEventKind.Grabbed:
+                    tone = ours ? Tone.Bad : Tone.Good;
+                    return ours ? $"{pilotTeamName} HAS YOUR BANNER" : pilot == "YOU" ? "YOU HAVE THE BANNER: RUN IT HOME" : $"{pilot} HAS THE BANNER";
+                case BannerEventKind.Dropped:
+                    tone = ours ? Tone.Good : Tone.Bad;
+                    return ours ? "CARRIER DOWN: YOUR BANNER IS LOOSE" : "BANNER CARRIER LOST";
+                case BannerEventKind.ReturnedByDefender:
+                    tone = ours ? Tone.Good : Tone.Bad;
+                    return ours ? "BANNER RETURNED" : "ENEMY RETURNED THEIR BANNER";
+                case BannerEventKind.ReturnedByTimeout:
+                    tone = Tone.Neutral;
+                    return ours ? "YOUR BANNER IS BACK HOME" : "THEIR BANNER IS BACK HOME";
+                case BannerEventKind.Captured:
+                    tone = pilotTeam == viewerTeam ? Tone.Good : Tone.Bad;
+                    return pilotTeam == viewerTeam ? "CAPTURED!" : $"{pilotTeamName} CAPTURED YOUR BANNER";
+            }
+            return null;
+        }
+
+        /// <summary>One banner's state for the top bar: "HOME", "TAKEN BY EAST FIGHTER 2", "DROPPED  12 S".</summary>
+        public static string BannerStatus(BannerState state, string carrier, float returnLeft) => state switch
+        {
+            BannerState.Carried => $"TAKEN BY {carrier}",
+            BannerState.Dropped => $"DROPPED  {Mathf.CeilToInt(Mathf.Max(0f, returnLeft))} S",
+            _ => "HOME",
+        };
+
         /// <summary>A distance for a marker: metres up close, then kilometres to one decimal.</summary>
         public static string Distance(float metres) => metres < 1000f ? $"{metres:0} M" : $"{metres / 1000f:0.0} KM";
 

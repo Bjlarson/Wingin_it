@@ -37,16 +37,34 @@ namespace WingingIt.Tests
         }
 
         [Test]
-        public void HasTwoHomeAirfields_AndANeutralOne()
+        public void HasTwoHomeAirfields_AndThreeNeutralOnes()
         {
             var fields = Airfield.All;
-            Assert.AreEqual(3, fields.Count);
+            Assert.AreEqual(5, fields.Count);
+            Assert.AreEqual(3, fields.Count(f => f.IsNeutral && !f.IsHome), "Central plus the south pair");
             Assert.IsTrue(fields.Any(f => f.IsHome && f.Team == 0), "no team 0 home airfield");
             Assert.IsTrue(fields.Any(f => f.IsHome && f.Team == 1), "no team 1 home airfield");
             Assert.IsTrue(fields.Any(f => f.IsNeutral && !f.IsHome), "no neutral airfield");
             Assert.AreEqual(0, _player.Team);
             var home = Airfield.NearestFriendly(_player.transform.position, _player.Team);
             Assert.IsTrue(home != null && home.IsHome && home.Team == 0, "the player doesn't start over its home airfield");
+        }
+
+        [Test]
+        public void EachHomeField_HasABannerStand_PastTheFarEndOfItsRunway()
+        {
+            Assert.AreEqual(2, BannerStand.All.Count);
+            foreach (var home in Airfield.All.Where(f => f.IsHome))
+            {
+                var stand = BannerStand.Of(home.Team);
+                Assert.IsNotNull(stand, $"team {home.Team} has no banner stand");
+                Vector3 local = home.transform.InverseTransformPoint(stand.Position);
+                Assert.Greater(local.z, home.RunwaySize.y * 0.5f, "the stand isn't past the far end of the runway");
+                Assert.Less(Mathf.Abs(local.x), 1f, "the stand isn't in line with the runway");
+                Assert.IsNotNull(stand.FlagMount);
+                Assert.Greater(stand.FlagMount.position.y - stand.Position.y, stand.ZoneHeight, "the pole is shorter than the grab zone");
+            }
+            Assert.IsNotNull(BannerStand.PositionsByTeam(2));
         }
 
         [Test]
@@ -212,6 +230,27 @@ namespace WingingIt.Tests
                     Assert.IsTrue(guide.OnPath, $"{field.DisplayName} {lane.DisplayName}: the final fix isn't on the glide path");
                 }
             }
+        }
+
+        /// <summary>Central lands from either end: one lane into each, ending on that end's glide path, the same length.</summary>
+        [Test]
+        public void Central_IsTwoWay_WithOneLaneIntoEachEnd()
+        {
+            var central = Airfield.All.Single(f => f.DisplayName == "Central Airfield");
+            Assert.IsTrue(central.IsTwoWay);
+            var lanes = ApproachLane.Into(central);
+            Assert.AreEqual(2, lanes.Count);
+            Assert.AreEqual(lanes[0].Length, lanes[1].Length, lanes[0].Length * 0.02f, "the two ends' lanes differ in length");
+            var ends = new HashSet<bool>();
+            foreach (var lane in lanes)
+            {
+                Vector3 heading = FinalLeg(lane) * 60f;
+                bool reverse = central.ApproachesFromReverseEnd(lane.FinalFix, heading);
+                ends.Add(reverse);
+                Assert.IsTrue(central.GetApproach(lane.FinalFix, heading).OnPath, $"{lane.DisplayName}: the final fix isn't on the glide path");
+                Assert.Less(Vector3.Distance(lane.FinalFix, central.GlidePathPoint(600f, reverse)), 0.1f, $"{lane.DisplayName}: wrong end");
+            }
+            Assert.AreEqual(2, ends.Count, "both lanes go to the same end");
         }
 
         /// <summary>Every leg of every lane is open air: no terrain, building or landmark in the way, nor close below.</summary>
@@ -531,6 +570,54 @@ namespace WingingIt.Tests
                 Time.timeScale = 1f;
             }
             Assert.IsEmpty(failures, string.Join("\n", failures));
+        }
+
+        // ------------------------------------------------------------------ nature (Art/Models/Nature)
+
+        /// <summary>
+        /// The nature pack covers the island as terrain trees, but nothing grows on or off the ends of a runway, where
+        /// planes come in low, or in the city.
+        /// </summary>
+        [Test]
+        public void Nature_GrowsAcrossTheIsland_ButNotOnRunwaysOrInTheCity()
+        {
+            var terrain = Terrain.activeTerrain;
+            var data = terrain.terrainData;
+            Assert.Greater(data.treeInstanceCount, 1000, "the island is bare");
+            Assert.Greater(data.treePrototypes.Length, 15, "too few kinds of tree, bush and rock");
+            var spire = Landmark.All.First(l => l.Region == MapRegion.City);
+            foreach (var tree in data.treeInstances)
+            {
+                Vector3 p = terrain.transform.position + Vector3.Scale(tree.position, data.size);
+                Assert.Greater(FlatDistance(p, spire.transform.position), 350f, $"a {data.treePrototypes[tree.prototypeIndex].prefab.name} grows downtown at {p}");
+                foreach (var field in Airfield.All)
+                {
+                    Vector3 local = field.transform.InverseTransformPoint(p);
+                    Assert.IsFalse(Mathf.Abs(local.x) < 120f && Mathf.Abs(local.z) < field.RunwaySize.y * 0.5f + 300f,
+                        $"a {data.treePrototypes[tree.prototypeIndex].prefab.name} grows in line with {field.DisplayName}'s runway at {p}");
+                }
+            }
+        }
+
+        /// <summary>The desert mesas and Lighthouse Rock's islet are meshes you can crash into, flat on top.</summary>
+        [Test]
+        public void Mesas_AndTheIslet_AreSolidMeshes()
+        {
+            var mesas = GameObject.Find("Mesas");
+            Assert.IsNotNull(mesas, "no mesas");
+            Assert.AreEqual(3, mesas.transform.childCount);
+            foreach (Transform mesa in mesas.transform)
+            {
+                Assert.IsTrue(Physics.Raycast(mesa.position + Vector3.up * 1000f, Vector3.down, out var hit, 2000f), $"{mesa.name}: nothing solid");
+                Assert.AreEqual(mesa, hit.collider.transform, $"{mesa.name}: hit {hit.collider.name} instead");
+                Assert.Greater(hit.point.y - mesa.position.y, 80f, $"{mesa.name} is too low");
+            }
+
+            var lighthouse = Landmark.All.First(l => l.Region == MapRegion.Ocean);
+            Vector3 lawn = lighthouse.transform.position + new Vector3(-30f, 200f, -20f);
+            Assert.IsTrue(Physics.Raycast(lawn, Vector3.down, out var top, 400f), "nothing under the islet's top");
+            Assert.AreEqual("Islet", top.collider.name);
+            Assert.AreEqual(lighthouse.transform.position.y, top.point.y, 1f, "the islet's top isn't level with the lighthouse's foot");
         }
 
         [UnityTest]

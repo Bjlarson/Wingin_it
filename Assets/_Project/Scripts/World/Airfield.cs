@@ -6,7 +6,8 @@ namespace WingingIt.World
     /// <summary>
     /// A runway with a repair zone and spawn points. The runway runs along the local Z axis, centered on this
     /// transform, and planes take off and land heading +Z. Home airfields belong to a team; neutral ones
-    /// (<see cref="Neutral"/>) belong to nobody until captured.
+    /// (<see cref="Neutral"/>) belong to nobody until captured. A match mode's arena can close a field for the match
+    /// (<see cref="IsOpen"/>): it stays as scenery, but nobody repairs or spawns there, its AA is off and the HUD drops it.
     /// </summary>
     public class Airfield : MonoBehaviour
     {
@@ -47,6 +48,13 @@ namespace WingingIt.World
         [SerializeField] Transform hangarSpot;
         [Tooltip("The landing approach the landing-assist guide shows.")]
         [SerializeField] GlideSlope glideSlope = new();
+        [Tooltip("Landable from either end: the glide path, guide and lanes mirror at the far end. Home fields are one-way.")]
+        [SerializeField] bool twoWay;
+
+        /// <summary>In use this match. A closed field (<see cref="SetOpen"/>) is only scenery.</summary>
+        public bool IsOpen { get; private set; } = true;
+        /// <summary>Its control tower is bombed out (<see cref="FieldDefenses"/>): no repair and no AA until it rebuilds.</summary>
+        public bool TowerDown { get; private set; }
 
         public string DisplayName => displayName;
         public int Team => team;
@@ -58,6 +66,7 @@ namespace WingingIt.World
         public RepairZone RepairZone => repairZone;
         public Transform HangarSpot => hangarSpot;
         public GlideSlope GlideSlope => glideSlope;
+        public bool IsTwoWay => twoWay;
         /// <summary>The landing and takeoff heading.</summary>
         public Vector3 RunwayDirection => transform.forward;
 
@@ -75,7 +84,22 @@ namespace WingingIt.World
             repairZone = zone;
         }
 
+        public void SetTwoWay(bool value) => twoWay = value;
+
         public void SetHangarSpot(Transform spot) => hangarSpot = spot;
+
+        /// <summary>Opens or closes the field for the match (see <see cref="IsOpen"/>).</summary>
+        public void SetOpen(bool open) => IsOpen = open;
+
+        /// <summary>Hands the field to <paramref name="owner"/> (or <see cref="Neutral"/>): a capture. Home fields can't change hands.</summary>
+        public void SetTeam(int owner)
+        {
+            if (!isHome)
+                team = owner;
+        }
+
+        /// <summary>Set by the field's <see cref="FieldDefenses"/> while its tower is a wreck.</summary>
+        public void SetTowerDown(bool down) => TowerDown = down;
 
         /// <summary><paramref name="team"/>'s home airfield, or null.</summary>
         public static Airfield HomeOf(int team)
@@ -116,15 +140,49 @@ namespace WingingIt.World
             return new Pose(spawn.position + offset, spawn.rotation);
         }
 
-        /// <summary>Where a plane at <paramref name="position"/> flying at <paramref name="velocity"/> is relative to this runway's glide path.</summary>
+        /// <summary>
+        /// Which end a plane at <paramref name="position"/> flying at <paramref name="velocity"/> is landing at: false =
+        /// the normal end (heading <see cref="RunwayDirection"/>), true = the far end of a <see cref="IsTwoWay"/> runway
+        /// (heading the other way). Decided by heading, or by which end it is nearer when nearly stopped. Always false
+        /// on a one-way field.
+        /// </summary>
+        public bool ApproachesFromReverseEnd(Vector3 position, Vector3 velocity)
+        {
+            if (!twoWay)
+                return false;
+            Vector3 flat = new Vector3(velocity.x, 0f, velocity.z);
+            if (flat.sqrMagnitude > 1f)
+                return Vector3.Dot(flat, RunwayDirection) < 0f;
+            return transform.InverseTransformPoint(position).z > 0f;
+        }
+
+        /// <summary>The landing and takeoff heading at the normal (false) or far (true) end.</summary>
+        public Vector3 RunwayDirectionFor(bool reverseEnd) => reverseEnd ? -RunwayDirection : RunwayDirection;
+
+        /// <summary>Right of the runway looking down it from the normal (false) or far (true) end.</summary>
+        public Vector3 RunwayRightFor(bool reverseEnd) => reverseEnd ? -transform.right : transform.right;
+
+        // Runway-local point or direction as seen from the far end: turned half a circle about the vertical axis.
+        static Vector3 Flip(Vector3 local, bool reverseEnd) => reverseEnd ? new Vector3(-local.x, local.y, -local.z) : local;
+
+        /// <summary>Where a plane at <paramref name="position"/> flying at <paramref name="velocity"/> is relative to this runway's glide path (at the end it is heading for, see <see cref="ApproachesFromReverseEnd"/>).</summary>
         public ApproachGuide GetApproach(Vector3 position, Vector3 velocity) =>
-            glideSlope.Evaluate(transform.InverseTransformPoint(position), transform.InverseTransformDirection(velocity), runwaySize);
+            GetApproach(position, velocity, ApproachesFromReverseEnd(position, velocity));
 
-        /// <summary>The world point on the glide path <paramref name="distance"/> m before the aim point (the aim point itself at 0).</summary>
-        public Vector3 GlidePathPoint(float distance) => transform.TransformPoint(glideSlope.PathPoint(distance, runwaySize.y));
+        /// <summary>The same, judged against the glide path of one chosen end.</summary>
+        public ApproachGuide GetApproach(Vector3 position, Vector3 velocity, bool reverseEnd) =>
+            glideSlope.Evaluate(Flip(transform.InverseTransformPoint(position), reverseEnd),
+                Flip(transform.InverseTransformDirection(velocity), reverseEnd), runwaySize);
 
-        /// <summary>Planes on this team can land here to repair. Neutral airfields serve nobody until captured.</summary>
-        public bool IsFriendlyTo(int planeTeam) => !IsNeutral && team == planeTeam;
+        /// <summary>The world point on the glide path <paramref name="distance"/> m before the aim point (the aim point itself at 0), at the normal end or, with <paramref name="reverseEnd"/>, the far one.</summary>
+        public Vector3 GlidePathPoint(float distance, bool reverseEnd = false) =>
+            transform.TransformPoint(Flip(glideSlope.PathPoint(distance, runwaySize.y), reverseEnd));
+
+        /// <summary>
+        /// Planes on this team can land here to repair. Neutral airfields serve nobody until captured, closed ones and
+        /// ones with their tower down nobody at all.
+        /// </summary>
+        public bool IsFriendlyTo(int planeTeam) => IsOpen && !TowerDown && !IsNeutral && team == planeTeam;
 
         /// <summary>True if <paramref name="position"/> is over the runway and no more than <paramref name="maxHeight"/> above it.</summary>
         public bool IsOverRunway(Vector3 position, float maxHeight = 10f)

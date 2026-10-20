@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.OnScreen;
 using WingingIt.Flight;
 using WingingIt.Input;
 using WingingIt.Settings;
@@ -28,6 +29,12 @@ namespace WingingIt.UI
         [SerializeField] GameObject bombButton;
 
         bool _touchSeen;
+
+        void Awake()
+        {
+            if (player != null && controlsRoot != null)
+                player.TouchStick = controlsRoot.GetComponentInChildren<OnScreenStick>(true);
+        }
 
         void OnEnable()
         {

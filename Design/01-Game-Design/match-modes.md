@@ -1,11 +1,13 @@
 # Match Modes
 
 Status: Draft
-Last updated: 2026-10-17
+Last updated: 2026-10-19
 
 ## Summary
 
 Four core modes use the primary loop (fight + repair). Every mode awards player XP. One party mode uses the secondary "ram" loop.
+
+**Mode prototypes (added 2026-10-19):** before networking, three more modes get built offline against bots to see how they feel: [Capture the Banner](#capture-the-banner-prototype), [Airfield Domination](#airfield-domination-prototype) and [Ram Royale](#ram-royale-prototype). Each is a quick prototype. A playtest then decides which ones ship (see [development plan, Phase 6.5](../development-plan.md#phase-65--mode-prototypes-offline)). Everything in those sections is **proposed** unless it says decided.
 
 ## Free For All
 
@@ -50,6 +52,112 @@ Every point a pilot earns goes to their team's score and their own (personal sco
 
 Assists count toward team score (so focus fire pays a little more than a duel: a kill with two helpers is worth 90). **Revisit after playtests** along with the point values. Every award raises `MatchScore.Awarded` (team, pilot, points, kind, label) for the score popups and kill feed still to come.
 
+## Shared Mode Framework (prototype)
+
+Today `MatchManager` hard-codes Teams. The three prototypes need it split up:
+
+- **Mode rules object:** each mode supplies its win check, scoring, spawn rules, lives, loadout limits, HUD widgets and scoreboard columns. `MatchManager` keeps the phases (menu → class select → countdown → play → end) and asks the mode. Teams becomes the first mode written this way, with no change in behavior.
+- **Game mode cards:** each new mode gets a card in the game mode scroll (`GameModeInfo`), with its own bot difficulty row.
+- **Loadout limits:** a mode can switch weapons off (Ram Royale) or slow a plane down (the banner) through the existing modifier stack and the weapons' `IsEquipped`.
+- **Free-for-all teams:** every pilot on their own team (Ram Royale; later Free For All).
+- **Lives:** unlimited (default) or one life, with spectating after death.
+- **Arena:** a mode can pick its own play area and spawns on the Island (a smaller boundary, extra airfields), instead of a new scene for each mode. Built: see [Arenas](#arenas-built-2026-10-19).
+- **Bots:** each mode gives `BotBrain` its own goals (grab the banner, capture a field, ram a target). The flying and dodging underneath stay the same.
+
+### Framework (built 2026-10-19)
+
+- `MatchMode` (`Scripts/Match/MatchMode.cs`) is the rules object; each `GameModeInfo` card makes a fresh one per match. `MatchManager` runs the phases and asks it the rest.
+- **Scoring:** `RecordKill(score, KillRecord)`, plus `Tick` every frame of play for timed points (fields held, a carried banner).
+- **Winning:** `EarlyWinner` ends the match at once (3 captures, every field held, last plane); `Winner` decides at the whistle; `WinRule` is the scoreboard's footer line.
+- **Lives and spawns:** `CanRespawn` (asked when the respawn timer runs out), `TryGetSpawnPose` (an air ring, an owned field), through `PlaneRespawner.Rules`.
+- **Loadout limits:** `OnSpawned(plane)` after every spawn, where a mode switches weapons off or adds a modifier.
+- **HUD and scoreboard:** `Widgets` (team scores, kill feed, score popups) and `Columns` / `CompareForScoreboard`.
+- **Teams** (`TeamsMode`): kill 50, assist 20, unlimited lives, usual spawns, every widget, K / A / D / SCORE.
+
+### Game mode cards (built 2026-10-19)
+
+- `GameModeInfo.All` has four cards: **Teams**, **Capture the Banner**, **Airfield Domination**, **Ram Royale** (8 v 8 / 5:00, 8 v 8 / 5:00, 8 v 8 / 5:00, 16 FFA / 3:00), each with its pitch and a drawn top-down sketch (`ModeSketch`).
+- **Bot difficulty per mode:** every card has its own BOTS row, remembered between sessions under `WingingIt.<Id>.BotDifficulty` (Teams keeps the old key, so saved picks survive). `MatchManager.DifficultyFor(card)` / `SetDifficulty(card, level)`; `MatchManager.Difficulty` is the played mode's and drives the bots.
+- **In development:** a card with no `Rules` yet is not playable: it shows only in the Editor and development builds, with **IN DEVELOPMENT** in place of PLAY, and `SelectMode` refuses it. Release builds hide it, so players never see a locked card. A mode turns playable by setting its `Rules`.
+
+### Arenas (built 2026-10-19)
+
+A mode plays on the Island **as built** unless the level has an arena for it. The geometry lives in the level, not the mode: a `ModeArena` object in the scene names the mode it's for (`GameModeInfo.Id`; `MatchMode.ArenaId` can point elsewhere), and the match puts it in force when the class is picked (before anyone spawns) and puts the Island back on Dismiss or when the scene goes.
+
+- **Play area:** center, radius, ceiling and edge type. The `FlightBoundary` swaps to it (`UseArea` / `RestoreArea`), the minimap is photographed again for the smaller area, and the buoy ring is laid round the new edge.
+- **Hard edge (new):** no autopilot turn-back. Past the edge the HUD counts down OUTSIDE THE ARENA — GET BACK IN 2.1, and after **3 s** outside the plane is out (`DeathCause.OutOfBounds`, breaks up in mid-air, OUT OF THE ARENA). Kill credit follows the crash rule (the last attacker, if recent). Bots turn back toward the middle on their own when they're heading out and will be within the edge margin in 3 s (`BotState.AvoidEdge`, above everything but terrain). The ceiling still pushes down softly.
+- **Airfields:** each can be **closed** for the match (`Airfield.SetOpen`): still scenery, but nobody repairs or spawns there, its AA is off, and the minimap, nearest-field marker and RETURN TO BASE leave it out (with no field at all, RETURN TO BASE and the alarm don't show). Open fields keep their roles: home (spawn, repair, AA), neutral (nothing until captured). Capturing comes with Airfield Domination.
+- **Spawns:** the usual airfields, or an **air start**: every plane appears on a ring in the air, level and facing the middle, in the free slot furthest from everyone already flying (`ArenaRules.SpreadSlot`), so a field of any size spreads round the whole ring. A mode's own spawn pose still comes first.
+- **Bots:** the arena can give its own patrol points (`BotRoster.SetFightAreas`).
+
+| Mode | Arena |
+|---|---|
+| Teams, Capture the Banner, Airfield Domination | The Island as built (Domination's extra fields and Banner's stands come with those modes) |
+| Ram Royale | **700 m** round Lighthouse Rock (0, -1950), **450 m** ceiling, edge warning 150 m in, **hard edge**; every airfield closed; air start on a **550 m** ring at **220 m**, 16 slots; bots patrol over the lighthouse and four points 350 m round it at 200 m. Its north edge just reaches the south coast |
+
+## Capture the Banner (prototype)
+
+*Working name.* Teams, but the way to win is stealing the enemy's banner and bringing it home.
+
+- **Size / length:** 8v8 with bots, 5 minutes. Island, normal boundary, normal respawns and repairs.
+- **Banner stand:** each home airfield has a tall banner pole off the end of its runway, out past the runway's far end so the grab run isn't straight through all four AA guns. Its grab zone is a cylinder about 40 m across that only counts below about 40 m above the ground.
+- **Grabbing:** fly an enemy pilot through the enemy stand's zone, low. No landing needed. The home AA still shoots, so a grab run is dangerous and needs escorts or a low, fast approach.
+- **Carrying (the drag):** the banner trails on a long cable behind the plane, a big cloth streamer everyone can see. The carrier gets about −25% top speed, −30% climb and acceleration, and **no Boost or Afterburner** (a modifier, removed on drop). Barrel Roll and Armor Shield still work. The carrier shows on every enemy's minimap and HUD the whole time. It's a target, not a sneak.
+- **Dropping:** the banner comes loose only when the carrier is **destroyed** (shot down or crashed). It falls on its cable and lies where it lands (it floats on the sea) for 20 s. An enemy pilot flying low through it grabs it again. A defender flying low through it sends it straight home. If nobody touches it, it returns home after 20 s.
+- **Scoring a capture:** carry the banner low through **your own** stand's zone. A capture is worth **300** team points, plus the normal kill / assist points. **Proposed for a 5-minute match:** your own banner does **not** have to be at home to score, since the classic rule makes stalemates and the match is short. Try the classic rule in a playtest too.
+- **Win:** most captures when time runs out, or **3 captures** ends it at once. Equal captures: the higher team score wins. Then a draw.
+- **Carrier and repairs:** the carrier can't repair while carrying. Landing in a repair zone with the banner does nothing, so a hurt carrier has to choose: run home or get shot down.
+- **HUD:** both banners' state at the top (HOME / TAKEN by X / DROPPED + return timer), a marker on each banner and carrier, a drag icon on the carrier's flight panel, and callouts ("WEST HAS YOUR BANNER", "BANNER RETURNED", "CAPTURED!").
+- **Bots:** split roles. **Runners** (Interceptors and Fighters) take an approach lane in, grab and run home. **Escorts** form up on a friendly carrier. **Defenders** hunt the enemy carrier first and return a dropped banner. Everyone else plays Teams as usual.
+
+## Airfield Domination (prototype)
+
+*Working name.* Control the airfields. Capturing one means **landing on it**, and bombers open up defended fields. It makes players try the Heavy and practice landings.
+
+- **Size / length:** 8v8 with bots, 5 minutes. Island.
+- **Fields:** the two home fields stay as each team's spawn and can't be captured. The prototype has **3 capture fields**: Central plus a new pair of neutral fields placed as mirror images of each other, the same distance from both homes. A **5-field** version adds a second mirrored pair. Try both and keep the one that plays better. Each new field needs 2 approach lanes, and Central's landing direction must be settled first (the decision moves up from Phase 8).
+- **Capturing (landing):** a plane that **lands and stops** inside a field's repair zone starts capturing it: **10 s** for one plane, faster with more (proposed: each extra plane is +50% speed, up to 3). An enemy plane also landed in the zone **contests** it, so progress stops. No invulnerability while capturing: a plane sitting on the runway is a target. Shooting it off the runway is how defenders fight back.
+- **Defended fields (bomber role):** a field a team owns gets **2 light AA guns** and a **control tower**. While the tower stands, enemies capture it **3× slower**. Bombing the tower (a `GroundTarget`; about 2 bomb hits) shuts off that field's AA and repair and lets enemies capture at full speed. It rebuilds after 45 s. Domination AA guns can be destroyed (rockets or bombs) and rebuild after 30 s. Bombs make flipping a field possible, but someone still has to land.
+- **Owned field benefits:** the owning team repairs there (normal invulnerability while the timer runs) and can respawn there. The class / respawn screen gets a spawn-point choice: home or any owned field.
+- **Scoring:** a capture is worth **100** to the team plus 50 to each pilot who helped capture. Each owned field adds **5 points every 2 s**. Kills and assists score as in Teams. Highest score at 5:00 wins, or **holding every capture field for 30 s** wins at once.
+- **HUD:** field letters (A / B / C …) in the owner's color at the top and on the minimap, a capture progress ring when landed in a zone, TOWER DOWN on a bombed field, and callouts ("CENTRAL CAPTURED BY EAST").
+- **Bots:** each team splits between fields by value (neutral / enemy / threatened). A Heavy goes for the tower of a defended enemy field. Capture bots fly an approach lane and land using the existing retreat-to-repair landing code, and others fly cover over the field. Bots on the ground leave if an enemy lands too.
+
+### Capture rules (built 2026-10-19)
+
+Pure rules in `FieldBoard` (`Scripts/Match/DominationRules.cs`); nothing in the Island feeds them yet.
+
+- **Who counts:** a plane parked in a capture field's zone: alive, on its wheels, stopped, not backing up (`FieldBoard.IsParked`). Home fields aren't on the board.
+- **Speed:** 10 s for one plane; each extra plane of the same team adds +50%, counting up to 3 (6.7 s for two, 5 s for three or more). While the owner's control tower stands, 3× slower (30 s alone). A tower on a neutral field changes nothing.
+- **Contested:** planes of two teams parked on the same field: progress holds where it is. When one side leaves, the other picks up where it stopped.
+- **Nobody capturing** (empty, or only the owner's own planes): progress drains back at the one-plane rate. So a defender who lands and sits on their field undoes an enemy's half-capture.
+- **Switching teams:** a team arriving on a field with the other team's progress first undoes it, then builds its own.
+- **Flip:** at 100% the field goes straight to the capturer (no neutral step), and every capturing pilot parked there at that moment is on the capture (for the +50 each).
+- **No perks for capturing:** the board gives the plane nothing, no repair and no invulnerability.
+
+### Field defenses (built 2026-10-19)
+
+`FieldDefenses` on each of the 3 capture fields, made by the Island builder from the airfield prefab's buildings.
+
+- **Control tower:** the tower and its cab are one `GroundTarget`, **300 HP** (2 direct bomb hits), rebuilt **45 s** after it falls. While it's down the field has no AA and no repair (`Airfield.TowerDown`; `IsFriendlyTo` is false, so the RETURN TO BASE marker, bots' retreats and respawns skip it too), and `FieldDefenses.TowerUp` is false for the capture board's 3× slowdown.
+- **Light AA:** of the prefab's four guns, the two on one diagonal stay (the others are removed), on lighter `LightAAGuns` stats (600 m, 3 rounds/s, 1.5 damage, wider spread). Each is a `GroundTarget`, **120 HP** (one bomb, or a few rocket hits: rockets now deal `RocketStats.groundDamage`, 40 at the center), rebuilt after **30 s**. A gun fires only while it's intact, the field is owned and its tower stands. Home fields' four guns are unchanged and can't be destroyed.
+- **Changing hands:** a wreck stays a wreck when a field is captured (`Airfield.SetTeam`) and rebuilds on its own timer for the new owner. Home fields can't change hands.
+- **Dormant outside Domination:** until a match calls `SetActive(true)` nothing can be hit and the AA stays quiet, so Teams and Banner see only scenery. Switching on or off rebuilds everything. Nothing switches it on yet: that arrives with the Domination world (owned-field repair + respawn).
+
+## Ram Royale (prototype)
+
+*Working name.* A party mode: no weapons, planes hitting planes, one life each, last plane standing wins. Replaces the earlier sketch further down.
+
+- **Size / length:** free for all, up to 16 (bots fill), one round of **up to 3 minutes**.
+- **Arena:** a small circle so everyone stays close: proposed **~700 m radius, 50–450 m altitude**, over the open sea south of the island near Lighthouse Rock (few obstacles, and the lighthouse is something to weave around). The boundary here is a **hard edge**: flying past it is out (with a 3 s warning), unlike the soft turn-back in other modes. **Proposed:** in the last minute the circle shrinks to ~250 m.
+- **Start:** everyone **spawns in the air already flying** at cruise, spread on a ring and facing roughly into the middle, after the 3-2-1. No runway, no airfields, no repairs.
+- **Loadout:** **no guns, rockets, missiles or bombs.** Boost stays. Abilities: Barrel Roll (a dodge), Afterburner (a charge) and Armor Shield (a tank) fit, but Repair Aura doesn't (no allies). **Proposed:** keep the class pick, give Support a **Ram Boost** (a short charge with extra ram damage) in place of the aura, and see if the classes feel different.
+- **Ram damage (new):** today a plane that sweeps into another plane just crashes, and the other plane takes nothing. Ram Royale needs a real plane-on-plane rule. Proposed: both planes take damage from the **closing speed** at the contact, to the parts that touched (a clipped wing comes off, a nose-on hit damages the body). The plane that hits **from behind or above** (more of the closing speed is its own) takes only ~30% of it, and a head-on hit hurts both fully, so meeting head-on usually kills both. Heavier classes deal more and take less. A crippled plane keeps flying, and body at 0 is out. The other plane gets kill credit, and a plane that crashes into the sea or the lighthouse within 10 s of a hit credits whoever hit it last (the existing crash credit).
+- **Out:** a destroyed plane becomes a spectator: a follow camera cycling through the survivors, with a list of who's left.
+- **Win:** the last plane flying. If time runs out, the plane with the most body HP left wins, then the most rams. **Scoring** (for XP / coins later): a placement bonus plus points per ram knock-out.
+- **HUD:** planes left (e.g. 7 / 16), a big arrow or marker on the nearest plane, the shrinking-edge warning, and a ram hit flash ("RAMMED X!").
+- **Bots:** a new ram behavior: steer at a **collision intercept point** (not the gun lead point), boost in the last second, and break away from anyone lining up on them. In this mode the existing plane-avoidance reflex only dodges planes that are coming at the bot.
+
 ## King of the Sky
 
 Capture and hold airspace zones.
@@ -66,9 +174,9 @@ Each team has an aircraft carrier at sea. Destroy the enemy carrier to win.
 - Bombs and rockets do bonus damage to carriers.
 - Landing on a moving carrier is harder, which raises the skill ceiling for repairs.
 
-## Ram Royale (Secondary Loop)
+## Ram Royale (Secondary Loop): earlier sketch
 
-*Working name.* Players crash into each other, and the last plane standing wins.
+*Working name.* Players crash into each other, and the last plane standing wins. Superseded by [Ram Royale (prototype)](#ram-royale-prototype).
 
 - No guns, or guns disabled
 - No repairs
@@ -81,9 +189,11 @@ Each team has an aircraft carrier at sea. Destroy the enemy carrier to win.
 |---|---|---|---|
 | Free For All | No | Neutral airfields | Kills |
 | Teams | 2 | Home + captured | Kills + objectives |
+| Capture the Banner | 2 | Home | Steal and carry the banner |
+| Airfield Domination | 2 | Home + owned fields | Land to capture, bomb to open |
 | King of the Sky | 2 | Home | Zone control |
 | Carrier War | 2 | Carrier | Destroy carrier |
-| Ram Royale | No | No | Survival |
+| Ram Royale | No | No | Survival (one life, no weapons) |
 
 ## Open Questions
 
@@ -91,3 +201,8 @@ Each team has an aircraft carrier at sea. Destroy the enemy carrier to win.
 - [x] Match length: ~5 minutes (Ram Royale shorter)
 - [x] First mode: Teams
 - [x] Overtime / tie-breaker rules: none for now; a tie is a draw (2026-10-17)
+- [x] Capture the Banner: does your own banner have to be home to score? → **no** (the proposed rule; drag strength and stand AA still to tune in a playtest).
+- [ ] Capture the Banner, still open: how strong is the drag? Should home AA stay on around the stand?
+- [ ] Airfield Domination: **3 capture fields, decided 2026-10-19** (Central plus South West / South East at (±750, −900), one-way, landing north). Should landing be the only way to capture, or should a low flyover also start a slow capture?
+- [ ] Ram Royale: arena size and whether it shrinks; class pick or one plane for all; ram damage split (rear hit vs head-on).
+- [ ] Which prototype modes ship at launch, which go to Later, and which get cut (decide after the Phase 6.5 playtest).

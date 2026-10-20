@@ -13,6 +13,22 @@ namespace WingingIt.Flight
     /// appear inside itself. In <see cref="SpawnMode.Runway"/> levels a plane with no spawn point also starts
     /// the level on the runway.
     /// </summary>
+    /// <summary>
+    /// Rules a match mode puts on every respawn (see <see cref="PlaneRespawner.Rules"/>): whether a dead plane comes
+    /// back at all (lives), where, and what it may carry once it does (loadout limits).
+    /// </summary>
+    public interface ISpawnRules
+    {
+        /// <summary>False keeps a dead plane out (no lives left). Asked when its respawn timer runs out.</summary>
+        bool CanRespawn(PlaneController plane);
+
+        /// <summary>A spawn pose of the mode's own (an air ring, an owned field); false for the usual one.</summary>
+        bool TryGetSpawnPose(PlaneController plane, Vector3 deathPosition, out Pose pose, out bool onRunway);
+
+        /// <summary>The plane was just put back (respawn or match start): the place to apply loadout limits.</summary>
+        void OnSpawned(PlaneController plane);
+    }
+
     [RequireComponent(typeof(PlaneController))]
     public class PlaneRespawner : MonoBehaviour
     {
@@ -27,6 +43,12 @@ namespace WingingIt.Flight
         const float AirSlotClearance = 25f;
 
         PlaneController _plane;
+
+        /// <summary>The running match mode's spawn rules, or null for the usual ones (free flight, tests).</summary>
+        public static ISpawnRules Rules { get; set; }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetStatics() => Rules = null;
 
         public float RespawnDelay => respawnDelay;
         public float RespawnTimeLeft { get; private set; }
@@ -64,7 +86,8 @@ namespace WingingIt.Flight
                 yield return null;
             }
             RespawnTimeLeft = 0f;
-            SpawnNow();
+            if (Rules == null || Rules.CanRespawn(_plane))
+                SpawnNow();
         }
 
         /// <summary>Spawns the plane right away, where and how <see cref="SpawnPoseFor"/> says.</summary>
@@ -77,12 +100,15 @@ namespace WingingIt.Flight
                 _plane.SpawnOnGround(pose.position, pose.rotation);
             else
                 _plane.Respawn(pose.position, pose.rotation);
+            Rules?.OnSpawned(_plane);
         }
 
         /// <summary>Where the plane will reappear if it dies at <paramref name="deathPosition"/>; <paramref name="onRunway"/> = parked for takeoff.</summary>
         public Pose SpawnPoseFor(Vector3 deathPosition, out bool onRunway)
         {
             onRunway = false;
+            if (Rules != null && Rules.TryGetSpawnPose(_plane, deathPosition, out var modePose, out onRunway))
+                return modePose;
             if (spawnPoint != null)
                 return new Pose(spawnPoint.position, spawnPoint.rotation);
             var field = Airfield.NearestFriendly(deathPosition, _plane.Team);

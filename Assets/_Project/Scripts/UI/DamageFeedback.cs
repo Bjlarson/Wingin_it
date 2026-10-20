@@ -51,6 +51,7 @@ namespace WingingIt.UI
 
         void Awake()
         {
+            useGUILayout = false; // no GUILayout here: skips IMGUI's layout pass
             _source = GetComponent<AudioSource>();
             _source.playOnAwake = false;
             _source.spatialBlend = 0f;
@@ -131,13 +132,10 @@ namespace WingingIt.UI
                 PlayWarning();
             _alert = alert;
 
-            bool onApproach = false;
-            if (plane != null && plane.IsAlive && !plane.IsGrounded)
-            {
-                var field = Airfield.NearestFriendly(plane.Position, plane.Team);
-                onApproach = field != null && field.GetApproach(plane.Position, plane.Velocity).OnApproach;
-            }
-            ShowingReturnToBase = plane != null && DamageFeedbackMath.ShouldReturnToBase(alert, plane.IsAlive, plane.IsGrounded, onApproach);
+            var field = plane != null ? Airfield.NearestFriendly(plane.Position, plane.Team) : null;
+            bool onApproach = field != null && plane.IsAlive && !plane.IsGrounded && field.GetApproach(plane.Position, plane.Velocity).OnApproach;
+            // No base to return to (an arena with every field closed): no RETURN TO BASE or alarm, only the vignette.
+            ShowingReturnToBase = field != null && DamageFeedbackMath.ShouldReturnToBase(alert, plane.IsAlive, plane.IsGrounded, onApproach);
 
             if (ShowingReturnToBase && !AlarmPlaying)
             {
@@ -162,6 +160,9 @@ namespace WingingIt.UI
         void OnGUI()
         {
             if (plane == null || health == null)
+                return;
+            // Only draws: every touch or mouse event would otherwise redraw the whole thing once more this frame.
+            if (Event.current.type != EventType.Repaint)
                 return;
             GUI.depth = 1; // behind the HUD
             _g.EnsureStyles();

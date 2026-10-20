@@ -53,6 +53,8 @@ namespace WingingIt.Flight
         [SerializeField] Transform launchPoint;
         [Tooltip("Missile body (unlit, dark) and its exhaust/blast glow.")]
         [SerializeField] Material missileMaterial;
+        [Tooltip("The missile model (ArtSource/Weapons); unset flies a placeholder box in missileMaterial.")]
+        [SerializeField] ProjectileVisuals.WeaponModel missileModel;
         [SerializeField] Material flameMaterial;
         [SerializeField] Material smokeMaterial;
 
@@ -348,7 +350,7 @@ namespace WingingIt.Flight
                 Speed = Mathf.Max(_plane.Speed, 1f),
                 Target = target,
                 Visual = ProjectileVisuals.Create("Missile", _visualRoot, origin, dir, s.missileLength, s.missileWidth,
-                    missileMaterial, flameMaterial, smokeMaterial, smokeTime: 1.5f, smokeEndWidth: 2.2f),
+                    missileMaterial, flameMaterial, smokeMaterial, smokeTime: 1.5f, smokeEndWidth: 2.2f, missileModel, puffTrail: 1f),
             });
             Fired?.Invoke(this, target);
         }
@@ -397,7 +399,7 @@ namespace WingingIt.Flight
             float distance = move.magnitude;
             if (distance > 1e-4f && TryHit(m.Position, m.Direction, distance, s.missileRadius, out var hit))
             {
-                Explode(hit.point, hit.collider, m.Direction * m.Speed);
+                Explode(hit.point, hit.collider);
                 return false;
             }
 
@@ -411,7 +413,7 @@ namespace WingingIt.Flight
                 if (miss <= s.proximityRadius)
                 {
                     // Blow up where the missile was at the closest moment.
-                    Explode(m.Position + move * t, null, m.Direction * m.Speed);
+                    Explode(m.Position + move * t, null);
                     return false;
                 }
             }
@@ -419,7 +421,7 @@ namespace WingingIt.Flight
             m.Position += move;
             if (m.Age < s.lifetime)
                 return true;
-            Explode(m.Position, null, m.Direction * m.Speed); // self-destruct at max range
+            Explode(m.Position, null); // self-destruct at max range
             return false;
         }
 
@@ -468,7 +470,7 @@ namespace WingingIt.Flight
         }
 
         /// <summary>Direct damage to the part hit (if any), then splash damage to the body of every plane in the blast.</summary>
-        void Explode(Vector3 point, Collider directHit, Vector3 velocity)
+        void Explode(Vector3 point, Collider directHit)
         {
             var s = Stats;
             PlaneHealth directHealth = null;
@@ -487,7 +489,7 @@ namespace WingingIt.Flight
                 Damage(health, health.GetPart(PlanePartType.Body), s.SplashDamageAt(distance), point);
             SplashTargets.Clear();
 
-            SpawnBlast(s, point, velocity);
+            Explosions.PlayBlast(point, directHit, s.splashRadius);
             Exploded?.Invoke(this, point);
         }
 
@@ -498,7 +500,7 @@ namespace WingingIt.Flight
                 HitPlane?.Invoke(this, health, new PartDamageInfo(part, taken, point, _plane));
         }
 
-        // ------------------------------------------------------------------ visuals (placeholder)
+        // ------------------------------------------------------------------ visuals
 
         void LateUpdate()
         {
@@ -507,15 +509,6 @@ namespace WingingIt.Flight
             foreach (var m in _missiles)
                 if (m.Visual != null)
                     m.Visual.SetPositionAndRotation(m.Position + m.Direction * (m.Speed * ahead), Quaternion.LookRotation(m.Direction));
-        }
-
-        void SpawnBlast(MissileStats s, Vector3 point, Vector3 velocity)
-        {
-            if (flameMaterial == null)
-                return;
-            float size = s.splashRadius * 2f;
-            PlaneVisuals.SpawnFlash(point, smokeMaterial, new Color(0.3f, 0.3f, 0.32f), 1.5f, size, 1.6f, velocity * 0.05f);
-            PlaneVisuals.SpawnFlash(point, flameMaterial, new Color(1f, 0.55f, 0.12f), 2f, size, 0.4f, velocity * 0.1f);
         }
 
         static MissileStats FallbackStats()

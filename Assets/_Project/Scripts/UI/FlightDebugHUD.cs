@@ -22,6 +22,8 @@ namespace WingingIt.UI
         GUIStyle _tiny, _small;
         const float ReferenceHeight = 1080f;
 
+        void Awake() => useGUILayout = false; // no GUILayout here: skips IMGUI's layout pass
+
         void Update()
         {
             var keyboard = Keyboard.current;
@@ -31,7 +33,7 @@ namespace WingingIt.UI
 
         void OnGUI()
         {
-            if (plane == null || !GameSettings.DevToolsOn)
+            if (plane == null || !GameSettings.DevToolsOn || Event.current.type != EventType.Repaint)
                 return;
             EnsureStyles();
 

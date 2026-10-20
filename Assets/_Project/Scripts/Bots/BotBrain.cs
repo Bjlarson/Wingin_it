@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using WingingIt.Flight;
+using WingingIt.Match;
 using WingingIt.World;
 
 namespace WingingIt.Bots
@@ -26,6 +27,8 @@ namespace WingingIt.Bots
         Evade,
         /// <summary>About to fly into another plane: sidestepping it.</summary>
         AvoidCollision,
+        /// <summary>Heading out of a hard-edged arena (no turn-back there): turning back toward the middle.</summary>
+        AvoidEdge,
         /// <summary>Terrain or a building ahead or below: pulling up and away. Overrides everything.</summary>
         AvoidTerrain,
     }
@@ -148,6 +151,16 @@ namespace WingingIt.Bots
         float _offApproachSince = -1f, _stoppedSince = -1f;
         bool _routeOrdered, _routeSlow, _missedZone, _forced;
         ApproachLane _forcedLane;
+
+        // Capture the Banner: what this bot is doing about the banners, and the point it last flew at.
+        BannerDuty _duty;
+        Vector3 _dutyPoint;
+        bool _dutyOrdered;
+
+        /// <summary>This bot's part in Capture the Banner (None outside it).</summary>
+        public BannerRole BannerRole { get; set; }
+        /// <summary>What it is doing about the banners right now.</summary>
+        public BannerDuty Duty => _duty;
 
         /// <summary>Every active brain, for debug views and tests.</summary>
         public static readonly List<BotBrain> All = new();
@@ -301,18 +314,42 @@ namespace WingingIt.Bots
                 Vector3 forward = _plane.Velocity.sqrMagnitude > 1f ? _plane.Velocity : _plane.Rotation * Vector3.forward;
                 _pilot.Override(BotSenses.EscapePoint(_plane.Position, forward, _avoidNormal), null, 1.5f);
             }
+            else if (CheckArenaEdge())
+            {
+                State = BotState.AvoidEdge;
+            }
             else if (!CheckTraffic() && !CheckMissiles(now) && !ClimbingOut())
             {
                 if (_retreating)
                     FlyHome(now);
-                else if (IsEngaged)
-                    Fight();
-                else
-                    Patrol();
+                else if (!DoBannerDuty(now))
+                {
+                    if (IsEngaged)
+                        Fight();
+                    else
+                        Patrol();
+                }
             }
 
             if (_skill.useAbilities)
                 UseAbility(now);
+        }
+
+        // ------------------------------------------------------------------ arena edge
+
+        /// <summary>
+        /// A hard arena edge (Ram Royale) has no autopilot turn-back, so a bot heading out of it turns back to the
+        /// middle at its height on its own (see <see cref="BotSenses.ShouldTurnFromEdge"/>). True while it's turning.
+        /// </summary>
+        bool CheckArenaEdge()
+        {
+            var boundary = FlightBoundary.Active;
+            if (boundary == null || !boundary.hardEdge
+                || !BotSenses.ShouldTurnFromEdge(_plane.Position, _plane.Velocity, boundary.Center, boundary.radius, boundary.warningMargin))
+                return false;
+            Vector3 c = boundary.Center;
+            _pilot.Override(new Vector3(c.x, _plane.Position.y, c.z), null, 1.5f);
+            return true;
         }
 
         // ------------------------------------------------------------------ terrain
@@ -324,6 +361,8 @@ namespace WingingIt.Bots
         /// </summary>
         int ApproachMode()
         {
+            if (!_retreating && (_duty == BannerDuty.Grab || _duty == BannerDuty.Deliver || _duty == BannerDuty.ReturnDropped))
+                return 1; // banner runs are flown low
             if (!_retreating || _phase == RetreatPhase.Hold)
                 return 0;
             if (_phase == RetreatPhase.Final)
@@ -378,8 +417,9 @@ namespace WingingIt.Bots
             {
                 var hit = s_hits[i];
                 if ((found && hit.distance >= nearest.distance) || hit.distance <= 0f || PlaneDebris.IsDebris(hit.collider) ||
-                    hit.collider.GetComponentInParent<PlaneController>() != null)
-                    continue;
+                    hit.collider.GetComponentInParent<PlaneController>() != null ||
+                    (_duty != BannerDuty.None && hit.collider.GetComponentInParent<BannerStand>() != null))
+                    continue; // a banner run flies past the pole on purpose
                 if (landingAt != null && (hit.normal.y > 0.7f ||
                                           landingAt.GetApproach(hit.point, Vector3.zero).HeightError < -1.5f))
                     continue;
@@ -626,8 +666,8 @@ namespace WingingIt.Bots
 
         bool WantsRepair()
         {
-            if (_health == null || _repair == null)
-                return false;
+            if (_health == null || _repair == null || _plane.CarryingBanner)
+                return false; // a carrier can't repair: it presses on home
             float body = _health.GetPart(PlanePartType.Body).NormalizedHealth;
             return BotSenses.NeedsRepair(body, _health.LostPartsMask, _skill.retreatHealth) ||
                    (restockWhenEmpty && Target == null && OutOfAmmo());
@@ -753,13 +793,17 @@ namespace WingingIt.Bots
             Vector3 next = _route[_routeIndex];
             float flat = FlatDistance(pos, next);
 
-            // The runway's taken: circle the point before the fix until it's clear.
+            // The runway's taken: circle the point before the fix until it's clear, inside the play area.
             if (toFix && RunwayBusy())
             {
                 if (_phase != RetreatPhase.Hold)
                 {
                     _phase = RetreatPhase.Hold;
-                    _pilot.Orbit(_route.Count >= 2 ? _route[^2] : next);
+                    Vector3 hold = _route.Count >= 2 ? _route[^2] : next;
+                    var boundary = FlightBoundary.Active;
+                    if (boundary != null)
+                        hold = BotSenses.OrbitInside(hold, _pilot.OrbitRadius, boundary.Center, boundary.radius, boundary.warningMargin);
+                    _pilot.Orbit(hold);
                 }
                 return;
             }
@@ -871,6 +915,99 @@ namespace WingingIt.Bots
         }
 
         // ------------------------------------------------------------------ patrol
+
+        // ------------------------------------------------------------------ Capture the Banner
+
+        /// <summary>
+        /// Capture the Banner: runs this bot's <see cref="BannerRole"/> (see <see cref="BannerPlan.Decide"/>). True when it
+        /// took the controls this step; false leaves it to the usual fight / patrol (a duty can still set the target).
+        /// </summary>
+        bool DoBannerDuty(float now)
+        {
+            var board = BannerWorld.Active?.Board;
+            int team = _plane.Team;
+            if (board == null || BannerRole == BannerRole.None || team < 0 || team >= board.TeamCount)
+            {
+                _duty = BannerDuty.None;
+                _dutyOrdered = false;
+                return false;
+            }
+
+            int enemy = team == 0 ? 1 : 0;
+            var own = board.Get(team);
+            var theirs = enemy < board.TeamCount ? board.Get(enemy) : null;
+            bool carrying = board.CarriedBy(_plane) >= 0;
+            var ally = theirs != null && theirs.State == BannerState.Carried && theirs.CarrierTeam == team
+                ? theirs.Carrier as PlaneController
+                : null;
+            if (ally == _plane || (ally != null && !ally.IsAlive))
+                ally = null;
+            var duty = BannerPlan.Decide(BannerRole, carrying, own.State, ally != null);
+            if (duty != _duty)
+                _dutyOrdered = false;
+            _duty = duty;
+
+            switch (duty)
+            {
+                case BannerDuty.Deliver:
+                    return RunTo(own.Stand);
+                case BannerDuty.Grab:
+                    if (theirs == null)
+                        return false;
+                    return RunTo(theirs.State == BannerState.Dropped ? theirs.DropPosition : theirs.Stand);
+                case BannerDuty.ReturnDropped:
+                    return RunTo(own.DropPosition);
+                case BannerDuty.ChaseCarrier:
+                    if (own.Carrier is PlaneController thief && thief != null && thief.IsAlive && Target != thief)
+                    {
+                        Target = thief;
+                        _engageAt = now;
+                        _lastSeen = _lastShotChance = now;
+                    }
+                    return false;
+                case BannerDuty.Escort:
+                    // Fight what is near the carrier; otherwise hold formation on it.
+                    if (IsEngaged && Vector3.Distance(Target.Position, ally.Position) < 700f)
+                        return false;
+                    Target = null;
+                    State = BotState.Patrol;
+                    _patrolOrdered = false;
+                    if (_pilot.Maneuver != BotManeuver.FormUp || _pilot.Target != ally)
+                        _pilot.FormUp(ally, new Vector3((_plane.name.GetHashCode() & 1) == 0 ? -50f : 50f, 15f, -60f));
+                    return true;
+                case BannerDuty.Guard:
+                    if (IsEngaged && Vector3.Distance(Target.Position, own.Stand) < BannerPlan.GuardLeash)
+                        return false;
+                    Target = null;
+                    State = BotState.Patrol;
+                    _patrolOrdered = false;
+                    if (!_dutyOrdered || _pilot.Maneuver != BotManeuver.Orbit)
+                    {
+                        _pilot.Orbit(own.Stand + Vector3.up * 180f, BannerPlan.GuardRadius);
+                        _dutyOrdered = true;
+                    }
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>Flies the low run through the banner zone at <paramref name="center"/>. Always takes the controls.</summary>
+        bool RunTo(Vector3 center)
+        {
+            Target = null;
+            State = BotState.Patrol;
+            _patrolOrdered = false;
+            float groundY = LandingGear.ProbeGround(center + Vector3.up * 50f, out var ground) ? ground.point.y : center.y;
+            Vector3 point = BannerPlan.RunPoint(center, _plane.Position, groundY);
+            if (!_dutyOrdered || _pilot.Maneuver != BotManeuver.FlyTo || (point - _dutyPoint).sqrMagnitude > 25f)
+            {
+                _pilot.FlyTo(point);
+                _dutyPoint = point;
+                _dutyOrdered = true;
+            }
+            return true;
+        }
 
         void Patrol()
         {

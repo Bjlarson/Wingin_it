@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using WingingIt.World;
 
 namespace WingingIt.Flight
 {
@@ -16,12 +17,15 @@ namespace WingingIt.Flight
     {
         static readonly RaycastHit[] HitBuffer = new RaycastHit[16];
         static readonly Dictionary<PlaneHealth, float> SplashTargets = new();
+        static readonly List<(GroundTarget target, float distance)> GroundTargets = new();
         static RocketStats _fallbackStats;
 
         [Tooltip("Rocket launch points. Each sits under the wing PlanePart that carries it; a lost wing loses its rail.")]
         [SerializeField] Transform[] rails;
         [Tooltip("Rocket body (unlit, dark) and its exhaust/blast glow.")]
         [SerializeField] Material rocketMaterial;
+        [Tooltip("The rocket model (ArtSource/Weapons); unset flies a placeholder box in rocketMaterial.")]
+        [SerializeField] ProjectileVisuals.WeaponModel rocketModel;
         [SerializeField] Material flameMaterial;
         [SerializeField] Material smokeMaterial;
 
@@ -47,6 +51,8 @@ namespace WingingIt.Flight
         public event Action<PlaneRockets> Fired;
         /// <summary>Raised when one of our rockets damages another plane (direct hit or splash, once per damage dealt).</summary>
         public event Action<PlaneRockets, PlaneHealth, PartDamageInfo> HitPlane;
+        /// <summary>Raised when one of our rockets damages a ground target (an AA gun, a tower).</summary>
+        public event Action<PlaneRockets, GroundTarget, float> HitGroundTarget;
         /// <summary>Raised where a rocket explodes.</summary>
         public event Action<PlaneRockets, Vector3> Exploded;
 
@@ -250,14 +256,14 @@ namespace WingingIt.Flight
             float distance = move.magnitude;
             if (distance > 1e-4f && TryHit(r.Position, move / distance, distance, out var hit))
             {
-                Explode(hit.point, hit.collider, r.Velocity);
+                Explode(hit.point, hit.collider);
                 return false;
             }
             r.Position += move;
             r.TimeLeft -= dt;
             if (r.TimeLeft > 0f)
                 return true;
-            Explode(r.Position, null, r.Velocity); // self-destruct at max range
+            Explode(r.Position, null); // self-destruct at max range
             return false;
         }
 
@@ -287,7 +293,7 @@ namespace WingingIt.Flight
         }
 
         /// <summary>Direct damage to the part hit (if any), then splash damage to the body of every plane in the blast.</summary>
-        void Explode(Vector3 point, Collider directHit, Vector3 velocity)
+        void Explode(Vector3 point, Collider directHit)
         {
             var s = Stats;
             PlaneHealth directHealth = null;
@@ -306,7 +312,17 @@ namespace WingingIt.Flight
                 Damage(health, health.GetPart(PlanePartType.Body), s.SplashDamageAt(distance), point);
             SplashTargets.Clear();
 
-            SpawnBlast(point, velocity, directHealth != null);
+            GroundTargets.Clear();
+            GroundTarget.FindInRadius(point, s.splashRadius, GroundTargets);
+            foreach (var (target, distance) in GroundTargets)
+            {
+                float taken = target.ApplyDamage(s.GroundDamageAt(distance), point, _plane);
+                if (taken > 0f)
+                    HitGroundTarget?.Invoke(this, target, taken);
+            }
+            GroundTargets.Clear();
+
+            Explosions.PlayBlast(point, directHit, s.splashRadius);
             Exploded?.Invoke(this, point);
         }
 
@@ -317,7 +333,7 @@ namespace WingingIt.Flight
                 HitPlane?.Invoke(this, health, new PartDamageInfo(part, taken, point, _plane));
         }
 
-        // ------------------------------------------------------------------ visuals (placeholder)
+        // ------------------------------------------------------------------ visuals
 
         void LateUpdate()
         {
@@ -330,18 +346,9 @@ namespace WingingIt.Flight
 
         Transform CreateVisual(RocketStats s, Vector3 position, Vector3 dir) =>
             ProjectileVisuals.Create("Rocket", _visualRoot, position, dir, s.rocketLength, s.rocketWidth,
-                rocketMaterial, flameMaterial, smokeMaterial, smokeTime: 0.6f, smokeEndWidth: 1.6f);
+                rocketMaterial, flameMaterial, smokeMaterial, smokeTime: 0.6f, smokeEndWidth: 1.6f, rocketModel, puffTrail: 0.7f);
 
         static void DestroyVisual(Transform visual) => ProjectileVisuals.Release(visual);
-
-        void SpawnBlast(Vector3 point, Vector3 velocity, bool direct)
-        {
-            if (flameMaterial == null)
-                return;
-            float size = Stats.splashRadius * 2f;
-            PlaneVisuals.SpawnFlash(point, smokeMaterial, new Color(0.3f, 0.3f, 0.32f), 1f, size * 0.9f, 1.2f, velocity * 0.05f);
-            PlaneVisuals.SpawnFlash(point, flameMaterial, new Color(1f, 0.55f, 0.12f), 1.5f, size, direct ? 0.35f : 0.25f, velocity * 0.1f);
-        }
 
         static RocketStats FallbackStats()
         {

@@ -355,5 +355,248 @@ namespace WingingIt.Tests
             Assert.AreEqual(15, _roster.Bots.Count);
             Assert.IsTrue(_player.GetComponent<Dev.ClassSwitcher>().enabled, "free class switching in the sandbox");
         }
+
+        /// <summary>A made-up mode for the framework hooks: one life, a first-to-N win, its own spawn point.</summary>
+        sealed class TestMode : MatchMode
+        {
+            public int WinAt = int.MaxValue;
+            public int Lives;
+            public Pose? Spawn;
+            public string Arena;
+            public readonly System.Collections.Generic.List<PlaneController> Spawned = new();
+
+            public override void RecordKill(MatchScore score, in KillRecord kill) =>
+                score.RecordDeath(kill.Victim.Pilot, kill.Victim.Name, kill.Victim.Team, kill.Killer.Pilot, kill.Killer.Name, kill.KillerTeam);
+
+            public override int? EarlyWinner(MatchScore score) =>
+                score.TeamScore(0) >= WinAt ? 0 : score.TeamScore(1) >= WinAt ? 1 : null;
+
+            public override bool CanRespawn(PilotScore pilot) => Lives <= 0 || pilot == null || pilot.Deaths < Lives;
+
+            public override bool TryGetSpawnPose(PlaneController plane, Vector3 deathPosition, out Pose pose, out bool onRunway)
+            {
+                onRunway = false;
+                pose = Spawn ?? default;
+                return Spawn != null && plane.Team == 0;
+            }
+
+            public override void OnSpawned(PlaneController plane) => Spawned.Add(plane);
+
+            public override string ArenaId => Arena;
+
+            public override System.Collections.Generic.IReadOnlyList<ScoreColumn> Columns { get; } =
+                new[] { new ScoreColumn("K", p => p.Kills.ToString()) };
+        }
+
+        [Test]
+        public void TheMatch_PlaysTeams_FromTheFirstCard()
+        {
+            Assert.IsInstanceOf<TeamsMode>(_match.Mode);
+            Assert.AreEqual(0, _match.ModeIndex);
+            Assert.AreEqual(GameModeInfo.All[0].Length, _match.MatchLength);
+            Assert.AreSame(_match, PlaneRespawner.Rules, "the match sets the respawn rules");
+        }
+
+        [Test]
+        public void EachMode_KeepsItsOwnBotDifficulty_AndOnlyThePlayedOneDrivesTheBots()
+        {
+            var teams = GameModeInfo.All[0];
+            var other = GameModeInfo.All[1];
+            var keep = (MatchManager.DifficultyFor(teams), MatchManager.DifficultyFor(other));
+            try
+            {
+                _match.SetDifficulty(teams, BotDifficulty.Easy);
+                _match.SetDifficulty(other, BotDifficulty.Hard);
+                Assert.AreEqual(BotDifficulty.Easy, _match.Difficulty, "Teams is being played");
+                Assert.AreEqual(BotDifficulty.Easy, _roster.Difficulty);
+                Assert.AreEqual(BotDifficulty.Hard, MatchManager.DifficultyFor(other));
+                Assert.AreEqual((int)BotDifficulty.Hard, PlayerPrefs.GetInt(other.DifficultyPref, -1), "remembered");
+
+                _match.Difficulty = BotDifficulty.Normal;
+                Assert.AreEqual(BotDifficulty.Normal, MatchManager.DifficultyFor(teams));
+                Assert.AreEqual(BotDifficulty.Hard, MatchManager.DifficultyFor(other), "the other card is untouched");
+            }
+            finally
+            {
+                _match.SetDifficulty(teams, keep.Item1);
+                _match.SetDifficulty(other, keep.Item2);
+            }
+        }
+
+        [Test]
+        public void AModeInDevelopment_CantBeSelected()
+        {
+            int wip = -1;
+            for (int i = 0; i < GameModeInfo.All.Count; i++)
+                if (!GameModeInfo.All[i].IsPlayable)
+                    wip = i;
+            if (wip < 0)
+                Assert.Ignore("every mode is playable");
+            _match.SelectMode(wip);
+            Assert.AreEqual(0, _match.ModeIndex);
+            Assert.IsInstanceOf<TeamsMode>(_match.Mode);
+        }
+
+        [UnityTest]
+        public IEnumerator AModesSpawnPose_AndLoadoutHook_ApplyToEverySpawn()
+        {
+            var mode = new TestMode { Spawn = new Pose(new Vector3(0f, 600f, 0f), Quaternion.identity) };
+            _match.SetMode(mode);
+            Assert.AreSame(mode, _match.Mode);
+            yield return StartPlaying();
+            Assert.Less(Vector3.Distance(_player.Position, mode.Spawn.Value.position), 30f, "spawned where the mode said");
+            Assert.Contains(_player, mode.Spawned);
+            Assert.That(mode.Spawned.Count, Is.GreaterThan(8), "the bots' spawns too");
+        }
+
+        [UnityTest]
+        public IEnumerator AModesEarlyWin_EndsTheMatch()
+        {
+            _match.SetMode(new TestMode { WinAt = 50 });
+            yield return StartPlaying();
+            var west = PlaneController.All.First(p => p.Team == 0 && p != _player);
+            var east = PlaneController.All.First(p => p.Team == 1);
+            east.GetComponent<PlaneHealth>().ApplyDamage(PlanePartType.Body, 10000f, east.Position, west);
+            yield return null;
+            yield return null;
+            Assert.AreEqual(MatchPhase.Ended, _match.Phase);
+            Assert.AreEqual(0, _match.Winner);
+            Assert.AreEqual(0f, _match.TimeLeft, "ended before time ran out");
+        }
+
+        [UnityTest]
+        public IEnumerator AModeWithOneLife_KeepsTheDeadOut()
+        {
+            _match.SetMode(new TestMode { Lives = 1 });
+            yield return StartPlaying();
+            var respawner = _player.GetComponent<PlaneRespawner>();
+            _player.Crash(_player.Position);
+            Time.timeScale = 10f; // run the respawn delay out quickly
+            float t = Time.realtimeSinceStartup;
+            while (Time.realtimeSinceStartup - t < 3f && respawner.RespawnTimeLeft > 0f)
+                yield return null;
+            yield return null;
+            Time.timeScale = 1f;
+            Assert.AreEqual(0f, respawner.RespawnTimeLeft, "the timer ran out");
+            Assert.IsFalse(_player.IsAlive, "no lives left: stays down");
+            Assert.AreEqual(1, _match.Score.Get(_player).Deaths);
+        }
+
+        // ---------- Arenas ----------
+
+        static Vector3 Flat(Vector3 v, Vector3 center) => new(v.x - center.x, 0f, v.z - center.z);
+
+        [UnityTest]
+        public IEnumerator Teams_PlaysTheIslandAsBuilt()
+        {
+            float radius = FlightBoundary.Active.radius;
+            yield return StartPlaying();
+            Assert.IsNull(_match.Arena, "Teams has no arena of its own");
+            Assert.IsFalse(FlightBoundary.Active.IsOverridden);
+            Assert.AreEqual(radius, FlightBoundary.Active.radius);
+            Assert.IsTrue(Airfield.All.All(f => f.IsOpen));
+        }
+
+        [UnityTest]
+        public IEnumerator RamRoyalesArena_ShrinksTheMap_ClosesTheFields_AndStartsEveryoneOnARing()
+        {
+            var arena = ModeArena.For("RamRoyale");
+            Assert.IsNotNull(arena, "the Island has a Ram Royale arena");
+            Assert.IsFalse(arena.IsApplied, "not before the match");
+            var islandAreas = _roster.FightAreas.ToList();
+            _match.SetMode(new TestMode { Arena = "RamRoyale" });
+            yield return StartPlaying();
+
+            Assert.AreSame(arena, _match.Arena);
+            var boundary = FlightBoundary.Active;
+            Vector3 c = arena.transform.position;
+            Assert.AreEqual(Flat(c, Vector3.zero), Flat(boundary.Center, Vector3.zero), "the play area is the arena's");
+            Assert.AreEqual(arena.Radius, boundary.radius);
+            Assert.AreEqual(arena.Ceiling, boundary.ceiling);
+            Assert.IsTrue(boundary.hardEdge);
+            Assert.IsTrue(Airfield.All.All(f => !f.IsOpen), "every field closed");
+            Assert.IsNull(Airfield.NearestFriendly(_player.Position, 0), "nowhere to repair");
+            Assert.IsTrue(AAGun.All.All(g => !g.IsArmed), "no AA");
+            CollectionAssert.AreEqual(arena.FightAreas, _roster.FightAreas, "bots patrol the arena");
+
+            var planes = PlaneController.All.Where(p => p.IsAlive).ToList();
+            Assert.That(planes.Count, Is.EqualTo(16), "a full field");
+            foreach (var p in planes)
+            {
+                Vector3 flat = Flat(p.Position, c);
+                Assert.AreEqual(arena.StartRingRadius, flat.magnitude, 60f, $"{p.name} starts on the ring");
+                Assert.AreEqual(arena.StartAltitude, p.Position.y, 30f, $"{p.name} at the start height");
+                Assert.Greater(Vector3.Dot(p.Rotation * Vector3.forward, -flat.normalized), 0.8f, $"{p.name} faces in");
+            }
+            float closest = float.MaxValue;
+            for (int i = 0; i < planes.Count; i++)
+                for (int j = i + 1; j < planes.Count; j++)
+                    closest = Mathf.Min(closest, Vector3.Distance(planes[i].Position, planes[j].Position));
+            Assert.Greater(closest, 150f, "spread round the ring, nobody on top of anybody");
+
+            var buoys = Object.FindAnyObjectByType<BoundaryBuoys>();
+            Assert.Greater(buoys.ArenaCount, 20, "buoys mark the arena's edge");
+
+            _match.Dismiss();
+            Assert.IsFalse(arena.IsApplied);
+            Assert.IsFalse(boundary.IsOverridden, "free flight is the Island as built");
+            Assert.IsFalse(boundary.hardEdge);
+            Assert.IsTrue(Airfield.All.All(f => f.IsOpen));
+            Assert.AreEqual(0, buoys.ArenaCount);
+            CollectionAssert.AreEqual(islandAreas, _roster.FightAreas, "the Island's patrols are back");
+        }
+
+        [UnityTest]
+        public IEnumerator AHardEdge_PutsOutAPlaneThatStaysPastIt()
+        {
+            _match.SetMode(new TestMode { Arena = "RamRoyale" });
+            yield return StartPlaying();
+            var boundary = FlightBoundary.Active;
+            Vector3 outward = Vector3.forward;
+            Vector3 start = boundary.Center + outward * (boundary.radius - 30f) + Vector3.up * 220f;
+            _player.Respawn(start, Quaternion.LookRotation(outward));
+            float t = Time.time;
+            bool sawOutside = false;
+            while (_player.IsAlive && Time.time - t < 8f)
+            {
+                sawOutside |= _player.IsOutOfBounds;
+                Assert.Greater(Vector3.Dot(_player.transform.forward, outward), 0.7f, "no turn-back at a hard edge");
+                yield return null;
+            }
+            Assert.IsTrue(sawOutside);
+            Assert.IsFalse(_player.IsAlive, "out after the grace");
+            Assert.AreEqual(DeathCause.OutOfBounds, _player.LastDeathCause);
+            Assert.That(Time.time - t, Is.GreaterThan(boundary.outOfBoundsGrace), "not before the grace ran out");
+        }
+
+        [UnityTest]
+        public IEnumerator Bots_StayInsideAHardEdge()
+        {
+            _match.SetMode(new TestMode { Arena = "RamRoyale" });
+            yield return StartPlaying();
+            int outs = 0;
+            string why = "";
+            void OnKilled(KillInfo kill)
+            {
+                if (kill.Cause != DeathCause.OutOfBounds || !kill.Victim.TryGetComponent<BotBrain>(out var brain))
+                    return; // the player's hands are off the stick here: it flies straight out
+                outs++;
+                why += $"{kill.Victim.name} ({brain.State}, lost parts {kill.Victim.LostPartsMask}, body {kill.Victim.BodyState}); ";
+            }
+            PlaneHealth.AnyKilled += OnKilled;
+            try
+            {
+                Time.timeScale = 3f;
+                float t = Time.time;
+                while (Time.time - t < 30f)
+                    yield return null;
+            }
+            finally
+            {
+                Time.timeScale = 1f;
+                PlaneHealth.AnyKilled -= OnKilled;
+            }
+            Assert.AreEqual(0, outs, "no bot flew out of the arena in 30 s: " + why);
+        }
     }
 }

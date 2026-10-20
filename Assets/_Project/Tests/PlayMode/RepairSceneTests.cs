@@ -69,6 +69,41 @@ namespace WingingIt.Tests
         }
 
         [UnityTest]
+        public IEnumerator Repair_RestocksMissiles()
+        {
+            var missiles = _plane.GetComponent<PlaneMissiles>();
+            if (missiles == null || !missiles.IsEquipped)
+                Assert.Ignore("the player's class carries no missiles");
+            yield return RunwayLanding.FinalApproachAndLand(_plane, _home);
+            missiles.Restock();
+            int full = missiles.Ammo;
+            Assert.Greater(full, 0);
+            typeof(PlaneMissiles).GetProperty("Ammo").SetValue(missiles, 0);
+            yield return RunwayLanding.RollToAStop(_plane);
+            yield return Wait(_repair.Duration + 0.2f);
+            Assert.AreEqual(full, missiles.Ammo, "resupplied at the repair zone");
+        }
+
+        [UnityTest]
+        public IEnumerator ThrottleDownAtAStandstill_BacksUp_ThenStopsWhenReleased()
+        {
+            yield return RunwayLanding.FinalApproachAndLand(_plane, _home);
+            yield return RunwayLanding.RollToAStop(_plane);
+            yield return Wait(_repair.Duration + 0.2f); // let the repair finish so it doesn't matter
+            Vector3 start = _plane.Position, forward = _plane.Rotation * Vector3.forward;
+            yield return RunwayLanding.Fly(_plane, new FlightInput { Throttle = -1f }, 2f);
+            Assert.IsTrue(_plane.IsReversing);
+            Assert.Less(Vector3.Dot(_plane.Position - start, forward), -2f, "rolled backwards");
+            yield return RunwayLanding.Fly(_plane, default, 1.5f);
+            Assert.IsFalse(_plane.IsReversing, "braked to a stop once released");
+            // Backed up past the repair zone, now ahead again: at idle the auto-brake taxis back up to its stop point.
+            yield return RunwayLanding.Fly(_plane, default, 6f);
+            Assert.Less(_plane.Speed, 0.1f, "stopped");
+            Assert.AreEqual(0f, Vector3.Dot(_plane.Position - start, forward), 3f, "back at the repair zone's stop point");
+            Assert.IsTrue(_plane.IsGrounded);
+        }
+
+        [UnityTest]
         public IEnumerator LostWingAndDeadEngine_CriticalRepair_RestoresEverything()
         {
             yield return LandAndStopInTheZone(() =>

@@ -29,6 +29,8 @@ namespace WingingIt.Flight
         [Min(0f)] public float splashRadius = 10f;
         [Tooltip("Fraction of the splash damage still dealt at the edge of the blast (falls off linearly).")]
         [Range(0f, 1f)] public float splashFalloffMin = 0.3f;
+        [Tooltip("Damage to ground targets (AA guns, towers) at the center of the blast; falls off like the splash.")]
+        [Min(0f)] public float groundDamage = 40f;
 
         [Header("Ballistics")]
         [Tooltip("Launch speed (m/s), added to the plane's own velocity. Rockets fly straight (no drop).")]
@@ -49,5 +51,9 @@ namespace WingingIt.Flight
         /// <summary>Body damage from a blast whose center is <paramref name="distance"/> m from the plane's nearest hitbox.</summary>
         public float SplashDamageAt(float distance) =>
             Explosions.SplashDamageAt(splashDamage, splashRadius, splashFalloffMin, distance);
+
+        /// <summary>Damage to a ground target whose nearest collider is <paramref name="distance"/> m from the blast.</summary>
+        public float GroundDamageAt(float distance) =>
+            Explosions.SplashDamageAt(groundDamage, splashRadius, splashFalloffMin, distance);
     }
 }

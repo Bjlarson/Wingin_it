@@ -104,5 +104,38 @@ namespace WingingIt.Tests
                 Object.DestroyImmediate(root);
             }
         }
+
+        [Test]
+        public void TwoWayAirfield_HasAGlidePathAtEachEnd_ChosenByHeading()
+        {
+            var root = new GameObject("Airfield");
+            try
+            {
+                root.transform.SetPositionAndRotation(new Vector3(100f, 5f, 50f), Quaternion.Euler(0f, 90f, 0f));
+                var field = root.AddComponent<Airfield>();
+                field.Configure("Test Field", Airfield.Neutral, false, Runway, null, null, null);
+                field.SetTwoWay(true);
+
+                Vector3 west = field.GlidePathPoint(800f), east = field.GlidePathPoint(800f, true);
+                Assert.Less(west.x, 100f - 800f, "normal end is west of an east-facing runway");
+                Assert.Greater(east.x, 100f + 800f, "far end is east of it");
+                Assert.AreEqual(west.y, east.y, 1e-3f, "same glide height at both ends");
+
+                var fromEast = field.GetApproach(east, new Vector3(-40f, -2f, 0f));
+                Assert.IsTrue(fromEast.OnPath, "flying west onto the far end's path");
+                Assert.AreEqual(800f, fromEast.Distance, 1e-2f);
+                Assert.IsTrue(field.ApproachesFromReverseEnd(east, new Vector3(-40f, -2f, 0f)));
+                Assert.IsFalse(field.ApproachesFromReverseEnd(west, new Vector3(40f, -2f, 0f)));
+                Assert.IsTrue(field.GetApproach(west, new Vector3(40f, -2f, 0f)).OnPath, "the normal end still works");
+                Assert.IsFalse(field.GetApproach(east, new Vector3(40f, -2f, 0f)).OnApproach, "heading away from the far end");
+
+                field.SetTwoWay(false);
+                Assert.IsFalse(field.GetApproach(east, new Vector3(-40f, -2f, 0f)).OnApproach, "a one-way field has no far end");
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
     }
 }

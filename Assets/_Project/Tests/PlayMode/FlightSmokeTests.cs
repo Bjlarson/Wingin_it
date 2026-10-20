@@ -52,6 +52,33 @@ namespace WingingIt.Tests
         }
 
         [UnityTest]
+        public IEnumerator HoldStyle_RollReleased_StaysBanked()
+        {
+            yield return Fly(new FlightInput { Roll = 1f, Style = ControlStyle.Hold }, 0.4f);
+            Assert.Less(_plane.transform.up.y, 0.9f, "roll input should bank the plane");
+            // The roll rate dies away at the class's responsiveness, so the plane rolls on a little past where the
+            // stick let go (~30° for the Fighter) before it settles: measure the bank once it has.
+            yield return Fly(new FlightInput { Style = ControlStyle.Hold }, 1f);
+            float banked = _plane.transform.up.y;
+            Assert.Less(banked, 0.9f, "still banked once the roll stops");
+            yield return Fly(new FlightInput { Style = ControlStyle.Hold }, 2f);
+            Assert.AreEqual(banked, _plane.transform.up.y, 0.1f, "released stick holds the bank instead of leveling");
+        }
+
+        [UnityTest]
+        public IEnumerator BankStyle_StickLeft_BanksAndTurnsLeft_CenterLevels()
+        {
+            Vector3 startFwd = _plane.transform.forward;
+            yield return Fly(new FlightInput { Roll = -1f, Style = ControlStyle.Bank }, 3f);
+            Assert.Less(_plane.transform.up.y, 0.6f, "holding the stick left holds a bank");
+            Assert.Greater(_plane.transform.up.y, 0.3f, "but not a roll over: the bank angle is capped");
+            float signedTurn = Vector3.SignedAngle(Flat(startFwd), Flat(_plane.transform.forward), Vector3.up);
+            Assert.Less(signedTurn, -10f, "stick left turns left");
+            yield return Fly(new FlightInput { Style = ControlStyle.Bank }, 3f);
+            Assert.Greater(_plane.transform.up.y, 0.95f, "centered stick levels the wings");
+        }
+
+        [UnityTest]
         public IEnumerator PitchUp_Climbs_AndBleedsSpeed()
         {
             float startAlt = _plane.transform.position.y;

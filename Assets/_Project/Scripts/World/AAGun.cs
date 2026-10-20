@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using WingingIt.Effects;
 using WingingIt.Flight;
 
 namespace WingingIt.World
@@ -9,8 +10,10 @@ namespace WingingIt.World
     /// An anti-aircraft turret guarding a home airfield (its parent <see cref="Airfield"/>), so enemies can't camp
     /// the repair zone. It picks the nearest enemy plane in range and line of sight, swings toward its lead point at a
     /// limited <see cref="AAStats.traverseRate"/>, and after a lock-on delay fires straight-flying tracer shells that
-    /// damage whichever part they hit. Spread tightens the longer it tracks the same plane. Can't be destroyed, and
-    /// sits idle on neutral or captured (non-home) airfields. Shells pass through planes on its own team.
+    /// damage whichever part they hit. Spread tightens the longer it tracks the same plane. Shells pass through planes on
+    /// its own team. A home field's guns can't be destroyed. A gun with its own <see cref="GroundTarget"/> is a capture
+    /// field's light AA (<see cref="FieldDefenses"/>): it fires only while it's intact, its field is owned and the
+    /// field's tower stands. Any other gun on a non-home field sits idle.
     /// </summary>
     [DefaultExecutionOrder(10)] // after PlaneController, so it aims at this step's pose
     public class AAGun : MonoBehaviour
@@ -21,11 +24,26 @@ namespace WingingIt.World
         static AAStats _fallbackStats;
 
         [SerializeField] AAStats stats;
-        [Tooltip("Turns to aim (yaw and pitch together); the barrels point along its +Z.")]
+        [Tooltip("Turns to aim (yaw and pitch together, unless there's a cradle); the barrels point along its +Z.")]
         [SerializeField] Transform head;
+        [Tooltip("Optional: tilts (pitch) inside the head, which then only turns (yaw). The barrels point along its +Z.")]
+        [SerializeField] Transform cradle;
+        [Tooltip("Optional: the left and right barrels, which kick back along their parent's -Z on alternate shots.")]
+        [SerializeField] Transform[] barrels = { };
+        [SerializeField, Min(0f)] float recoilDistance = 0.35f;
+        [Tooltip("Seconds for a barrel to run back out after a shot.")]
+        [SerializeField, Min(0.01f)] float recoilReturn = 0.12f;
         [Tooltip("Where shells leave from. Defaults to the head.")]
         [SerializeField] Transform muzzle;
+        [Tooltip("The placeholder tracer box, when there's no shell model.")]
         [SerializeField] Material tracerMaterial;
+        [Tooltip("The flak shell model (ArtSource/Weapons), a unit box scaled by AAStats' tracer width and length.")]
+        [SerializeField] ProjectileVisuals.WeaponModel shellModel;
+        [Tooltip("Shown at the muzzle for a moment per shot, on alternate barrels. Unset: no flash.")]
+        [SerializeField] ProjectileVisuals.WeaponModel muzzleFlashModel;
+        [SerializeField, Min(0f)] float muzzleFlashSize = 2f;
+        [Tooltip("Distance between the two barrels; the flashes alternate either side of the muzzle.")]
+        [SerializeField, Min(0f)] float barrelSpacing = 0.9f;
 
         struct Shell
         {
@@ -36,12 +54,17 @@ namespace WingingIt.World
         }
 
         Airfield _airfield;
+        GroundTarget _body;
         Quaternion _aim, _previousAim;
         float _retargetTimer;
         float _shotCooldown;
         readonly List<Shell> _shells = new();
         readonly Stack<Transform> _tracerPool = new();
         Transform _tracerRoot;
+        ProjectileVisuals.MuzzleFlash[] _flashes;
+        int _nextBarrel;
+        Vector3[] _barrelRest;
+        float[] _recoil;
 
         public static IReadOnlyList<AAGun> All => s_all;
 
@@ -57,13 +80,21 @@ namespace WingingIt.World
         public AAStats Stats => stats != null ? stats : FallbackStats();
         public Airfield Airfield => _airfield != null ? _airfield : _airfield = GetComponentInParent<Airfield>();
         public int Team => Airfield != null ? Airfield.Team : Airfield.Neutral;
-        /// <summary>Only a team's home airfield is defended.</summary>
-        public bool IsArmed => isActiveAndEnabled && Airfield != null && Airfield.IsHome && !Airfield.IsNeutral;
+        /// <summary>The gun's own destructible body, on a capture field's light AA; null on a home field's guns.</summary>
+        public GroundTarget Body => _body;
+        /// <summary>
+        /// A team's home airfield is defended while it's open. A capture field's light AA also needs the field owned,
+        /// its tower standing and the gun itself in one piece (and switched on for the match).
+        /// </summary>
+        public bool IsArmed => isActiveAndEnabled && Airfield != null && Airfield.IsOpen && !Airfield.IsNeutral && !Airfield.TowerDown
+            && (_body == null ? Airfield.IsHome : _body.isActiveAndEnabled && !_body.IsDestroyed);
         public PlaneController Target { get; private set; }
         /// <summary>Seconds spent tracking the current target.</summary>
         public float TrackTime { get; private set; }
         public bool IsFiring { get; private set; }
         public Vector3 Pivot => head != null ? head.position : transform.position;
+        /// <summary>What points the barrels: the cradle, or the head without one.</summary>
+        Transform Aimed => cradle != null ? cradle : head;
         /// <summary>The direction the barrels point (the simulated aim, not the interpolated head).</summary>
         public Vector3 AimDirection => _aim * Vector3.forward;
 
@@ -75,10 +106,31 @@ namespace WingingIt.World
             tracerMaterial = tracer;
         }
 
+        /// <summary>
+        /// A modelled turret: <see cref="head"/> only turns, <paramref name="pitchCradle"/> tilts in it, and
+        /// <paramref name="recoilBarrels"/> (left, right) kick back on alternate shots.
+        /// </summary>
+        public void SetMount(Transform pitchCradle, Transform[] recoilBarrels)
+        {
+            cradle = pitchCradle;
+            barrels = recoilBarrels ?? new Transform[0];
+        }
+
         void Awake()
         {
-            _aim = _previousAim = head != null ? head.rotation : transform.rotation;
+            _body = GetComponent<GroundTarget>();
+            _aim = _previousAim = Aimed != null ? Aimed.rotation : transform.rotation;
+            _barrelRest = new Vector3[barrels.Length];
+            _recoil = new float[barrels.Length];
+            for (int i = 0; i < barrels.Length; i++)
+                _barrelRest[i] = barrels[i] != null ? barrels[i].localPosition : Vector3.zero;
             _tracerRoot = new GameObject($"{name} Shells").transform;
+            var flashParent = muzzle != null ? muzzle : head;
+            _flashes = new[]
+            {
+                ProjectileVisuals.CreateFlash(flashParent, muzzleFlashModel, Vector3.left * (barrelSpacing * 0.5f), muzzleFlashSize),
+                ProjectileVisuals.CreateFlash(flashParent, muzzleFlashModel, Vector3.right * (barrelSpacing * 0.5f), muzzleFlashSize),
+            };
         }
 
         void OnEnable() => s_all.Add(this);
@@ -89,6 +141,8 @@ namespace WingingIt.World
             Target = null;
             TrackTime = 0f;
             IsFiring = false;
+            foreach (var flash in _flashes ?? System.Array.Empty<ProjectileVisuals.MuzzleFlash>())
+                flash?.Hide();
         }
 
         void OnDestroy()
@@ -215,7 +269,7 @@ namespace WingingIt.World
         }
 
         Vector3 MuzzlePosition() => muzzle != null
-            ? Pivot + _aim * Quaternion.Inverse(head != null ? head.rotation : transform.rotation) * (muzzle.position - Pivot)
+            ? Pivot + _aim * Quaternion.Inverse(Aimed != null ? Aimed.rotation : transform.rotation) * (muzzle.position - Pivot)
             : Pivot;
 
         void FireOne(AAStats s, float age)
@@ -236,6 +290,10 @@ namespace WingingIt.World
                 TimeLeft = s.shellLifetime,
                 Tracer = GetTracer(s),
             };
+            _flashes[_nextBarrel]?.Show();
+            if (_nextBarrel < _recoil.Length)
+                _recoil[_nextBarrel] = 1f;
+            _nextBarrel = 1 - _nextBarrel;
             if (age > 0f && !Step(ref shell, age))
                 ReleaseTracer(shell.Tracer);
             else
@@ -310,23 +368,45 @@ namespace WingingIt.World
                 float taken = health.ApplyDamage(part, Stats.damage, hit.point, this);
                 if (taken > 0f)
                     HitPlane?.Invoke(this, health, new PartDamageInfo(part, taken, hit.point, this));
-                SpawnBurst(hit.point, 2f);
+                Vfx.Play(VfxKind.FlakBurst, hit.point);
             }
             else
             {
-                SpawnBurst(hit.point, 1f);
+                Explosions.PlayBulletHit(hit, null, 2f);
             }
         }
 
-        // ------------------------------------------------------------------ visuals (placeholder)
+        // ------------------------------------------------------------------ visuals
 
         void LateUpdate()
         {
+            foreach (var flash in _flashes)
+                flash?.Tick(Time.deltaTime);
             // Interpolate the head between physics steps so the swing looks smooth.
             if (head != null)
             {
                 float t = Time.fixedDeltaTime > 0f ? Mathf.Clamp01((Time.time - Time.fixedTime) / Time.fixedDeltaTime) : 1f;
-                head.rotation = Quaternion.Slerp(_previousAim, _aim, t);
+                Quaternion shown = Quaternion.Slerp(_previousAim, _aim, t);
+                if (cradle == null)
+                {
+                    head.rotation = shown;
+                }
+                else
+                {
+                    // The head turns flat about the mount's up; the cradle takes the elevation.
+                    Vector3 forward = shown * Vector3.forward, up = transform.up;
+                    Vector3 flat = Vector3.ProjectOnPlane(forward, up);
+                    if (flat.sqrMagnitude > 1e-6f)
+                        head.rotation = Quaternion.LookRotation(flat, up);
+                    cradle.rotation = Quaternion.LookRotation(forward, head.up);
+                }
+            }
+            for (int i = 0; i < barrels.Length; i++)
+            {
+                if (barrels[i] == null)
+                    continue;
+                _recoil[i] = Mathf.MoveTowards(_recoil[i], 0f, Time.deltaTime / recoilReturn);
+                barrels[i].localPosition = _barrelRest[i] - Vector3.forward * (recoilDistance * _recoil[i] * _recoil[i]);
             }
             float ahead = Time.time - Time.fixedTime;
             foreach (var shell in _shells)
@@ -336,9 +416,11 @@ namespace WingingIt.World
 
         Transform GetTracer(AAStats s)
         {
-            if (tracerMaterial == null)
+            if (tracerMaterial == null && !shellModel.IsSet)
                 return null;
-            Transform t = _tracerPool.Count > 0 ? _tracerPool.Pop() : CreateCube("Shell Tracer", _tracerRoot);
+            Transform t = _tracerPool.Count > 0 ? _tracerPool.Pop()
+                : shellModel.IsSet ? ProjectileVisuals.MeshObject("Shell Tracer", _tracerRoot, shellModel).transform
+                : CreateCube("Shell Tracer", _tracerRoot);
             t.localScale = new Vector3(s.tracerWidth, s.tracerWidth, s.tracerLength);
             t.gameObject.SetActive(true);
             return t;
@@ -350,16 +432,6 @@ namespace WingingIt.World
                 return;
             tracer.gameObject.SetActive(false);
             _tracerPool.Push(tracer);
-        }
-
-        void SpawnBurst(Vector3 point, float size)
-        {
-            if (tracerMaterial == null)
-                return;
-            var t = CreateCube("Shell Burst", null);
-            t.SetPositionAndRotation(point, UnityEngine.Random.rotation);
-            t.localScale = Vector3.one * size;
-            Destroy(t.gameObject, 0.1f);
         }
 
         Transform CreateCube(string cubeName, Transform parent)

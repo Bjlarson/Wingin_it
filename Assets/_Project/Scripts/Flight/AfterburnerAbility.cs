@@ -21,7 +21,8 @@ namespace WingingIt.Flight
             cooldown = 18f;
         }
 
-        public override bool CanActivate(PlaneAbility ability) => ability.Plane.Modifiers.Get(FlightStat.Thrust) > 0f;
+        public override bool CanActivate(PlaneAbility ability) =>
+            !ability.Plane.CarryingBanner && ability.Plane.Modifiers.Get(FlightStat.Thrust) > 0f;
 
         public override void Begin(PlaneAbility ability)
         {

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using WingingIt.Flight;
 using WingingIt.Settings;
 using static WingingIt.UI.GlassGUI;
 
@@ -261,12 +262,16 @@ namespace WingingIt.UI
                     rows.Add(Slider("FREE LOOK SENSITIVITY", () => D.freeLookSensitivity, v => S.Set(s => s.freeLookSensitivity = v),
                         GameSettings.MinSensitivity, GameSettings.MaxSensitivity, 0.05f, v => $"{v:0.00}×"));
                     rows.Add(Toggle("INVERT PITCH", () => D.invertPitch, v => S.Set(s => s.invertPitch = v)));
+                    rows.Add(Choice("STICK STYLE", new[] { "AUTO-LEVEL", "HOLD", "BANK TURN" }, () => (int)D.controlStyle,
+                        i => S.Set(s => s.controlStyle = (ControlStyle)i)));
                     rows.Add(Choice("TOUCH CONTROLS", new[] { "AUTO", "ON", "OFF" }, () => (int)D.touchControls, i => S.Set(s => s.touchControls = (TouchControlsMode)i)));
                     if (touchRows)
                     {
                         rows.Add(Toggle("AUTO THROTTLE (TOUCH)", () => D.autoThrottle, v => S.Set(s => s.autoThrottle = v)));
                         rows.Add(Slider("TOUCH BUTTON SIZE", () => D.touchButtonSize, v => S.Set(s => s.touchButtonSize = v),
                             GameSettings.MinTouchButtonSize, GameSettings.MaxTouchButtonSize, Notch, v => $"{v * 100f:0}%"));
+                        rows.Add(Slider("TOUCH STICK SENSITIVITY", () => D.touchSensitivity, v => S.Set(s => s.touchSensitivity = v),
+                            GameSettings.MinSensitivity, GameSettings.MaxSensitivity, 0.05f, v => $"{v:0.00}×"));
                     }
                     if (_actions != null)
                         rows.Add(new Row { Label = "BINDINGS", Value = () => "VIEW  ›", Press = () => _bindings = true });
@@ -291,6 +296,8 @@ namespace WingingIt.UI
                     rows.Add(Slider("FIELD OF VIEW", () => D.fieldOfView, v => S.Set(s => s.fieldOfView = v),
                         GameSettings.MinFov, GameSettings.MaxFov, 1f, v => $"{v:0}°"));
                     rows.Add(Toggle("SPEED FOV EFFECT", () => D.speedFov, v => S.Set(s => s.speedFov = v)));
+                    rows.Add(Toggle("HDR", () => D.hdr, v => S.Set(s => s.hdr = v)));
+                    rows.Add(Toggle("SHOW FRAME RATE", () => D.showFps, v => S.Set(s => s.showFps = v)));
                     break;
 
                 case SettingsTab.Audio:

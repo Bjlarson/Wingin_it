@@ -19,6 +19,8 @@ namespace WingingIt.World
         public static int TotalCount => s_gates.Count;
 
         [SerializeField] Renderer[] ringRenderers;
+        [Tooltip("Only the slots using this material are tinted, as a team colour (the ring model's tube); empty tints whole renderers.")]
+        [SerializeField] Material tintMaterial;
         [SerializeField] Color idleColor = new Color(1f, 0.75f, 0.1f);
         [SerializeField] Color passedColor = new Color(0.2f, 0.9f, 0.3f);
 
@@ -41,7 +43,11 @@ namespace WingingIt.World
 
         void Reset() => GetComponent<Collider>().isTrigger = true;
 
-        public void SetRenderers(Renderer[] renderers) => ringRenderers = renderers;
+        public void SetRenderers(Renderer[] renderers, Material tint = null)
+        {
+            ringRenderers = renderers;
+            tintMaterial = tint;
+        }
 
         public void OnPlanePassed(PlaneController plane)
         {
@@ -71,10 +77,29 @@ namespace WingingIt.World
             if (ringRenderers == null)
                 return;
             _block ??= new MaterialPropertyBlock();
-            _block.SetColor(BaseColorId, color);
+            if (tintMaterial == null)
+            {
+                _block.SetColor(BaseColorId, color);
+                foreach (var r in ringRenderers)
+                    if (r != null)
+                        r.SetPropertyBlock(_block);
+                return;
+            }
+            Vector4 tint = PlaneVisuals.TeamTint(color);
             foreach (var r in ringRenderers)
-                if (r != null)
-                    r.SetPropertyBlock(_block);
+            {
+                if (r == null)
+                    continue;
+                var mats = r.sharedMaterials;
+                for (int i = 0; i < mats.Length; i++)
+                {
+                    if (mats[i] != tintMaterial)
+                        continue;
+                    r.GetPropertyBlock(_block, i);
+                    _block.SetVector(BaseColorId, tint);
+                    r.SetPropertyBlock(_block, i);
+                }
+            }
         }
     }
 }

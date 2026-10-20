@@ -6,13 +6,13 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/_Project/Scenes/FlightTest.unity
-    guid: 0a17bc7ec65c70b4fb185ddd6c99d4e5
+    path: Assets/_Project/Scenes/Island.unity
+    guid: bc361a42be35e9440a40fdca94c97a92
   - enabled: 1
     path: Assets/_Project/Scenes/SampleScene.unity
     guid: 99c9720ab356a0642a771bea13969a05
   - enabled: 1
-    path: Assets/_Project/Scenes/Island.unity
-    guid: bc361a42be35e9440a40fdca94c97a92
+    path: Assets/_Project/Scenes/FlightTest.unity
+    guid: 0a17bc7ec65c70b4fb185ddd6c99d4e5
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}

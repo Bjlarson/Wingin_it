@@ -288,6 +288,9 @@ namespace WingingIt.Tests
             {
                 foreach (var lane in ApproachLane.All.ToArray())
                 {
+                    // A neutral field repairs nobody until a team captures it (Airfield Domination), so no bot retreats to it.
+                    if (lane.Airfield.IsNeutral)
+                        continue;
                     string name = $"{lane.Airfield.DisplayName} {lane.DisplayName}";
                     _plane.Team = lane.Airfield.Team;
                     // A little short of the entry, flying toward it, like a bot leaving the fight.

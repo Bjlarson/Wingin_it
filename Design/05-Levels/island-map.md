@@ -1,7 +1,7 @@
 # Island Map
 
 Status: Draft
-Last updated: 2026-10-16
+Last updated: 2026-10-19
 
 ## Summary
 
@@ -98,7 +98,7 @@ All four are in sight from the middle of the map at 600 m (tested in `IslandScen
 |---|---|---|---|
 | West Home | (-1600, 0) | north | team 0 (the player), AA armed |
 | East Home | (1600, 0) | south | team 1, AA armed |
-| Central | (0, -700), south of the city | east | neutral (no AA, can't repair until capture exists) |
+| Central | (0, -700), south of the city | **either end** (two-way) | neutral (no AA, can't repair until capture exists) |
 
 The two home fields are point-symmetric about the island center, so both teams have the same distance to the city (~1.6 km, ~19 s at Fighter cruise). Their approaches come in over open sea.
 
@@ -142,7 +142,7 @@ Runways land one way only, so a lane from behind the field has to fly a circuit 
 - **Separate routes:** until 500 m from the fix, every lane stays at least 250 m from the other lanes into the same field, so one enemy can't cover two of them.
 - **Debug HUD:** on a friendly lane (within 150 m of it), a diamond marks the next gate, labeled with the lane name and the distance left to the fix. The glide-path rings take over once you're on approach.
 - **Tested** (`IslandSceneTests`): 2–3 lanes per home field, all ending on its glide path; every leg clear of terrain, buildings and landmarks with 25 m of room below; lanes kept apart; inside the boundary warning; the fix under home AA; both teams' lane lengths equal. An autopilot steering for each lane's next waypoint, the way a bot will, flies all six lanes without crashing or straying, and arrives on approach.
-- **Central has no lanes yet.** It lands heading east, so every approach to it comes in from the west, past West Home's AA guns (400–500 m from them, inside their 800 m reach). Once capture exists, team 1 would have to land at Central through team 0's flak. Decide when capture is designed (Phase 8): turn Central north (approaches from the south sea, the same for both teams, but its pad cuts into the south of the city), or something else.
+- **Central lands from either end (decided and built 2026-10-19).** An east-only runway would have sent every approach past West Home's AA (400–500 m from it, inside its 800 m reach), so team 1 would have had to land through team 0's flak. Central is now **two-way** (`Airfield.IsTwoWay`): the glide path, landing guide and HUD rings are mirrored at the far end, and the end is chosen by heading (`Airfield.ApproachesFromReverseEnd`; by which end is nearer when nearly stopped). Landing, braking and repair don't care about direction. It has **one lane into each end** (`West Final`, `East Final`, gold gates): the same route from the south sea, mirrored across x = 0, ending 600 m out on that end's glide path, so both teams and both ends get identical approaches, clear of both homes' AA. Tested: `Central_IsTwoWay_WithOneLaneIntoEachEnd`, the shared lane tests, and the autopilot flies both. Bots don't pick a Central end yet (they only land at friendly fields, and Central has no owner until Domination capture exists).
 - **Needs a hands-on flight:** is the 40 s Canyon Run worth flying, compared to the 17 s Grassland lane? Are the gates readable at speed?
 
 **Spawn to fight:** the air spawn is 300 m up and 250 m behind each home runway, facing down the runway (north for west, south for east), not toward the center. The city center is ~1.7 km (~20 s) away, and two teams flying at each other close to missile lock range (900 m) after ~14 s. That misses the "find a fight within ~10 s" target (see Scale below). Fixes to consider later: point the air spawns at the center, or spawn further forward.
@@ -169,6 +169,10 @@ The edge is a circle 2600 m from the island center, all over open sea (the neare
 - **Turned back:** past the edge, the same autopilot bots will use takes the stick over 0.6 s and steers for the island center, holding altitude (at least 150 m, below the ceiling band). It lets go once you're back inside. Throttle and boost stay yours. Over the ceiling, it noses the plane down.
 - **Tested** (`IslandSceneTests`): every class, on 8 bearings, at 30 / 600 / 1400 m, flying straight out or along the edge, hands off or boosting outward against it. All are back inside in **3–6 s**, at most **~280 m** past the edge (the Interceptor boosting straight out), never lose height, and hands off they don't drift back out once it lets go.
 
+### Mode arenas (built, 2026-10-19)
+
+Modes that need a different play area get an arena on this map instead of a new scene (`Mode Arenas` in the scene, `ModeArena`; rules in [match-modes](../01-Game-Design/match-modes.md#arenas-built-2026-10-19)). Only **Ram Royale** has one so far: a 700 m circle round Lighthouse Rock with a 450 m ceiling and a hard edge, every airfield closed, an air start on a 550 m ring. While it's in force the buoy ring moves to its edge (~30 buoys). Its north edge just reaches the south coast; the rest is open sea.
+
 ## Design Rules
 
 - **Retreat distance:** from any point of action, a friendly airfield should be roughly **10–20 seconds** of flight away (proposed). Matches are only ~5 minutes, so a long retreat takes too much of the match. Too close removes the risk.
@@ -188,4 +192,4 @@ Teams mode airfields (proposed): 2 home airfields + 1 central neutral, capturabl
 - [x] Player count: up to 16
 - [ ] One map at launch, or several smaller ones? (Recommended for solo scope: one map)
 - [ ] Are city buildings destructible?
-- [ ] Central airfield's landing direction: today's east-facing runway makes every approach pass through West Home's AA (see [Approach lanes](#approach-lanes-built-2026-10-16)). Decide with airfield capture (Phase 8).
+- [x] Central airfield's landing direction → **landable from both ends**, one lane into each (see [Approach lanes](#approach-lanes-built-2026-10-16)).

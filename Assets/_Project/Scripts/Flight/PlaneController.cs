@@ -12,6 +12,8 @@ namespace WingingIt.Flight
         Collision,
         /// <summary>Body HP reached 0: explodes in mid-air.</summary>
         ShotDown,
+        /// <summary>Stayed past a hard arena edge too long (<see cref="WingingIt.World.FlightBoundary.hardEdge"/>).</summary>
+        OutOfBounds,
     }
 
     /// <summary>
@@ -31,8 +33,12 @@ namespace WingingIt.Flight
         [SerializeField] int team;
 
         [Header("Crash")]
-        [Tooltip("Any solid hit while faster than this destroys the plane.")]
+        [Tooltip("A solid hit by the body or engine while faster than this destroys the plane (a wing or tail just breaks off).")]
         [SerializeField] float crashSpeed = 8f;
+        [Tooltip("Fraction of speed lost when a wing or tail clips something and breaks off instead of crashing the plane.")]
+        [Range(0f, 1f)] [SerializeField] float clipSpeedLoss = 0.15f;
+        [Tooltip("Yaw jolt (deg/s) toward a wing that clips something: the snag drags the nose round.")]
+        [SerializeField] float clipYawKick = 40f;
 
         [Header("Landing")]
         [SerializeField] LandingRules landingRules = new();
@@ -50,6 +56,15 @@ namespace WingingIt.Flight
         [SerializeField] float liftoffPitch = 4f;
         [Tooltip("At idle on the ground, the brakes stop the plane by themselves, in our repair zone if it's ahead on this runway.")]
         [SerializeField] AutoBrake autoBrake = new();
+
+        [Tooltip("Reverse speed on the wheels (m/s): hold throttle down at a standstill to back up.")]
+        [SerializeField] float reverseSpeed = 8f;
+
+        [Header("Bank-style controls")]
+        [Tooltip("Bank angle (deg) that full roll input holds in the Bank control style.")]
+        [SerializeField] float bankStyleMaxBank = 60f;
+        [Tooltip("How hard the plane rolls toward the stick's bank angle (rate per degree of error, 1/s).")]
+        [SerializeField] float bankStyleGain = 4f;
 
         [Header("Boundary turn-back")]
         [SerializeField] float boundarySteerSensitivity = 2.5f;
@@ -78,6 +93,7 @@ namespace WingingIt.Flight
         float _simTime; // drives wobble, so it follows the simulation rather than the frame clock
         float _forcedRollRate, _forcedRollTime; // barrel roll
         float _groundPitch; // nose-up angle while on the wheels, deg
+        bool _reversing; // backing up on the wheels
         bool _takeoffRun; // powered up on the wheels: auto-throttle holds cruise until the gear retracts
 
         public event Action<PlaneController, Vector3> Crashed;
@@ -105,9 +121,16 @@ namespace WingingIt.Flight
         /// <summary>0..1 remaining boost.</summary>
         public float BoostMeter { get; private set; } = 1f;
         public bool IsBoosting { get; private set; }
+        /// <summary>
+        /// Towing a banner (Capture the Banner): no Boost, no Afterburner, no repair. Set by the match; the drag itself is
+        /// a <see cref="BannerDrag"/> modifier. Cleared on respawn.
+        /// </summary>
+        public bool CarryingBanner { get; set; }
         public bool IsOutOfBounds { get; private set; }
         public bool IsNearBoundary { get; private set; }
         public bool IsNearCeiling { get; private set; }
+        /// <summary>Seconds spent outside the play area this time (0 while inside). Past a hard edge's grace the plane is out.</summary>
+        public float OutOfBoundsTime { get; private set; }
         /// <summary>0..1, how much lift the plane has (1 = flying normally).</summary>
         public float LiftFactor { get; private set; } = 1f;
         public Vector3 Velocity => _velocity + Vector3.down * _sinkSpeed;
@@ -127,6 +150,8 @@ namespace WingingIt.Flight
         /// <summary>While <see cref="IsAutoBraking"/>: meters to the repair zone stop point, or null when just stopping.</summary>
         public float? AutoBrakeStopDistance { get; private set; }
         public AutoBrake AutoBrake => autoBrake;
+        /// <summary>Backing up on the wheels (throttle held down at a standstill).</summary>
+        public bool IsReversing => IsGrounded && _reversing;
         /// <summary>The most recent touchdown (check <see cref="HasTouchedDown"/>). Cleared on respawn.</summary>
         public TouchdownInfo LastTouchdown { get; private set; }
         public bool HasTouchedDown { get; private set; }
@@ -155,6 +180,12 @@ namespace WingingIt.Flight
 
         /// <summary>Set by the player input, a bot brain, or the network each frame.</summary>
         public void SetInput(FlightInput input) => _input = input;
+
+        /// <summary>
+        /// Multiplies how fast the turn rates follow the controls (<see cref="FlightStat.Responsiveness"/>). The player's
+        /// touch controls raise it: a thumb on glass has no feel, so the plane answers it more directly.
+        /// </summary>
+        public float ResponsivenessScale { get; set; } = 1f;
 
         public void SetStats(FlightStats newStats)
         {
@@ -210,6 +241,7 @@ namespace WingingIt.Flight
         void Spawn(Vector3 position, Quaternion rotation, float throttle, bool grounded)
         {
             Modifiers.Clear();
+            CarryingBanner = false;
             ResetState(position, rotation, throttle);
             if (grounded)
             {
@@ -235,6 +267,7 @@ namespace WingingIt.Flight
             _sinkSpeed = 0f;
             _angularRates = Vector3.zero;
             _boundaryOverride = 0f;
+            OutOfBoundsTime = 0f;
             _simTime = 0f;
             BoostMeter = 1f;
             _boostCooldown = 0f;
@@ -246,6 +279,7 @@ namespace WingingIt.Flight
             IsGrounded = false;
             IsAutoBraking = false;
             AutoBrakeStopDistance = null;
+            _reversing = false;
             _groundPitch = 0f;
             _takeoffRun = false;
             HasTouchedDown = false;
@@ -260,6 +294,8 @@ namespace WingingIt.Flight
             float dt = Time.fixedDeltaTime;
             _simTime += dt;
             FlightInput input = ApplyBoundary(_input, dt);
+            if (!IsAlive)
+                return; // out past a hard edge
 
             UpdateThrottleAndBoost(input, dt);
             Vector3 step;
@@ -301,14 +337,21 @@ namespace WingingIt.Flight
             IsNearBoundary = boundary.IsNearEdge(_position);
             IsNearCeiling = boundary.IsNearCeiling(_position);
             bool aboveCeiling = boundary.IsAboveCeiling(_position);
+            OutOfBoundsTime = IsOutOfBounds ? OutOfBoundsTime + dt : 0f;
+            if (boundary.IsOut(OutOfBoundsTime))
+            {
+                Crash(_position, DeathCause.OutOfBounds);
+                return input;
+            }
 
-            bool takeOver = IsOutOfBounds || aboveCeiling;
+            // A hard edge doesn't turn planes back: leaving is the pilot's own mistake (the ceiling still pushes down).
+            bool takeOver = (IsOutOfBounds && !boundary.hardEdge) || aboveCeiling;
             _boundaryOverride = Mathf.MoveTowards(_boundaryOverride, takeOver ? 1f : 0f, dt / boundaryTakeoverTime);
             if (_boundaryOverride <= 0f)
                 return input;
 
             Vector3 target;
-            if (IsOutOfBounds)
+            if (IsOutOfBounds && !boundary.hardEdge)
             {
                 target = boundary.ReturnPoint(_position);
             }
@@ -348,7 +391,7 @@ namespace WingingIt.Flight
                 Throttle = Mathf.Clamp01(Throttle + input.Throttle * stats.throttleChangeRate * dt);
 
             // Need a little meter to start a boost, so tapping on empty doesn't flicker.
-            bool wantsBoost = input.Boost && Modifiers.Get(FlightStat.Thrust) > 0f;
+            bool wantsBoost = input.Boost && !CarryingBanner && Modifiers.Get(FlightStat.Thrust) > 0f;
             IsBoosting = wantsBoost && (IsBoosting ? BoostMeter > 0f : BoostMeter > 0.15f);
 
             if (IsBoosting)
@@ -430,10 +473,16 @@ namespace WingingIt.Flight
             // Bank angle: 0 = wings level, + = right wing up, ±180 = inverted.
             float bank = Mathf.Atan2(right.y, up.y) * Mathf.Rad2Deg;
 
-            if (Mathf.Abs(input.Roll) < 0.05f)
-                target.z = Mathf.Clamp(bank * stats.autoLevelRoll * rollStability, -rollRate, rollRate);
+            if (input.Style == ControlStyle.Bank)
+            {
+                // Stick is a bank angle (right wing down for + roll), held until the stick moves.
+                float wanted = -Mathf.Clamp(input.Roll, -1f, 1f) * bankStyleMaxBank;
+                target.z = Mathf.Clamp(-Mathf.DeltaAngle(bank, wanted) * bankStyleGain, -rollRate, rollRate);
+            }
+            else if (Mathf.Abs(input.Roll) < 0.05f)
+                target.z = input.Style == ControlStyle.Hold ? 0f : Mathf.Clamp(bank * stats.autoLevelRoll * rollStability, -rollRate, rollRate);
 
-            if (Mathf.Abs(input.Pitch) < 0.05f)
+            if (Mathf.Abs(input.Pitch) < 0.05f && input.Style != ControlStyle.Hold)
             {
                 float pitchAngle = Mathf.Asin(Mathf.Clamp(forward.y, -1f, 1f)) * Mathf.Rad2Deg;
                 target.x = -pitchAngle * stats.autoLevelPitch * pitchStability * Mathf.Clamp01(up.y);
@@ -450,7 +499,7 @@ namespace WingingIt.Flight
                 target.y += (Mathf.PerlinNoise(t, _wobbleSeed) * 2f - 1f) * yawWobble;
 
             target *= authority;
-            float k = 1f - Mathf.Exp(-m.Get(FlightStat.Responsiveness) * dt);
+            float k = 1f - Mathf.Exp(-m.Get(FlightStat.Responsiveness) * ResponsivenessScale * dt);
             _angularRates = Vector3.Lerp(_angularRates, target, k);
 
             // A barrel roll spins at a fixed rate from the first step and stops dead on the last one, so it turns
@@ -609,9 +658,22 @@ namespace WingingIt.Flight
             Vector3 flat = Vector3.ProjectOnPlane(_rotation * Vector3.forward, Vector3.up);
             float heading = Mathf.Atan2(flat.x, flat.z) * Mathf.Rad2Deg;
 
-            IsAutoBraking = Throttle <= 0.001f && !IsBoosting;
+            // Throttle held down at a standstill backs the plane up (to reach the repair zone after a long landing).
+            bool wantsReverse = input.Throttle < -0.1f && Throttle <= 0.001f && !IsBoosting && thrust > 0f;
+            if (!_reversing && wantsReverse && Speed <= 0.5f)
+                _reversing = true;
+
+            IsAutoBraking = !_reversing && Throttle <= 0.001f && !IsBoosting;
             AutoBrakeStopDistance = IsAutoBraking ? StopDistance(flat.normalized) : null;
-            if (IsAutoBraking)
+            if (_reversing)
+            {
+                Speed = wantsReverse
+                    ? Mathf.MoveTowards(Speed, reverseSpeed, autoBrake.taxiAcceleration * dt)
+                    : Mathf.MoveTowards(Speed, 0f, autoBrake.brakeDeceleration * dt);
+                if (!wantsReverse && Speed <= 0.001f)
+                    _reversing = false;
+            }
+            else if (IsAutoBraking)
             {
                 Speed = autoBrake.NextSpeed(Speed, AutoBrakeStopDistance, thrust > 0f, dt);
             }
@@ -625,22 +687,22 @@ namespace WingingIt.Flight
             }
 
             float steer = Mathf.Clamp(input.Yaw + input.Roll, -1f, 1f);
-            heading += steer * groundTurnRate * Mathf.Clamp01(Speed / 10f) * dt; // no pivoting on the spot
+            heading += steer * groundTurnRate * Mathf.Clamp01(Speed / 10f) * (_reversing ? -1f : 1f) * dt; // no pivoting on the spot
 
             bool flyingSpeed = Speed >= stats.stallSpeed;
             float pitchTarget = flyingSpeed && input.Pitch > 0.05f ? Mathf.Clamp01(input.Pitch) * takeoffPitch : 0f;
             _groundPitch = Mathf.MoveTowards(_groundPitch, pitchTarget, m.Get(FlightStat.PitchRate) * 0.25f * dt);
 
             _rotation = Quaternion.Euler(-_groundPitch, heading, 0f);
-            _velocity = Quaternion.Euler(0f, heading, 0f) * Vector3.forward * Speed;
+            _velocity = Quaternion.Euler(0f, heading, 0f) * Vector3.forward * (_reversing ? -Speed : Speed);
             _sinkSpeed = 0f;
             _angularRates = Vector3.zero;
             _stallLift = _damageLift = LiftFactor = 1f;
 
             // Only a pull-up lifts off: a nose-high touchdown (a flare, or a crippled plane holding its nose up) stays down.
-            if (flyingSpeed && pitchTarget > 0f && _groundPitch >= liftoffPitch)
+            if (!_reversing && flyingSpeed && pitchTarget > 0f && _groundPitch >= liftoffPitch)
             {
-                IsGrounded = IsAutoBraking = false; // rotate and climb away along the nose
+                IsGrounded = IsAutoBraking = _reversing = false; // rotate and climb away along the nose
                 AutoBrakeStopDistance = null;
                 _velocity = _rotation * Vector3.forward * Speed;
                 return _velocity * dt;
@@ -655,7 +717,7 @@ namespace WingingIt.Flight
                 step.y = ground.point.y + clearance - _position.y;
             else
             {
-                IsGrounded = IsAutoBraking = false; // rolled off an edge: fall and fly
+                IsGrounded = IsAutoBraking = _reversing = false; // rolled off an edge: fall and fly
                 AutoBrakeStopDistance = null;
             }
             return step;
@@ -723,6 +785,10 @@ namespace WingingIt.Flight
                 return true;
             }
 
+            // A wing or tail that clips something breaks off; then the rest of the plane may still hit it.
+            if (TryClipPart(solid.Value, step / distance))
+                return SweepForCollisions(step);
+
             // Hitting flat ground with the airframe while nearly level is a failed touchdown (for the HUD), not just a
             // crash: a belly landing without locked gear, or with it, a wingtip or tail striking first (past ~20°).
             // Setting down on the sea is always a ditching.
@@ -737,6 +803,58 @@ namespace WingingIt.Flight
             }
             Crash(solid.Value.point);
             return true;
+        }
+
+        /// <summary>
+        /// If the collider that struck <paramref name="hit"/> belongs to a wing or stabilizer, rips that part off (and the
+        /// other plane's part too, in a wing-on-wing clip) instead of crashing. Returns true if a part came off.
+        /// </summary>
+        bool TryClipPart(RaycastHit hit, Vector3 direction)
+        {
+            var part = StrikingPart(hit, direction);
+            if (part == null || !part.CanDetach || part.IsDetached)
+                return false;
+            _health.ApplyDamage(part, float.MaxValue, hit.point, this);
+            if (!part.IsDetached)
+                return false; // invulnerable (just repaired): crashes as before
+
+            if (PlanePart.TryGetFromCollider(hit.collider, out var other) && other.CanDetach)
+            {
+                var otherHealth = other.GetComponentInParent<PlaneHealth>();
+                if (otherHealth != null && otherHealth != _health)
+                    otherHealth.ApplyDamage(other, float.MaxValue, hit.point, this);
+            }
+
+            Speed *= 1f - clipSpeedLoss;
+            _velocity *= 1f - clipSpeedLoss;
+            if (part.partType is PlanePartType.WingLeft or PlanePartType.WingRight)
+                _angularRates.y += (part.partType == PlanePartType.WingLeft ? -1f : 1f) * clipYawKick;
+            return true;
+        }
+
+        /// <summary>
+        /// Which of our parts made <paramref name="hit"/>. The sweep doesn't say which collider struck, so this takes the
+        /// one nearest the contact point, measured from where the plane is now (the hit point minus the swept distance).
+        /// </summary>
+        PlanePart StrikingPart(RaycastHit hit, Vector3 direction)
+        {
+            if (_health == null || (hit.distance <= 0f && hit.point == Vector3.zero))
+                return null; // started overlapping: no contact point to go on
+            Vector3 contact = hit.point - direction * hit.distance;
+            Collider nearest = null;
+            float best = float.PositiveInfinity;
+            foreach (var c in _colliders)
+            {
+                if (c == null || !c.enabled || !c.gameObject.activeInHierarchy || c.isTrigger)
+                    continue;
+                float d = (c.ClosestPoint(contact) - contact).sqrMagnitude;
+                if (d < best)
+                {
+                    best = d;
+                    nearest = c;
+                }
+            }
+            return PlanePart.TryGetFromCollider(nearest, out var part) ? part : null;
         }
 
         /// <summary>Destroys the plane at <paramref name="point"/>. Every death goes through here; respawning is up to <see cref="PlaneRespawner"/>.</summary>

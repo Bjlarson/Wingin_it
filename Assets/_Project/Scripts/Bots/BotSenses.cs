@@ -115,6 +115,39 @@ namespace WingingIt.Bots
         }
 
         /// <summary>
+        /// Whether a bot flying at <paramref name="velocity"/> should turn back from a hard arena edge (no autopilot
+        /// turn-back there): it's heading outward and will be within <paramref name="margin"/> of the edge (or past it)
+        /// in <paramref name="lookahead"/> seconds.
+        /// </summary>
+        public static bool ShouldTurnFromEdge(Vector3 position, Vector3 velocity, Vector3 center, float radius,
+            float margin = 100f, float lookahead = 3f)
+        {
+            Vector3 radial = position - center;
+            radial.y = 0f;
+            Vector3 flatVelocity = new Vector3(velocity.x, 0f, velocity.z);
+            if (Vector3.Dot(radial, flatVelocity) <= 0f)
+                return false; // heading in (or straight along the edge)
+            Vector3 ahead = radial + flatVelocity * lookahead;
+            return ahead.magnitude > radius - margin;
+        }
+
+        /// <summary>
+        /// Where to circle <paramref name="point"/> at <paramref name="orbitRadius"/> without the circle reaching within
+        /// <paramref name="margin"/> of the play area's edge (out there the boundary turn-back would take the stick, and it
+        /// doesn't watch the ground). The point itself if it's far enough in, else pulled straight in toward the middle.
+        /// </summary>
+        public static Vector3 OrbitInside(Vector3 point, float orbitRadius, Vector3 center, float radius, float margin)
+        {
+            Vector3 radial = point - center;
+            radial.y = 0f;
+            float max = Mathf.Max(0f, radius - margin - orbitRadius);
+            if (radial.magnitude <= max)
+                return point;
+            Vector3 inside = center + radial.normalized * max;
+            return new Vector3(inside.x, point.y, inside.z);
+        }
+
+        /// <summary>
         /// Where to steer to pull away from an obstacle: up at about <paramref name="climbAngle"/> degrees, and turned
         /// away from it along its surface normal (a wall turns us aside, flat ground just pulls the nose up).
         /// </summary>

@@ -101,6 +101,8 @@ namespace WingingIt.Bots
         public BotManeuver Maneuver { get; private set; } = BotManeuver.Cruise;
         /// <summary>FlyTo's goal, or the orbit center.</summary>
         public Vector3 Destination => Maneuver == BotManeuver.Orbit ? _orbitCenter : _destination;
+        /// <summary>How wide an <see cref="Orbit"/> circles (the last radius given, or the default).</summary>
+        public float OrbitRadius => orbitRadius;
         /// <summary>The plane being pursued or followed, or null.</summary>
         public PlaneController Target { get; private set; }
         /// <summary>Set when a FlyTo reaches its point (the bot then orbits it). Cleared by the next order.</summary>

@@ -149,6 +149,23 @@ If the runway is taken before final, it circles the point before the fix until i
 
 **On the ground:** it idles and lets the auto-brake stop it on the cross, which starts the repair. Stopped for **2 s** without a repair (it landed short or long of the zone) means it missed: it takes off and flies the approach again. When the repair finishes it boosts down the runway, takes off, and goes back to whatever it was doing.
 
+## Capture the Banner (built 2026-10-19, prototype)
+
+Each bot gets a **role** from its roster slot (`BannerPlan.RoleForSlot`: Runner, Defender, Escort, Escort repeating, so 2 / 2 / 3 in 7). The role only matters while a Banner match is on. `BotBrain.DoBannerDuty` turns it into a duty (`BannerPlan.Decide`) each step, ahead of the usual fight / patrol and after terrain, traffic and missile avoidance:
+
+| Duty | Who | What |
+|---|---|---|
+| Grab | Runner | Fly the low run (25 m up, 12 m beside the pole) through the enemy stand, or through the banner where it lies dropped. Ignores enemies on the way |
+| Deliver | Whoever carries | Same low run through its own stand. Never retreats to repair (a carrier can't) |
+| Escort | Runner / Escort while a teammate carries | Hold formation behind the carrier; fight only enemies within 700 m of it |
+| ChaseCarrier | Defender / Escort while our banner is taken | Targets the enemy carrier (always visible to us) |
+| ReturnDropped | Defender | Low run through our dropped banner |
+| Guard | Defender, banner home | Orbit our stand at 450 m; fights enemies within 1.5 km of it |
+
+Runs relax the terrain check to the landing minimum (20 m) and skip the pole's collider.
+
+**Not yet seen in a match** (only the EditMode `BannerPlanTests` ran). Check: do runners actually pass inside the 20 m zone below 40 m, do they clip the pole, and is 2 runners too many or too few.
+
 ## Tested
 
 - EditMode (`BotSteeringTests`): throttle commands (air, ground, lost thrust, dead engine), intercept lead + cap, formation slot frame + speed trim, orbit point, stick slew.

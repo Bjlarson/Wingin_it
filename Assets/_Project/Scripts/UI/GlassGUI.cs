@@ -228,9 +228,11 @@ namespace WingingIt.UI
                 _ramp.SetPixel(i, 0, new Color(1f, 1f, 1f, Mathf.Lerp(1f, 0.15f, i / 63f)));
             _ramp.Apply();
 
-            // DIN-like signage face: Bahnschrift on Windows, falling back through similar faces. Body face: Inter / Segoe UI.
-            _din = Font.CreateDynamicFontFromOSFont(new[] { "Bahnschrift", "DIN Alternate", "D-DIN", "Segoe UI Semibold", "Arial" }, 28);
-            _inter = Font.CreateDynamicFontFromOSFont(new[] { "Inter", "Segoe UI Variable", "Segoe UI", "Arial" }, 15);
+            // DIN-like signage face: Bahnschrift on Windows, falling back through similar faces (Roboto Condensed on
+            // Android). Body face: Inter / Segoe UI / Roboto.
+            // A font file bundled at Resources/Fonts/Display.ttf / Body.ttf ships inside the build and wins over device fonts.
+            _din = Resources.Load<Font>("Fonts/Display") ?? OSFont(28,"Bahnschrift", "DIN Alternate", "D-DIN", "Segoe UI Semibold", "Roboto Condensed", "Roboto", "Arial");
+            _inter = Resources.Load<Font>("Fonts/Body") ?? OSFont(15,"Inter", "Segoe UI Variable", "Segoe UI", "Roboto", "Arial");
 
             Title = Style(_din, 36, FontStyle.Bold);
             Item = Style(_din, 20, FontStyle.Normal);
@@ -240,6 +242,20 @@ namespace WingingIt.UI
             BodyText = Style(_inter, 17, FontStyle.Normal);
             BodyText.alignment = TextAnchor.UpperLeft;
             BodyText.wordWrap = true;
+        }
+
+        /// <summary>
+        /// The first of <paramref name="names"/> installed on this device. A dynamic font asked for names the OS lacks
+        /// (Windows faces on Android) has no glyphs and draws nothing, so with no match fall back to Unity's built-in
+        /// font, which every build includes.
+        /// </summary>
+        static Font OSFont(int size, params string[] names)
+        {
+            var installed = new HashSet<string>(Font.GetOSInstalledFontNames(), System.StringComparer.OrdinalIgnoreCase);
+            foreach (var name in names)
+                if (installed.Contains(name))
+                    return Font.CreateDynamicFontFromOSFont(name, size);
+            return Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         }
 
         static GUIStyle Style(Font font, int size, FontStyle fontStyle)

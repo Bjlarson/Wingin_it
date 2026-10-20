@@ -30,6 +30,20 @@ namespace WingingIt.Tests
             Assert.AreEqual(60f, pc.fieldOfView);
             Assert.IsTrue(pc.mouseAim);
             Assert.AreEqual(TouchControlsMode.Auto, pc.touchControls);
+            Assert.IsTrue(pc.hdr);
+            Assert.IsFalse(phone.hdr, "HDR costs phones bandwidth for little gain");
+            Assert.IsFalse(phone.showFps);
+            Assert.AreEqual(1f, phone.touchSensitivity);
+        }
+
+        [Test]
+        public void Phones_Offer90Fps_AndTouchSensitivityClamps()
+        {
+            var phone = new GameSettings(true, new MemoryStore());
+            phone.Set(s => s.frameRateCap = 90);
+            Assert.AreEqual(90, phone.Data.frameRateCap);
+            phone.Set(s => s.touchSensitivity = 10f);
+            Assert.AreEqual(GameSettings.MaxSensitivity, phone.Data.touchSensitivity);
         }
 
         [Test]
@@ -72,6 +86,18 @@ namespace WingingIt.Tests
             Assert.AreEqual(0.25f, loaded.musicVolume, 1e-5f);
             Assert.AreEqual(TeamColorMode.HighContrast, loaded.teamColors);
             Assert.AreEqual(WindowMode.Borderless, loaded.windowMode);
+        }
+
+        [Test]
+        public void ControlStyle_DefaultsToAutoLevel_RoundTrips_AndRejectsGarbage()
+        {
+            var store = new MemoryStore();
+            Assert.AreEqual(WingingIt.Flight.ControlStyle.AutoLevel, new GameSettings(false, store).Data.controlStyle);
+            var settings = new GameSettings(false, store);
+            settings.Set(s => s.controlStyle = WingingIt.Flight.ControlStyle.Bank);
+            Assert.AreEqual(WingingIt.Flight.ControlStyle.Bank, new GameSettings(false, store).Data.controlStyle);
+            settings.Set(s => s.controlStyle = (WingingIt.Flight.ControlStyle)42);
+            Assert.AreEqual(WingingIt.Flight.ControlStyle.AutoLevel, settings.Data.controlStyle);
         }
 
         [Test]

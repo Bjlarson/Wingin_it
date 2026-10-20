@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using WingingIt.Flight;
 
 namespace WingingIt.Settings
 {
@@ -44,10 +45,15 @@ namespace WingingIt.Settings
         public bool mouseAim = true;
         public float mouseAimSensitivity = 1f;
         public float freeLookSensitivity = 1f;
+        /// <summary>Flips up/down on the keys, stick, touch stick and mouse (mouse aim included).</summary>
         public bool invertPitch;
+        /// <summary>What the stick means in Direct mode, on a pad and on touch: turn rate (auto-level or hold) or bank angle.</summary>
+        public ControlStyle controlStyle = ControlStyle.AutoLevel;
         public TouchControlsMode touchControls = TouchControlsMode.Auto;
         public bool autoThrottle = true;
         public float touchButtonSize = 1f;
+        /// <summary>How hard the on-screen stick steers: scales the stick past its small dead zone.</summary>
+        public float touchSensitivity = 1f;
 
         // Graphics
         /// <summary>Index into the quality levels; -1 = the platform's default level.</summary>
@@ -61,6 +67,10 @@ namespace WingingIt.Settings
         public float renderScale = 1f;
         public float fieldOfView = 60f;
         public bool speedFov = true;
+        /// <summary>High dynamic range rendering. Off by default on phones, where it costs bandwidth for little gain.</summary>
+        public bool hdr = true;
+        /// <summary>A small frame rate / frame time readout in the top left corner.</summary>
+        public bool showFps;
 
         // Audio (0-1)
         public float masterVolume = 0.8f;
@@ -117,7 +127,7 @@ namespace WingingIt.Settings
         public const float MinFov = 50f, MaxFov = 80f;
         public const float MinHudScale = 0.75f, MaxHudScale = 1.25f;
         public static readonly int[] DesktopFrameRates = { 30, 60, 120, 144, 0 };
-        public static readonly int[] MobileFrameRates = { 30, 60, 120 };
+        public static readonly int[] MobileFrameRates = { 30, 60, 90, 120 };
 
         static GameSettings s_instance;
 
@@ -185,9 +195,11 @@ namespace WingingIt.Settings
                         s.mouseAimSensitivity = d.mouseAimSensitivity;
                         s.freeLookSensitivity = d.freeLookSensitivity;
                         s.invertPitch = d.invertPitch;
+                        s.controlStyle = d.controlStyle;
                         s.touchControls = d.touchControls;
                         s.autoThrottle = d.autoThrottle;
                         s.touchButtonSize = d.touchButtonSize;
+                        s.touchSensitivity = d.touchSensitivity;
                         break;
                     case SettingsTab.Graphics:
                         s.quality = d.quality;
@@ -198,6 +210,8 @@ namespace WingingIt.Settings
                         s.renderScale = d.renderScale;
                         s.fieldOfView = d.fieldOfView;
                         s.speedFov = d.speedFov;
+                        s.hdr = d.hdr;
+                        s.showFps = d.showFps;
                         break;
                     case SettingsTab.Audio:
                         s.masterVolume = d.masterVolume;
@@ -228,6 +242,7 @@ namespace WingingIt.Settings
             {
                 d.frameRateCap = 60;
                 d.renderScale = 0.8f;
+                d.hdr = false;
             }
             return d;
         }
@@ -238,6 +253,9 @@ namespace WingingIt.Settings
             s.mouseAimSensitivity = Mathf.Clamp(s.mouseAimSensitivity, MinSensitivity, MaxSensitivity);
             s.freeLookSensitivity = Mathf.Clamp(s.freeLookSensitivity, MinSensitivity, MaxSensitivity);
             s.touchButtonSize = Mathf.Clamp(s.touchButtonSize, MinTouchButtonSize, MaxTouchButtonSize);
+            s.touchSensitivity = Mathf.Clamp(s.touchSensitivity, MinSensitivity, MaxSensitivity);
+            if (!Enum.IsDefined(typeof(ControlStyle), s.controlStyle))
+                s.controlStyle = ControlStyle.AutoLevel;
             if (!Enum.IsDefined(typeof(TouchControlsMode), s.touchControls))
                 s.touchControls = TouchControlsMode.Auto;
 

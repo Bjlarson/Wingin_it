@@ -1,13 +1,15 @@
 using System.Collections.Generic;
 using UnityEngine;
+using WingingIt.Effects;
 
 namespace WingingIt.Flight
 {
     /// <summary>
-    /// Placeholder presentation for the modular plane: class tint and scale, spinning propeller, landing gear folding,
+    /// Presentation for the modular plane: the class's finished model (or the tinted placeholder boxes) and team colors,
+    /// class scale, spinning propeller, landing gear folding,
     /// parts breaking off as tumbling, smoking debris, damage smoke and fire from the body state
-    /// (and a dead engine), a cheap break-apart when the plane crashes,
-    /// and a mid-air explosion with a burning, falling wreck when it's shot down.
+    /// (and a dead engine), a cheap break-apart when the plane crashes (a ground blast, or a splash on the sea),
+    /// and a mid-air "BOOM!" with a burning, falling wreck when it's shot down. Effects come from the VFX pack (<see cref="Vfx"/>).
     /// </summary>
     public class PlaneVisuals : MonoBehaviour
     {
@@ -20,22 +22,57 @@ namespace WingingIt.Flight
         [SerializeField] Renderer[] tintedRenderers;
         [SerializeField] Transform propeller;
         [SerializeField] float propellerMaxRpm = 1800f;
+        [Tooltip("How fast a class model's radar dome turns.")]
+        [SerializeField] float radarRpm = 12f;
         [SerializeField] float debrisLifetime = 6f;
         [Tooltip("Wreckage of a plane shot down in mid-air; long enough to fall to the ground.")]
         [SerializeField] float wreckLifetime = 12f;
-        [Tooltip("Trail left by a broken-off part as it falls.")]
-        [SerializeField] Material smokeMaterial;
-        [Tooltip("Flames trailing a Critical plane.")]
-        [SerializeField] Material fireMaterial;
 
         [Tooltip("Landing gear legs: each folds by its angles when the gear is up and hides once fully stowed.")]
         [SerializeField] GearLeg[] gearLegs;
 
-        [Header("Damage smoke")]
-        [SerializeField] Color lightSmokeColor = new(0.6f, 0.6f, 0.62f);
-        [SerializeField] Color heavySmokeColor = new(0.1f, 0.1f, 0.11f);
+        [Header("Class models")]
+        [Tooltip("The placeholder boxes' renderers, hidden while the class flown has its own model. Hitboxes stay.")]
+        [SerializeField] Renderer[] placeholderRenderers;
+        [Tooltip("Finished models: each shows only while its class is flown.")]
+        [SerializeField] ClassModel[] classModels;
+        [Tooltip("The gun muzzles (PlaneGuns' order): a class model can move them onto its own barrels.")]
+        [SerializeField] Transform[] muzzles;
+        [Tooltip("The rocket rails (PlaneRockets' order): a class model can move them onto its own pods.")]
+        [SerializeField] Transform[] rails;
+        [Tooltip("The wing hitboxes (left, right): a class model whose wing sits elsewhere (a high wing) moves them onto it.")]
+        [SerializeField] Transform[] wingHitboxes;
+        [Tooltip("Team-zone material (wingtips, tail, roundel): tinted with the plane's team color.")]
+        [SerializeField] Material teamMaterial;
+        [Tooltip("Team colors without a match (team 0, team 1).")]
+        [SerializeField] Color[] fallbackTeamColors = { new(0.35f, 0.6f, 1f), new(1f, 0.38f, 0.32f) };
+
+        /// <summary>The running match's team colors (high-contrast setting included), or null for the fallbacks.</summary>
+        public static System.Func<int, Color> TeamColors { get; set; }
+
+        /// <summary>The team ramp's base tone in PlanePalette.png: the team tint scales it up to the team color.</summary>
+        const float TeamSwatchBase = 215f / 255f;
 
         enum SmokeLevel { None, Light, Heavy }
+
+        /// <summary>One class's finished model, spread over the parts, gear legs and broken edges of the shared prefab.</summary>
+        [System.Serializable]
+        public struct ClassModel
+        {
+            public FlightStats stats;
+            [Tooltip("Roots of the model's pieces; shown only while this class is flown.")]
+            public GameObject[] pieces;
+            [Tooltip("Local positions for the muzzles (same order) on this model's barrels; empty keeps the prefab's.")]
+            public Vector3[] muzzlePositions;
+            [Tooltip("More propellers that spin with the engine (e.g. a twin's, on the wings), besides the nose one.")]
+            public Transform[] propellers;
+            [Tooltip("Local positions for the rocket rails (same order) at this model's pods; empty keeps the prefab's.")]
+            public Vector3[] railPositions;
+            [Tooltip("Local positions for the wing hitboxes (left, right) on this model's wings; empty keeps the prefab's.")]
+            public Vector3[] wingHitboxPositions;
+            [Tooltip("Radar domes that turn slowly about their vertical axis while the plane flies.")]
+            public Transform[] radars;
+        }
 
         /// <summary>One landing gear leg: a pivot posed fully extended in the prefab, and its fold when stowed.</summary>
         [System.Serializable]
@@ -49,12 +86,17 @@ namespace WingingIt.Flight
         PlaneHealth _health;
         LandingGear _gear;
         Quaternion[] _legExtended;
-        TrailRenderer _smoke, _fire;
+        VfxEffect _smoke, _fire;
         SmokeLevel _smokeLevel;
         bool _fireOn;
 
         MaterialPropertyBlock _block;
         readonly List<Renderer> _hidden = new();
+        readonly List<(Renderer renderer, int index)> _teamSlots = new();
+        Vector3[] _muzzleDefaults, _railDefaults, _hitboxDefaults;
+        Transform[] _extraPropellers, _radars;
+        Color _teamColor;
+        bool _teamTinted;
 
         void Reset() => plane = GetComponent<PlaneController>();
 
@@ -69,6 +111,7 @@ namespace WingingIt.Flight
             plane.StatsChanged += OnStatsChanged;
             plane.Crashed += OnCrashed;
             plane.Respawned += OnRespawned;
+            plane.TouchedDown += OnTouchedDown;
             ApplyClassLook();
         }
 
@@ -81,20 +124,141 @@ namespace WingingIt.Flight
             plane.StatsChanged -= OnStatsChanged;
             plane.Crashed -= OnCrashed;
             plane.Respawned -= OnRespawned;
+            plane.TouchedDown -= OnTouchedDown;
         }
 
         void Update()
         {
-            if (propeller == null || !plane.IsAlive)
+            if (!plane.IsAlive)
                 return;
             float throttle = plane.IsBoosting ? 1.3f : Mathf.Lerp(0.3f, 1f, plane.Throttle);
-            propeller.Rotate(0f, 0f, propellerMaxRpm * 6f * throttle * plane.EffectiveThrust * Time.deltaTime, Space.Self);
+            float degrees = propellerMaxRpm * 6f * throttle * plane.EffectiveThrust * Time.deltaTime;
+            if (propeller != null)
+                propeller.Rotate(0f, 0f, degrees, Space.Self);
+            if (_extraPropellers != null)
+                foreach (var p in _extraPropellers)
+                    if (p != null)
+                        p.Rotate(0f, 0f, degrees, Space.Self);
+            if (_radars != null)
+                foreach (var r in _radars)
+                    if (r != null)
+                        r.Rotate(0f, radarRpm * 6f * Time.deltaTime, 0f, Space.Self);
         }
 
         void LateUpdate()
         {
             UpdateDamageSmoke();
             UpdateGear();
+            UpdateTeamColor();
+        }
+
+        /// <summary>Tints the team zones whenever the team (or its color setting) changes.</summary>
+        void UpdateTeamColor()
+        {
+            if (teamMaterial == null)
+                return;
+            int team = plane.Team;
+            Color color = TeamColors != null ? TeamColors(team)
+                : fallbackTeamColors.Length > 0 ? fallbackTeamColors[Mathf.Clamp(team, 0, fallbackTeamColors.Length - 1)]
+                : Color.white;
+            if (_teamTinted && color == _teamColor)
+                return;
+            _teamColor = color;
+            _teamTinted = true;
+
+            if (_teamSlots.Count == 0)
+                foreach (var model in classModels)
+                foreach (var piece in model.pieces)
+                {
+                    if (piece == null)
+                        continue;
+                    foreach (var r in piece.GetComponentsInChildren<Renderer>(true))
+                    {
+                        var mats = r.sharedMaterials;
+                        for (int i = 0; i < mats.Length; i++)
+                            if (mats[i] == teamMaterial)
+                                _teamSlots.Add((r, i));
+                    }
+                }
+
+            var tint = TeamTint(color);
+            var block = new MaterialPropertyBlock();
+            foreach (var (r, index) in _teamSlots)
+            {
+                if (r == null)
+                    continue;
+                r.GetPropertyBlock(block, index);
+                block.SetVector(BaseColorId, tint);
+                r.SetPropertyBlock(block, index);
+            }
+        }
+
+        /// <summary>
+        /// The team material's raw _BaseColor for <paramref name="team"/>: the texture's ramp is grey, so it's scaled
+        /// so the base tone lands exactly on the team color. Raw (set with SetVector), since the scale has to happen in
+        /// the shader's color space.
+        /// </summary>
+        public static Vector4 TeamTint(Color team)
+        {
+            bool linear = QualitySettings.activeColorSpace == ColorSpace.Linear;
+            Color c = linear ? team.linear : team;
+            float b = linear ? Mathf.GammaToLinearSpace(TeamSwatchBase) : TeamSwatchBase;
+            return new Vector4(c.r / b, c.g / b, c.b / b, 1f);
+        }
+
+        /// <summary>
+        /// Shows the class's own model, if it has one, in place of the placeholder boxes. Waits while the plane is down
+        /// (its renderers are hidden until the respawn re-applies it).
+        /// </summary>
+        void ApplyClassModel()
+        {
+            if (!plane.IsAlive || classModels == null)
+                return;
+            var stats = plane.Stats;
+            bool hasModel = false;
+            Vector3[] muzzlePositions = null, railPositions = null, hitboxPositions = null;
+            _extraPropellers = _radars = null;
+            foreach (var model in classModels)
+                if (model.stats != null && model.stats == stats)
+                {
+                    hasModel = true;
+                    muzzlePositions = model.muzzlePositions;
+                    railPositions = model.railPositions;
+                    hitboxPositions = model.wingHitboxPositions;
+                    _extraPropellers = model.propellers;
+                    _radars = model.radars;
+                }
+            foreach (var model in classModels)
+            foreach (var piece in model.pieces)
+                if (piece != null)
+                    piece.SetActive(model.stats == stats);
+            foreach (var r in placeholderRenderers)
+                if (r != null)
+                    r.enabled = !hasModel;
+            Place(muzzles, ref _muzzleDefaults, muzzlePositions);
+            Place(rails, ref _railDefaults, railPositions);
+            Place(wingHitboxes, ref _hitboxDefaults, hitboxPositions);
+        }
+
+        /// <summary>
+        /// Moves gun muzzles, rocket rails or wing hitboxes to the class model's positions for them, or back where the
+        /// prefab has them.
+        /// </summary>
+        static void Place(Transform[] points, ref Vector3[] defaults, Vector3[] positions)
+        {
+            if (points == null || points.Length == 0)
+                return;
+            if (defaults == null)
+            {
+                defaults = new Vector3[points.Length];
+                for (int i = 0; i < points.Length; i++)
+                    if (points[i] != null)
+                        defaults[i] = points[i].localPosition;
+            }
+            bool own = positions != null && positions.Length == points.Length;
+            for (int i = 0; i < points.Length; i++)
+                if (points[i] != null)
+                    points[i].localPosition = own ? positions[i] : defaults[i];
         }
 
         void UpdateGear()
@@ -122,7 +286,7 @@ namespace WingingIt.Flight
             }
         }
 
-        /// <summary>Light smoke when Damaged; heavy black smoke when Critical or the engine is dead; fire when Critical.</summary>
+        /// <summary>Grey wisps when Damaged; thick black smoke when Critical or the engine is dead; flames too when Critical.</summary>
         void UpdateDamageSmoke()
         {
             var level = SmokeLevel.None;
@@ -138,74 +302,34 @@ namespace WingingIt.Flight
                 fire = state == BodyDamageState.Critical;
             }
 
+            // A stopped emitter lets its puffs drift away behind the plane, so a change of level never pops.
             if (level != _smokeLevel)
             {
                 _smokeLevel = level;
-                if (level != SmokeLevel.None && _smoke == null)
-                    _smoke = CreateTrail("Damage Smoke", smokeMaterial);
-                if (_smoke != null)
-                {
-                    bool heavy = level == SmokeLevel.Heavy;
-                    _smoke.emitting = level != SmokeLevel.None;
-                    _smoke.time = heavy ? 2.5f : 1.4f;
-                    _smoke.widthCurve = heavy
-                        ? new AnimationCurve(new Keyframe(0f, 1.3f), new Keyframe(1f, 4.5f))
-                        : new AnimationCurve(new Keyframe(0f, 0.6f), new Keyframe(1f, 2.2f));
-                    SetColor(_smoke, heavy ? heavySmokeColor : lightSmokeColor);
-                    if (level == SmokeLevel.None)
-                        _smoke.Clear();
-                }
+                _smoke?.Stop();
+                _smoke = level == SmokeLevel.None ? null
+                    : AttachAtEngine(level == SmokeLevel.Heavy ? VfxKind.DamageSmokeHeavy : VfxKind.DamageSmokeLight);
             }
-
             if (fire != _fireOn)
             {
                 _fireOn = fire;
-                if (fire && _fire == null)
-                {
-                    _fire = CreateTrail("Damage Fire", fireMaterial);
-                    if (_fire != null)
-                        _fire.time = 0.2f;
-                }
-                if (_fire != null)
-                {
-                    _fire.emitting = fire;
-                    if (!fire)
-                        _fire.Clear();
-                }
+                _fire?.Stop();
+                _fire = fire ? AttachAtEngine(VfxKind.DamageFire) : null;
             }
-
-            // Flicker the flames.
-            if (_fireOn && _fire != null)
-                _fire.widthMultiplier = Mathf.Lerp(0.6f, 1.3f, Mathf.PerlinNoise(Time.time * 12f, 0.3f));
         }
 
-        /// <summary>A trail that streams from the engine (the nose), behind the propeller.</summary>
-        TrailRenderer CreateTrail(string trailName, Material material)
+        /// <summary>
+        /// A looping effect streaming from the engine (the nose), behind the propeller. It rides on the plane itself,
+        /// not the engine part, which can break off.
+        /// </summary>
+        VfxEffect AttachAtEngine(VfxKind kind)
         {
-            if (material == null)
-                return null;
-            var go = new GameObject(trailName);
-            var anchor = _health != null && _health.GetPart(PlanePartType.Engine) != null
-                ? _health.GetPart(PlanePartType.Engine).transform
-                : plane.transform;
-            go.transform.SetParent(plane.transform, false);
-            go.transform.position = anchor.position;
-            var trail = go.AddComponent<TrailRenderer>();
-            trail.sharedMaterial = material;
-            trail.minVertexDistance = 0.5f;
-            trail.emitting = false;
-            trail.widthCurve = new AnimationCurve(new Keyframe(0f, 1f), new Keyframe(1f, 0f));
-            trail.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            return trail;
+            var engine = _health != null ? _health.GetPart(PlanePartType.Engine) : null;
+            Vector3 local = engine != null ? plane.transform.InverseTransformPoint(engine.transform.position) : Vector3.zero;
+            return Vfx.Attach(kind, plane.transform, local, ClassScale);
         }
 
-        void SetColor(Renderer r, Color color)
-        {
-            _block ??= new MaterialPropertyBlock();
-            r.GetPropertyBlock(_block);
-            _block.SetColor(BaseColorId, color);
-            r.SetPropertyBlock(_block);
-        }
+        float ClassScale => plane.Stats != null ? plane.Stats.visualScale : 1f;
 
         void OnStatsChanged(PlaneController _) => ApplyClassLook();
 
@@ -222,6 +346,7 @@ namespace WingingIt.Flight
             foreach (var r in tintedRenderers)
                 if (r != null)
                     r.SetPropertyBlock(_block);
+            ApplyClassModel();
         }
 
         void OnPartDestroyed(PlaneHealth _, PartDamageInfo info)
@@ -235,13 +360,14 @@ namespace WingingIt.Flight
             debris.linearVelocity = plane.Velocity * 0.9f + away.normalized * Random.Range(4f, 8f) + Vector3.up * Random.Range(1f, 4f);
             debris.angularVelocity = Random.insideUnitSphere * 5f;
             debris.linearDamping = 0.6f;
-            AddSmokeTrail(debris.gameObject);
+            Vfx.Attach(VfxKind.DebrisSmoke, debris.transform, Vector3.zero);
+            Vfx.Play(VfxKind.PartDetach, info.Part.transform.position, ClassScale);
         }
 
         void OnCrashed(PlaneController _, Vector3 point)
         {
             Vector3 velocity = plane.Velocity;
-            bool shotDown = plane.LastDeathCause == DeathCause.ShotDown;
+            bool shotDown = plane.LastDeathCause is DeathCause.ShotDown or DeathCause.OutOfBounds; // both break up in mid-air
             _hidden.Clear();
 
             // Throw a copy of every part still attached, then hide the real plane until respawn.
@@ -256,9 +382,9 @@ namespace WingingIt.Flight
                     debris.linearVelocity = velocity * 0.7f + away * Random.Range(6f, 14f) + Vector3.up * Random.Range(2f, 8f);
                     debris.angularVelocity = Random.insideUnitSphere * 4f;
                     debris.linearDamping = 0.3f;
-                    AddSmokeTrail(debris.gameObject);
+                    Vfx.Attach(VfxKind.DebrisSmoke, debris.transform, Vector3.zero, 1.3f);
                     if (part.partType is PlanePartType.Body or PlanePartType.Engine)
-                        AddFireTrail(debris.gameObject);
+                        Vfx.Attach(VfxKind.DamageFire, debris.transform, Vector3.zero, 1.5f);
                 }
                 else
                 {
@@ -267,18 +393,21 @@ namespace WingingIt.Flight
                 }
             }
 
+            UpdateDamageSmoke(); // the plane is down: stop the damage smoke now, so it drifts off instead of hiding
             foreach (var r in GetComponentsInChildren<Renderer>())
             {
-                if (!r.enabled)
+                if (!r.enabled || r is ParticleSystemRenderer) // effects finish on their own
                     continue;
                 r.enabled = false;
                 _hidden.Add(r);
             }
 
             if (shotDown)
-                SpawnExplosion(point, velocity);
+                Vfx.Play(VfxKind.ExplosionPlane, point, ClassScale);
+            else if (Physics.CheckSphere(point, 2f, 1 << PlaneController.WaterLayer, QueryTriggerInteraction.Ignore))
+                Vfx.Play(VfxKind.WaterSplash, point, ClassScale); // ditched
             else
-                SpawnFlash(point, fireMaterial, new Color(1f, 0.55f, 0.1f), 2f, 22f, 0.4f, Vector3.zero);
+                Vfx.Play(VfxKind.ExplosionGround, point, 1.2f * ClassScale);
         }
 
         void OnRespawned(PlaneController _)
@@ -287,6 +416,24 @@ namespace WingingIt.Flight
                 if (r != null)
                     r.enabled = true;
             _hidden.Clear();
+            ApplyClassModel(); // the class may have changed while the plane was down
+            Vfx.Attach(VfxKind.RespawnShimmer, plane.transform, Vector3.zero, ClassScale);
+        }
+
+        /// <summary>Tyre smoke under each main wheel, more for a harder landing; a bounce kicks up more still.</summary>
+        void OnTouchedDown(PlaneController _, TouchdownInfo info)
+        {
+            if (info.Result == TouchdownResult.Crashed || gearLegs == null)
+                return;
+            float scale = Mathf.Clamp(0.8f + info.SinkRate / 3f, 0.8f, 2f) * (info.Result == TouchdownResult.Bounced ? 1.5f : 1f);
+            float groundY = plane.Position.y - (_gear != null ? _gear.WheelClearance : 0f);
+            for (int i = 0; i < gearLegs.Length && i < 2; i++) // the mains come first; the nose wheel touches later
+            {
+                if (gearLegs[i].pivot == null)
+                    continue;
+                var wheel = gearLegs[i].pivot.position;
+                Vfx.Play(VfxKind.Touchdown, new Vector3(wheel.x, groundY, wheel.z), scale * ClassScale);
+            }
         }
 
         /// <summary>A physics copy of <paramref name="part"/> that despawns after a while. Works on a detached (inactive) part.</summary>
@@ -295,6 +442,7 @@ namespace WingingIt.Flight
             var copy = Instantiate(part, position, part.transform.rotation);
             copy.transform.localScale = part.transform.lossyScale;
             copy.name = part.name + " (Debris)";
+            CopyTints(part, copy);
             foreach (var c in copy.GetComponentsInChildren<PlanePart>(true))
                 Destroy(c);
             // It starts inside the plane, so keep it from shoving against the plane's own hitboxes.
@@ -307,93 +455,34 @@ namespace WingingIt.Flight
             }
             copy.SetActive(true);
 
-            copy.AddComponent<PlaneDebris>();
+            copy.AddComponent<PlaneDebris>().Expire(lifetime);
             var body = copy.AddComponent<Rigidbody>();
             body.mass = 50f;
-            Destroy(copy, lifetime);
             return body;
         }
 
-        void AddSmokeTrail(GameObject debris)
+        /// <summary>Property blocks (class and team tints) aren't cloned with the object, so carry them over to debris.</summary>
+        void CopyTints(GameObject source, GameObject copy)
         {
-            if (smokeMaterial == null)
-                return;
-            var trail = debris.AddComponent<TrailRenderer>();
-            trail.sharedMaterial = smokeMaterial;
-            trail.time = 1.5f;
-            trail.minVertexDistance = 0.5f;
-            trail.widthCurve = new AnimationCurve(new Keyframe(0f, 0.9f), new Keyframe(1f, 2.4f));
-            trail.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        }
-
-        void AddFireTrail(GameObject debris)
-        {
-            if (fireMaterial == null)
-                return;
-            // A child, since the debris already carries the smoke trail.
-            var go = new GameObject("Fire");
-            go.transform.SetParent(debris.transform, false);
-            var trail = go.AddComponent<TrailRenderer>();
-            trail.sharedMaterial = fireMaterial;
-            trail.time = 0.35f;
-            trail.minVertexDistance = 0.3f;
-            trail.widthCurve = new AnimationCurve(new Keyframe(0f, 1.6f), new Keyframe(1f, 0f));
-            trail.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        }
-
-        /// <summary>
-        /// Placeholder mid-air explosion, big enough to read as a kill from a distance: a white-hot core,
-        /// an orange fireball drifting with the wreck, and a dark smoke cloud that hangs for a few seconds.
-        /// </summary>
-        void SpawnExplosion(Vector3 point, Vector3 velocity)
-        {
-            // The opaque spheres nest, so the smoke starts small and only swallows the fireball as it fades.
-            SpawnFlash(point, smokeMaterial, heavySmokeColor, 2f, 26f, 2.5f, velocity * 0.15f);
-            SpawnFlash(point, fireMaterial, new Color(1f, 0.5f, 0.08f), 4f, 24f, 0.7f, velocity * 0.4f);
-            SpawnFlash(point, fireMaterial, new Color(1f, 0.95f, 0.75f), 3f, 12f, 0.18f, velocity * 0.5f);
-        }
-
-        /// <summary>One expanding sphere. <paramref name="material"/> (unlit) makes it glow; null uses the primitive's default lit look.</summary>
-        public static void SpawnFlash(Vector3 point, Material material, Color color, float startSize, float endSize, float duration, Vector3 drift)
-        {
-            var flash = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            flash.name = "Explosion";
-            Destroy(flash.GetComponent<Collider>());
-            flash.transform.position = point;
-            var r = flash.GetComponent<Renderer>();
-            if (material != null)
-                r.sharedMaterial = material;
-            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            var from = source.GetComponentsInChildren<Renderer>(true);
+            var to = copy.GetComponentsInChildren<Renderer>(true);
             var block = new MaterialPropertyBlock();
-            block.SetColor(BaseColorId, color);
-            r.SetPropertyBlock(block);
-            flash.AddComponent<GrowAndDestroy>().Init(startSize, endSize, duration, drift);
-        }
-
-        /// <summary>Placeholder explosion puff: a sphere that swells (fast at first), drifts, and disappears.</summary>
-        class GrowAndDestroy : MonoBehaviour
-        {
-            float _t, _startSize, _endSize, _duration;
-            Vector3 _drift;
-
-            public void Init(float startSize, float endSize, float duration, Vector3 drift)
+            for (int i = 0; i < from.Length && i < to.Length; i++)
             {
-                _startSize = startSize;
-                _endSize = endSize;
-                _duration = duration;
-                _drift = drift;
-                transform.localScale = Vector3.one * startSize;
-            }
-
-            void Update()
-            {
-                _t += Time.deltaTime;
-                float k = 1f - (1f - _t / _duration) * (1f - _t / _duration); // ease out
-                transform.localScale = Vector3.one * Mathf.Lerp(_startSize, _endSize, k);
-                transform.position += _drift * Time.deltaTime;
-                _drift *= Mathf.Exp(-1.5f * Time.deltaTime);
-                if (_t > _duration)
-                    Destroy(gameObject);
+                if (from[i].HasPropertyBlock())
+                {
+                    from[i].GetPropertyBlock(block);
+                    to[i].SetPropertyBlock(block);
+                }
+                if (teamMaterial == null)
+                    continue;
+                var mats = from[i].sharedMaterials;
+                for (int m = 0; m < mats.Length; m++)
+                    if (mats[m] == teamMaterial)
+                    {
+                        from[i].GetPropertyBlock(block, m);
+                        to[i].SetPropertyBlock(block, m);
+                    }
             }
         }
     }

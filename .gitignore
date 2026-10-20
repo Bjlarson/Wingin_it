@@ -50,3 +50,9 @@ desktop.ini
 
 # Test runner temp scenes
 /Assets/InitTestScene*.unity*
+
+# Blender auto-backups
+*.blend1
+
+# Python bytecode from Blender build scripts
+__pycache__/

@@ -60,9 +60,11 @@ namespace WingingIt.Editor
             (new Vector2(1150f, -620f), 100f, 90f),
             (new Vector2(750f, -230f), 80f, 140f),
         };
-        // The canal runs from the middle of the city north to the sea.
+        // The canal runs from the middle of the city north to the sea, between quay walls 120 m apart (their face is
+        // CanalHalfWidth from the middle, with a promenade behind: the city pack's Quay). The bridges carry two streets.
         const float CanalStartZ = 50f;
-        static readonly float[] BridgeZ = { 200f, 520f };
+        const float CanalHalfWidth = 60f;
+        static readonly float[] BridgeZ = { 200f, 560f };
 
         // Landmarks, one per region (island-map.md). The Spire takes a whole city block as its plaza; the summit
         // radar goes on the highest mountain peak; the lighthouse stands on a rocky islet off the south coast.
@@ -85,6 +87,10 @@ namespace WingingIt.Editor
             ("West Home Airfield", 0, true, new Vector2(-1600f, 0f), 0f),
             ("East Home Airfield", 1, true, new Vector2(1600f, 0f), 180f),
             ("Central Airfield", Airfield.Neutral, false, new Vector2(0f, -700f), 90f),
+            // Airfield Domination's mirrored pair of capture fields: equally far from both homes, one-way, landing north
+            // off the south sea (the other end faces the south coast hills).
+            ("South West Airfield", Airfield.Neutral, false, new Vector2(-750f, -900f), 0f),
+            ("South East Airfield", Airfield.Neutral, false, new Vector2(750f, -900f), 0f),
         };
         /// <summary>
         /// Where bots patrol when nothing's in sight (<see cref="BotRoster"/>): world XZ and the height to fly above the
@@ -131,7 +137,7 @@ namespace WingingIt.Editor
         /// approach fix, <see cref="FinalFixDistance"/> m out on the glide path. East Home gets the same lanes mirrored
         /// through the island center (<see cref="MirrorLane"/>), so both teams' routes are the same length, except where
         /// the terrain isn't a mirror image: those East lanes have their own points (<c>east</c>), kept the same length.
-        /// Central has none until capture exists.
+        /// Central's are <see cref="CentralLane"/>.
         /// </summary>
         static readonly (string name, string eastName, Color color, (Vector2 xz, float agl)[] points, (Vector2 xz, float agl)[] east)[] WestLanes =
         {
@@ -152,6 +158,27 @@ namespace WingingIt.Editor
             {
                 (new Vector2(-550f, -450f), 60f), (new Vector2(-950f, -800f), 60f), (new Vector2(-1250f, -1150f), 50f),
             }, EastGrassland),
+        };
+
+        /// <summary>
+        /// Central lands from either end, so it has one lane into each: the same route from the south sea, mirrored across
+        /// x = 0 for the east end, so both teams (and both ends) get identical approaches that stay clear of both homes'
+        /// AA. The west one ends on the west end's glide path, heading east.
+        /// </summary>
+        static readonly (Vector2 xz, float agl)[] CentralLane =
+        {
+            (new Vector2(-300f, -1500f), 60f), (new Vector2(-900f, -1500f), 60f), (new Vector2(-1300f, -1250f), 60f),
+            (new Vector2(-1350f, -850f), 60f), (new Vector2(-1150f, -720f), 50f),
+        };
+
+        /// <summary>
+        /// The south-west capture field's two lanes, both from the open sea south of the island to its final fix (the
+        /// south-east field's are the x-mirror). They stay clear of the lighthouse and of Central's and the homes' lanes.
+        /// </summary>
+        static readonly (string name, (Vector2 xz, float agl)[] points)[] SouthFieldLanes =
+        {
+            ("Open Sea", new[] { (new Vector2(-300f, -2100f), 70f), (new Vector2(-700f, -2100f), 60f) }),
+            ("Coast Run", new[] { (new Vector2(-1300f, -1550f), 70f), (new Vector2(-1150f, -1800f), 70f), (new Vector2(-1000f, -1950f), 60f), (new Vector2(-800f, -2000f), 60f) }),
         };
 
         /// <summary>Where every lane joins its runway's glide path: inside the home AA umbrella, ~31 m above the runway.</summary>
@@ -210,18 +237,23 @@ namespace WingingIt.Editor
             RenderSettings.skybox = Sky();
             new GameObject("Level Settings").AddComponent<LevelSettings>().SpawnMode = SpawnMode.Air;
 
+            var nature = NatureModels.Load();
+            var city = CityModels.Load();
+            var markers = MarkerModels.Load();
             var world = new GameObject("World").transform;
-            var terrain = BuildTerrain(world);
+            var terrain = BuildTerrain(world, nature);
+            BuildMesas(world, nature);
             BuildOcean(world);
-            BuildCity(world, m);
-            BuildBridges(world, m);
-            BuildLandmarks(world, terrain, m);
+            var bridges = BuildBridges(world, m, city);
+            BuildCity(world, m, city, nature, bridges);
+            BuildCanal(world, city);
+            BuildLandmarks(world, terrain, m, nature);
 
             var boundary = new GameObject("Flight Boundary").AddComponent<FlightBoundary>();
             boundary.transform.SetParent(world, false);
             boundary.radius = BoundaryRadius;
             boundary.ceiling = Ceiling;
-            BuildBoundaryBuoys(world, boundary);
+            BuildBoundaryBuoys(world, boundary, markers);
 
             Transform playerSpawn = null;
             var group = new GameObject("Airfields").transform;
@@ -238,22 +270,104 @@ namespace WingingIt.Editor
                 so.FindProperty("displayName").stringValue = name;
                 so.FindProperty("team").intValue = team;
                 so.FindProperty("isHome").boolValue = home;
+                so.FindProperty("twoWay").boolValue = name == "Central Airfield";
                 so.ApplyModifiedPropertiesWithoutUndo();
                 fields[name] = field;
                 if (home && team == 0)
                     playerSpawn = field.AirSpawn;
+                if (!home)
+                    BuildFieldDefenses(field, LightAAStats());
             }
-            BuildApproachLanes(world, fields["West Home Airfield"], fields["East Home Airfield"]);
-            BuildClouds(world);
+            BuildApproachLanes(world, fields["West Home Airfield"], fields["East Home Airfield"], fields["Central Airfield"],
+                fields["South West Airfield"], fields["South East Airfield"], markers);
+            BuildBannerStands(world, terrain, fields["West Home Airfield"], fields["East Home Airfield"]);
+            BuildClouds(world, nature);
+            BuildModeArenas(world);
 
             B.BuildPlayer(scene, planePrefab, classes, playerSpawn);
             var roster = BuildBotRoster(planePrefab, classes);
             BuildMatch(roster, classes);
 
             EditorSceneManager.SaveScene(scene, ScenePath);
-            B.AddSceneToBuildSettings(ScenePath, first: false);
+            B.AddSceneToBuildSettings(ScenePath, first: true); // the scene a build opens: the main menu lives here
             AssetDatabase.SaveAssets();
             Debug.Log($"[Winging It] Built {ScenePath}");
+        }
+
+        /// <summary>Control tower HP: about 2 bomb hits.</summary>
+        const float TowerHealth = 300f, TowerRebuild = 45f;
+        /// <summary>Light AA HP: one bomb, or a couple of rocket salvos.</summary>
+        const float LightAAHealth = 120f, LightAARebuild = 30f;
+
+        /// <summary>
+        /// Turns a capture field's buildings into Airfield Domination's defenses (<see cref="FieldDefenses"/>): the
+        /// tower and its cab become one bombable <see cref="GroundTarget"/>, and of the prefab's four AA guns the two on
+        /// one diagonal stay, as destructible light AA; the other two go. Dormant until a Domination match.
+        /// </summary>
+        static void BuildFieldDefenses(Airfield field, AAStats lightAA)
+        {
+            PrefabUtility.UnpackPrefabInstance(field.gameObject, PrefabUnpackMode.OutermostRoot, InteractionMode.AutomatedAction);
+            string shortName = field.DisplayName.Replace(" Airfield", "");
+
+            var buildings = field.transform.Find("Buildings");
+            var tower = buildings.Find("Control Tower"); // the airfield pack's stands on its foot
+            var cab = buildings.Find("Tower Cab");
+            if (cab != null) // greybox: a shaft box and a cab box, grouped on the ground
+            {
+                var shaft = tower;
+                tower = new GameObject("Control Tower").transform;
+                tower.SetParent(buildings, false);
+                tower.localPosition = new Vector3(shaft.localPosition.x, 0f, shaft.localPosition.z); // squashes toward the ground
+                shaft.name = "Tower Shaft";
+                shaft.SetParent(tower, true);
+                cab.SetParent(tower, true);
+            }
+            var towerTarget = tower.gameObject.AddComponent<GroundTarget>();
+            towerTarget.Configure($"{shortName} Tower", TowerHealth, tower.GetComponentsInChildren<Renderer>(), TowerRebuild);
+            SetStatic(tower, false); // a wreck changes scale
+
+            var aa = field.transform.Find("AA Guns");
+            var kept = new List<AAGun>();
+            foreach (var gun in aa.GetComponentsInChildren<AAGun>())
+            {
+                if (gun.name != "AA Gun 1" && gun.name != "AA Gun 4")
+                {
+                    Object.DestroyImmediate(gun.gameObject);
+                    continue;
+                }
+                var so = new SerializedObject(gun);
+                so.FindProperty("stats").objectReferenceValue = lightAA;
+                so.ApplyModifiedPropertiesWithoutUndo();
+                gun.gameObject.AddComponent<GroundTarget>().Configure($"{shortName} AA", LightAAHealth,
+                    gun.GetComponentsInChildren<Renderer>(), LightAARebuild);
+                SetStatic(gun.transform, false);
+                kept.Add(gun);
+            }
+            field.gameObject.AddComponent<FieldDefenses>().Configure(towerTarget, kept.ToArray());
+        }
+
+        static void SetStatic(Transform root, bool value)
+        {
+            foreach (var t in root.GetComponentsInChildren<Transform>(true))
+                t.gameObject.isStatic = value;
+        }
+
+        /// <summary>Capture fields' light AA: shorter reach, slower and less accurate than a home field's guns.</summary>
+        static AAStats LightAAStats()
+        {
+            string path = $"{B.WeaponsFolder}/LightAAGuns.asset";
+            var stats = AssetDatabase.LoadAssetAtPath<AAStats>(path);
+            if (stats != null)
+                return stats; // keep hand tuning
+            stats = ScriptableObject.CreateInstance<AAStats>();
+            stats.range = 600f;
+            stats.traverseRate = 40f;
+            stats.damage = 1.5f;
+            stats.roundsPerSecond = 3f;
+            stats.startSpread = 5f;
+            stats.settledSpread = 1.4f;
+            AssetDatabase.CreateAsset(stats, path);
+            return stats;
         }
 
         /// <summary>The procedural sky with its lower half the fog color, so the sea fades into it with no seam at the horizon.</summary>
@@ -324,7 +438,7 @@ namespace WingingIt.Editor
 
         static float Sq(float v) => v * v;
 
-        static float CityMask(float x, float z) => Smooth(CityRadius + 50f, CityRadius - 100f, Vector2.Distance(new Vector2(x, z), CityCenter));
+        static float CityMask(float x, float z) => Smooth(CityRadius + 50f, CityRadius - 40f, Vector2.Distance(new Vector2(x, z), CityCenter));
 
         static float DesertMask(float x, float z) => Smooth(DesertStartX, DesertFullX, x + (Fbm(x, z, 600f, 2, 9.4f) - 0.5f) * 300f);
 
@@ -336,6 +450,9 @@ namespace WingingIt.Editor
         }
 
         static float CanalX(float z) => 70f * Mathf.Sin((z - CanalStartZ) / 260f);
+
+        /// <summary>dx/dz of the canal's middle line.</summary>
+        static float CanalSlope(float z) => 70f / 260f * Mathf.Cos((z - CanalStartZ) / 260f);
 
         /// <summary>Distance from the canal's center line (it ends in a rounded basin at <see cref="CanalStartZ"/>).</summary>
         static float CanalDistance(float x, float z) =>
@@ -370,14 +487,15 @@ namespace WingingIt.Editor
             // Grassland: low rolling hills.
             float h = LandHeight + Fbm(x, z, 450f, 3, 1.3f) * 16f * (1f - desert);
 
-            // Desert: wind-blown dune ridges, plus a few flat-topped mesas.
+            // Desert: wind-blown dune ridges, plus a few flat-topped mesas. The mesas themselves are meshes
+            // (BuildMesas); the heightmap keeps a lower, narrower core inside each so no terrain pokes through its cliffs.
             float warp = Fbm(x, z, 400f, 2, 4.2f) * 6f;
             float dune = Mathf.Sin((x * 0.6f + z) / 70f + warp) * 0.5f + 0.5f;
             h += desert * dune * dune * 14f;
             foreach (var (center, radius, height) in Mesas)
             {
-                float d = Vector2.Distance(new Vector2(x, z), center) + (Fbm(x, z, 60f, 2, 2.2f) - 0.5f) * 40f;
-                h = Mathf.Max(h, LandHeight + height * Smooth(radius + 35f, radius - 5f, d));
+                float d = Vector2.Distance(new Vector2(x, z), center);
+                h = Mathf.Max(h, LandHeight + (height - 3f) * Smooth(radius - 10f, radius - 40f, d));
             }
 
             // Mountains: ridged peaks up to ~650 m, with a canyon cut through toward the city.
@@ -385,17 +503,20 @@ namespace WingingIt.Editor
             float canyon = Smooth(160f, 55f, DistanceToSegment(new Vector2(x, z), CanyonStart, CanyonEnd));
             h += mountains * (1f - 0.97f * canyon);
 
-            // City: flat ground, then the canal (below sea level, so the ocean fills it).
+            // City: flat ground, then the canal (below sea level, so the ocean fills it): flat banks, then a sheer cut
+            // just behind the quay walls' face (BuildCanal), inside their promenade, so the walls hide it.
             h = Mathf.Lerp(h, LandHeight, CityMask(x, z));
-            h = Mathf.Lerp(h, -10f, Smooth(75f, 40f, CanalDistance(x, z)));
+            float canal = CanalDistance(x, z);
+            h = Mathf.Lerp(h, LandHeight, Smooth(CanalHalfWidth + 50f, CanalHalfWidth + 20f, canal));
+            h = Mathf.Lerp(h, -10f, Smooth(CanalHalfWidth + 10f, CanalHalfWidth + 3f, canal));
 
             // Coast: shelve down to the sea floor.
             h = Mathf.Lerp(SeaFloor, h, land);
 
-            // The lighthouse islet: a rocky lump with a flat top in the middle for the lighthouse.
+            // The lighthouse islet: a mound just inside the islet mesh (BuildLighthouse), whose cliffs and grassy top
+            // at IsletHeight are what you see and hit.
             float islet = Vector2.Distance(new Vector2(x, z), IsletPosition);
-            float rocks = (Fbm(x, z, 40f, 2, 6.6f) - 0.5f) * 14f * Smooth(30f, 80f, islet);
-            h = Mathf.Max(h, Mathf.Lerp(SeaFloor, IsletHeight + rocks, Smooth(IsletRadius + 70f, IsletRadius - 30f, islet)));
+            h = Mathf.Max(h, Mathf.Lerp(SeaFloor, IsletHeight - 1.5f, Smooth(IsletRadius + 20f, IsletRadius - 40f, islet)));
 
             // Airfield pads last: dead flat at LandHeight.
             return Mathf.Lerp(h, LandHeight, PadMask(x, z));
@@ -403,7 +524,7 @@ namespace WingingIt.Editor
 
         // ------------------------------------------------------------------ terrain
 
-        static Terrain BuildTerrain(Transform parent)
+        static Terrain BuildTerrain(Transform parent, NatureModels nature)
         {
             var data = AssetDatabase.LoadAssetAtPath<TerrainData>(TerrainDataPath);
             if (data == null)
@@ -430,13 +551,24 @@ namespace WingingIt.Editor
 
             data.terrainLayers = new[]
             {
-                Layer("Grass", new Color(0.47f, 0.64f, 0.36f), 40f),
-                Layer("Sand", new Color(0.88f, 0.78f, 0.54f), 30f),
-                Layer("Rock", new Color(0.52f, 0.47f, 0.42f), 25f),
-                Layer("Snow", new Color(0.95f, 0.96f, 0.98f), 30f),
-                Layer("Paved", new Color(0.55f, 0.55f, 0.57f), 60f),
+                Layer(TerrainTextures.Kind.Grass, 80f),
+                Layer(TerrainTextures.Kind.Sand, 70f),
+                Layer(TerrainTextures.Kind.Rock, 50f),
+                Layer(TerrainTextures.Kind.Snow, 60f, smoothness: 0.25f),
+                Layer(TerrainTextures.Kind.Paved, 48f),
             };
             PaintLayers(data, origin);
+            if (nature != null)
+            {
+                PlantTrees(data, origin, nature);
+                PlantDetails(data, origin, nature);
+            }
+            else
+            {
+                data.treeInstances = System.Array.Empty<TreeInstance>();
+                data.treePrototypes = System.Array.Empty<TreePrototype>();
+                data.detailPrototypes = System.Array.Empty<DetailPrototype>();
+            }
             EditorUtility.SetDirty(data);
 
             var go = Terrain.CreateTerrainGameObject(data);
@@ -445,10 +577,17 @@ namespace WingingIt.Editor
             go.transform.position = origin;
             go.isStatic = true;
             var terrain = go.GetComponent<Terrain>();
-            terrain.materialTemplate = B.Materials.TerrainMat("Greybox_Terrain");
+            var material = B.Materials.TerrainMat("Env_Terrain");
+            material.EnableKeyword("_NORMALMAP"); // the layers have normal maps (the terrain inspector would set this)
+            EditorUtility.SetDirty(material);
+            terrain.materialTemplate = material;
             terrain.heightmapPixelError = 4f;
             terrain.basemapDistance = 2500f;
             terrain.drawInstanced = true;
+            terrain.treeDistance = TreeDistance;
+            terrain.treeBillboardDistance = TreeDistance; // mesh trees have no billboards: draw them as meshes all the way
+            terrain.detailObjectDistance = DetailDistance;
+            terrain.detailObjectDensity = 1f;
             return terrain;
         }
 
@@ -488,19 +627,190 @@ namespace WingingIt.Editor
             data.SetAlphamaps(0, 0, maps);
         }
 
-        static TerrainLayer Layer(string name, Color color, float tileSize)
+        /// <summary>A terrain layer on <see cref="TerrainTextures"/>' albedo and normal map, made or updated in place.</summary>
+        static TerrainLayer Layer(TerrainTextures.Kind kind, float tileSize, float smoothness = 0f)
         {
-            string path = $"{TerrainFolder}/{name}.terrainlayer";
+            string path = $"{TerrainFolder}/{kind}.terrainlayer";
             var layer = AssetDatabase.LoadAssetAtPath<TerrainLayer>(path);
-            if (layer != null)
-                return layer;
-            layer = new TerrainLayer
+            if (layer == null)
             {
-                diffuseTexture = B.Materials.TintedChecker($"Terrain_{name}", color, matteAlpha: true),
-                tileSize = new Vector2(tileSize, tileSize),
-            };
-            AssetDatabase.CreateAsset(layer, path);
+                layer = new TerrainLayer();
+                AssetDatabase.CreateAsset(layer, path);
+            }
+            var (albedo, normal) = TerrainTextures.Load(kind);
+            layer.diffuseTexture = albedo;
+            layer.normalMapTexture = normal;
+            layer.normalScale = 1f;
+            layer.tileSize = new Vector2(tileSize, tileSize);
+            layer.smoothnessSource = TerrainLayerSmoothnessSource.ConstantOnly; // not the albedo's alpha
+            layer.smoothness = smoothness;
+            layer.metallic = 0f;
+            EditorUtility.SetDirty(layer);
             return layer;
+        }
+
+        // ------------------------------------------------------------------ nature
+
+        const float TreeDistance = 2500f, DetailDistance = 200f;
+        /// <summary>Trees and rocks go on a jittered grid this far apart; each cell grows at most one.</summary>
+        const float TreeSpacing = 24f;
+        const int DetailResolution = 1024;
+
+        /// <summary>The nature pack's terrain trees (props without colliders), in prototype order.</summary>
+        static readonly string[] TreeKinds =
+        {
+            "TreeOak", "TreeOakTall", "TreePine", "TreePineTall", "TreePineSnow", "TreePalm", "TreePalmBent", "TreeDead",
+            "Bush", "BushDry", "Rock", "RockTall", "RockFlat", "RockSnow", "RockDesert", "CliffRock", "Cactus", "CactusSmall",
+            "BeachRocks", "Driftwood",
+        };
+
+        /// <summary>
+        /// Nothing grows in the city, the canal, on or off the ends of a runway (planes come in low there), on the
+        /// mesas, the islet or under the Pyramid: those are built, or meshes of their own.
+        /// </summary>
+        static bool KeepClear(float x, float z)
+        {
+            var p = new Vector2(x, z);
+            if (CityMask(x, z) > 0.02f || CanalDistance(x, z) < 100f)
+                return true;
+            foreach (var field in Airfields)
+            {
+                Vector2 local = Local(p, field.position, field.yaw);
+                if (Mathf.Abs(local.x) < 160f && Mathf.Abs(local.y) < 1300f)
+                    return true;
+            }
+            foreach (var (center, radius, _) in Mesas)
+                if (Vector2.Distance(p, center) < radius + 75f)
+                    return true;
+            return Vector2.Distance(p, PyramidPosition) < PyramidBase * 0.75f || Vector2.Distance(p, IsletPosition) < 150f;
+        }
+
+        /// <summary>What grows at a spot (a <see cref="TreeKinds"/> name and its scale range), or null for nothing.</summary>
+        static (string kind, float minScale, float maxScale)? PickTree(float x, float z, float h, float steep, double roll)
+        {
+            if (h < 1.5f || KeepClear(x, z))
+                return null;
+            float desert = DesertMask(x, z), mountain = MountainMask(x, z);
+            bool beach = h < 10f && LandMask(x, z) < 0.97f; // the low strip along the coast
+            float grove = Fbm(x, z, 220f, 2, 12.3f); // clumps trees into woods with clearings between
+
+            // Scales are toy-sized (about twice life) so woods and rocks still read from a few hundred metres up.
+            if (steep > 58f) // the steepest faces: big boulders and the odd crag (the mountains are mostly 45-70 degrees)
+                return roll < 0.12 ? ("Rock", 2f, 3.5f) : roll < 0.18 ? ("CliffRock", 1.2f, 1.8f) : null;
+            if (h > 430f) // above the tree line
+                return roll < 0.1 ? ("RockSnow", 1.8f, 3.5f) : null;
+            if (h > 330f)
+                return roll < 0.4 ? ("TreePineSnow", 1.5f, 2.1f) : roll < 0.46 ? ("RockSnow", 1.8f, 3f) : null;
+            if (mountain > 0.35f && h > 50f)
+            {
+                double forest = 0.45 + 0.45 * Smooth(0.42f, 0.6f, grove);
+                if (roll < forest)
+                    return roll < forest * 0.6 ? ("TreePine", 1.5f, 2.2f) : ("TreePineTall", 1.5f, 2.2f);
+                return roll < forest + 0.04 ? ("Rock", 1.6f, 3f) : roll < forest + 0.06 ? ("RockFlat", 1.6f, 2.6f) : null;
+            }
+            if (desert > 0.5f)
+                return roll < 0.04 ? ("Cactus", 1.5f, 2.2f) : roll < 0.08 ? ("CactusSmall", 1.6f, 2.4f)
+                    : roll < 0.14 ? ("BushDry", 1.5f, 2.5f) : roll < 0.17 ? ("RockDesert", 1.6f, 3.2f)
+                    : roll < 0.185 ? ("TreeDead", 1.5f, 2.1f) : null;
+            if (beach)
+                return roll < 0.07 ? ("TreePalm", 1.5f, 2.1f) : roll < 0.12 ? ("TreePalmBent", 1.5f, 2.1f)
+                    : roll < 0.15 ? ("Driftwood", 1.5f, 2.2f) : roll < 0.18 ? ("BeachRocks", 1.5f, 2.6f) : null;
+
+            // Grassland: woods and copses, bushes at their edges, the odd boulder in the open.
+            double wood = 0.75 * Smooth(0.47f, 0.62f, grove) + 0.03;
+            if (roll < wood)
+                return roll < wood * 0.6 ? ("TreeOak", 1.5f, 2.2f) : ("TreeOakTall", 1.5f, 2.1f);
+            return roll < wood + 0.05 ? ("Bush", 1.5f, 2.5f) : roll < wood + 0.065 ? ("Rock", 1.4f, 2.6f)
+                : roll < wood + 0.07 ? ("RockFlat", 1.4f, 2.5f) : null;
+        }
+
+        /// <summary>Scatters the nature pack's trees, bushes and rocks over the island as terrain trees (no colliders).</summary>
+        static void PlantTrees(TerrainData data, Vector3 origin, NatureModels nature)
+        {
+            var prototypes = new TreePrototype[TreeKinds.Length];
+            for (int i = 0; i < TreeKinds.Length; i++)
+                prototypes[i] = new TreePrototype { prefab = nature.Prefab(TreeKinds[i]) };
+            data.treePrototypes = prototypes;
+
+            var rng = new System.Random(777);
+            float Range(float a, float b) => a + (float)rng.NextDouble() * (b - a);
+            var trees = new List<TreeInstance>();
+            for (float cz = -IslandHalfSize.y - 100f; cz <= IslandHalfSize.y + 100f; cz += TreeSpacing)
+            for (float cx = -IslandHalfSize.x - 100f; cx <= IslandHalfSize.x + 100f; cx += TreeSpacing)
+            {
+                float x = cx + Range(-0.45f, 0.45f) * TreeSpacing, z = cz + Range(-0.45f, 0.45f) * TreeSpacing;
+                float nx = (x - origin.x) / TerrainSize, nz = (z - origin.z) / TerrainSize;
+                float h = data.GetInterpolatedHeight(nx, nz) + TerrainBase;
+                double roll = rng.NextDouble();
+                var pick = PickTree(x, z, h, data.GetSteepness(nx, nz), roll);
+                if (pick == null)
+                    continue;
+                var (kind, minScale, maxScale) = pick.Value;
+                float scale = Range(minScale, maxScale);
+                trees.Add(new TreeInstance
+                {
+                    position = new Vector3(nx, 0f, nz),
+                    prototypeIndex = System.Array.IndexOf(TreeKinds, kind),
+                    widthScale = scale,
+                    heightScale = scale * Range(0.9f, 1.1f),
+                    rotation = Range(0f, Mathf.PI * 2f),
+                    color = Color.white,
+                    lightmapColor = Color.white,
+                });
+            }
+            data.SetTreeInstances(trees.ToArray(), snapToHeightmap: true);
+        }
+
+        /// <summary>Grass tufts and flowers on the grassland (terrain details, instanced), none on pads or in the city.</summary>
+        static void PlantDetails(TerrainData data, Vector3 origin, NatureModels nature)
+        {
+            DetailPrototype Detail(string kind, float min, float max) => new()
+            {
+                prototype = nature.Prefab(kind, castShadows: false, lod: false),
+                usePrototypeMesh = true,
+                useInstancing = true,
+                renderMode = DetailRenderMode.VertexLit,
+                minWidth = min, maxWidth = max, minHeight = min, maxHeight = max,
+                noiseSpread = 0.3f,
+                healthyColor = Color.white, dryColor = Color.white,
+            };
+            data.detailPrototypes = new[] { Detail("GrassTuft", 0.8f, 1.6f), Detail("Flowers", 0.8f, 1.3f) };
+            data.SetDetailScatterMode(DetailScatterMode.InstanceCountMode);
+            data.SetDetailResolution(DetailResolution, 32);
+
+            var rng = new System.Random(778);
+            var grass = new int[DetailResolution, DetailResolution];
+            var flowers = new int[DetailResolution, DetailResolution];
+            float cell = TerrainSize / DetailResolution;
+            for (int iz = 0; iz < DetailResolution; iz++)
+            for (int ix = 0; ix < DetailResolution; ix++)
+            {
+                float x = origin.x + (ix + 0.5f) * cell, z = origin.z + (iz + 0.5f) * cell;
+                if (Mathf.Abs(x) > IslandHalfSize.x + 100f || Mathf.Abs(z) > IslandHalfSize.y + 100f)
+                    continue;
+                float nx = (ix + 0.5f) / DetailResolution, nz = (iz + 0.5f) / DetailResolution;
+                float h = data.GetInterpolatedHeight(nx, nz) + TerrainBase;
+                if (h < 2f || h > 250f || PadMask(x, z) > 0.01f || CityMask(x, z) > 0.02f || CanalDistance(x, z) < 90f
+                    || DesertMask(x, z) > 0.3f || LandMask(x, z) < 0.85f || data.GetSteepness(nx, nz) > 25f)
+                    continue;
+                float meadow = Fbm(x, z, 120f, 2, 21.7f);
+                grass[iz, ix] = meadow > 0.45f ? 2 : rng.NextDouble() < 0.5 ? 1 : 0;
+                flowers[iz, ix] = meadow > 0.55f && rng.NextDouble() < 0.25 ? 1 : 0;
+            }
+            data.SetDetailLayer(0, 0, 0, grass);
+            data.SetDetailLayer(0, 0, 1, flowers);
+        }
+
+        /// <summary>The three desert mesas: hero meshes with matching colliders, standing on the lowland height.</summary>
+        static void BuildMesas(Transform parent, NatureModels nature)
+        {
+            if (nature == null)
+                return; // the heightmap's mesa cores stand in
+            var group = new GameObject("Mesas").transform;
+            group.SetParent(parent, false);
+            for (int i = 0; i < Mesas.Length; i++)
+                nature.Place($"Mesa{i + 1}", group, new Vector3(Mesas[i].center.x, LandHeight, Mesas[i].center.y), collider: true);
+            group.gameObject.isStatic = true;
         }
 
         // ------------------------------------------------------------------ ocean
@@ -526,27 +836,44 @@ namespace WingingIt.Editor
 
         // ------------------------------------------------------------------ city
 
+        const float CityPitch = 120f, CityBlockSize = 90f;
+
         /// <summary>
         /// A downtown grid: 120 m blocks with 30 m streets, towers tallest in the middle (~300 m) falling to ~40 m at
-        /// the edge, some plazas left open, nothing on the canal banks or the central airfield's pad.
+        /// the edge, some plazas left open, nothing on the canal banks or the central airfield's pad. With the city pack
+        /// each lot gets one of its buildings (<see cref="CityModels.PlaceBuilding"/>), each block a sidewalk with
+        /// lamps, each open block a plaza with trees, and the streets roads and traffic (<see cref="BuildStreets"/>);
+        /// without it, boxes. No building stands in the way of a bridge or its ramps (<paramref name="bridges"/>).
         /// </summary>
-        static void BuildCity(Transform parent, B.Materials m)
+        static void BuildCity(Transform parent, B.Materials m, CityModels city, NatureModels nature, List<Footprint> bridges)
         {
             var group = new GameObject("City").transform;
             group.SetParent(parent, false);
             var rng = new System.Random(4242);
+            var pick = new System.Random(4343); // which building stands on a lot: its own stream, so the lots don't move
             float Range(float a, float b) => a + (float)rng.NextDouble() * (b - a);
 
-            const float pitch = 120f, block = 90f;
-            int n = 0;
-            for (float bz = CityCenter.y - CityRadius; bz <= CityCenter.y + CityRadius; bz += pitch)
-            for (float bx = CityCenter.x - CityRadius; bx <= CityCenter.x + CityRadius; bx += pitch)
+            const float half = CityBlockSize * 0.5f;
+            int n = 0, skipped = 0;
+            for (float bz = CityCenter.y - CityRadius; bz <= CityCenter.y + CityRadius; bz += CityPitch)
+            for (float bx = CityCenter.x - CityRadius; bx <= CityCenter.x + CityRadius; bx += CityPitch)
             {
                 // Blocks on a grid offset so the center falls on an intersection.
-                float cx = bx + pitch * 0.5f, cz = bz + pitch * 0.5f;
+                float cx = bx + CityPitch * 0.5f, cz = bz + CityPitch * 0.5f;
                 float r = Vector2.Distance(new Vector2(cx, cz), CityCenter);
-                if (r > CityRadius - 40f || CanalDistance(cx, cz) < 125f || PadMask(cx, cz) > 0.01f || rng.NextDouble() < 0.1
-                    || Vector2.Distance(new Vector2(cx, cz), SpirePosition) < 100f) // the Spire's plaza
+                if (r > CityRadius - 40f || CanalDistance(cx, cz) < 125f || PadMask(cx, cz) > 0.01f)
+                    continue;
+                var center = new Vector3(cx, LandHeight, cz);
+                bool paved = city != null && IsFlat(cx, cz, half, half);
+                if (rng.NextDouble() < 0.1) // left open: a square
+                {
+                    if (paved)
+                        BuildPlaza(group, city, nature, center, pick);
+                    continue;
+                }
+                if (paved)
+                    city.Place("CityBlock", group, center, collider: false).name = "Sidewalk";
+                if (Vector2.Distance(new Vector2(cx, cz), SpirePosition) < 100f) // the Spire's plaza
                     continue;
 
                 float core = Mathf.Lerp(300f, 40f, Smooth(0f, CityRadius, r));
@@ -559,24 +886,202 @@ namespace WingingIt.Editor
                         if (rng.NextDouble() < 0.75)
                             lots.Add((new Vector2(cx + ox, cz + oz), Range(26f, 40f)));
 
-                foreach (var (center, size) in lots)
+                foreach (var (lot, size) in lots)
                 {
                     float h = Mathf.Max(20f, core * Range(0.45f, 1.05f) * (size < 42f ? 0.7f : 1f));
-                    float w = size, d = Mathf.Min(block, size * Range(0.8f, 1.2f));
-                    B.Box($"Building {n++:000}", group, new Vector3(center.x, LandHeight + h * 0.5f, center.y),
+                    float w = size, d = Mathf.Min(CityBlockSize, size * Range(0.8f, 1.2f));
+                    if (Footprint.Any(bridges, lot, new Vector2(w, d) * 0.5f, 1f))
+                    {
+                        skipped++;
+                        continue;
+                    }
+                    if (city != null)
+                    {
+                        var building = city.PlaceBuilding(group, new Vector3(lot.x, LandHeight, lot.y), w, d, h, pick);
+                        building.name = $"Building {n++:000} ({building.name})";
+                        continue;
+                    }
+                    B.Box($"Building {n++:000}", group, new Vector3(lot.x, LandHeight + h * 0.5f, lot.y),
                         new Vector3(w, h, d), rng.NextDouble() < 0.5 ? m.Concrete : m.ConcreteDark, true).gameObject.isStatic = true;
                 }
             }
+            if (skipped > 0)
+                Debug.Log($"[Winging It] City: {skipped} lots left empty for the bridges and their ramps");
+            if (city != null)
+                BuildStreets(group, city, bridges);
         }
 
-        /// <summary>Two bridges over the canal, 34 m above the water, with 150 m between their towers to fly under.</summary>
-        static void BuildBridges(Transform parent, B.Materials m)
+        /// <summary>
+        /// Whether the ground is dead level at <see cref="LandHeight"/> over a <paramref name="halfX"/> by
+        /// <paramref name="halfZ"/> rectangle (and a heightmap cell round it), so a sidewalk or road laid there doesn't
+        /// float or sink into a bump: not on the city's ragged edge, a canal bank's cut or a hill.
+        /// </summary>
+        static bool IsFlat(float x, float z, float halfX, float halfZ)
+        {
+            const float margin = 6f, tolerance = 0.2f;
+            for (int i = -2; i <= 2; i++)
+            for (int j = -2; j <= 2; j++)
+                if (Mathf.Abs(Height(x + i * (halfX + margin) * 0.5f, z + j * (halfZ + margin) * 0.5f) - LandHeight) > tolerance)
+                    return false;
+            return true;
+        }
+
+        /// <summary>An open block: the pack's plaza (lawns, a fountain) with a pair of oaks on each lawn.</summary>
+        static void BuildPlaza(Transform parent, CityModels city, NatureModels nature, Vector3 center, System.Random rng)
+        {
+            city.Place("Plaza", parent, center, collider: false);
+            if (nature == null)
+                return;
+            foreach (float sx in new[] { -23f, 23f })
+            foreach (float sz in new[] { -23f, 23f })
+                for (int k = 0; k < 2; k++)
+                {
+                    var offset = new Vector3(sx + (k == 0 ? -6f : 6f), 0.35f, sz + (k == 0 ? 5f : -5f));
+                    var tree = nature.Place(rng.NextDouble() < 0.5 ? "TreeOak" : "TreeOakTall", parent, center + offset, collider: false);
+                    tree.transform.rotation = Quaternion.Euler(0f, (float)rng.NextDouble() * 360f, 0f);
+                    tree.transform.localScale = Vector3.one * (1.6f + (float)rng.NextDouble() * 0.4f); // toy-sized, like the island's
+                }
+        }
+
+        /// <summary>
+        /// Roads on every street between blocks, and a crossing wherever two meet, where the ground is flat (so not on
+        /// the city's edge, a pad or past the canal's promenade), with traffic stopped in their lanes (none under a
+        /// bridge ramp).
+        /// </summary>
+        static void BuildStreets(Transform parent, CityModels city, List<Footprint> bridges)
+        {
+            var group = new GameObject("Streets").transform;
+            group.SetParent(parent, false);
+            var rng = new System.Random(4444);
+            // Streets run down the gaps between blocks: x0 + i * pitch, z0 + j * pitch.
+            float x0 = CityCenter.x - CityRadius, z0 = CityCenter.y - CityRadius;
+            int lines = Mathf.FloorToInt(2f * CityRadius / CityPitch);
+            const float roadHalfLength = (CityPitch - 30f) * 0.5f, roadHalfWidth = 15f;
+            var crossings = new HashSet<Vector2Int>();
+            for (int i = 1; i <= lines; i++)
+            for (int j = 1; j <= lines; j++)
+                foreach (bool alongX in new[] { true, false })
+                {
+                    // The road east of crossing (i, j), or north of it.
+                    Vector2 mid = alongX
+                        ? new Vector2(x0 + i * CityPitch + CityPitch * 0.5f, z0 + j * CityPitch)
+                        : new Vector2(x0 + i * CityPitch, z0 + j * CityPitch + CityPitch * 0.5f);
+                    if (!IsFlat(mid.x, mid.y, alongX ? roadHalfLength : roadHalfWidth, alongX ? roadHalfWidth : roadHalfLength)
+                        || PadMask(mid.x, mid.y) > 0.01f)
+                        continue;
+                    float yaw = alongX ? 90f : 0f;
+                    var rotation = Quaternion.Euler(0f, yaw, 0f);
+                    var center = new Vector3(mid.x, LandHeight, mid.y);
+                    city.Place("Road", group, center, rotation, Vector3.one, null, castShadows: false);
+                    crossings.Add(new Vector2Int(i, j));
+                    crossings.Add(alongX ? new Vector2Int(i + 1, j) : new Vector2Int(i, j + 1));
+
+                    // Traffic: up to three vehicles in the four lanes (right-hand: the +x lanes head +z), never two in a slot.
+                    var slots = new List<int>();
+                    for (int c = rng.Next(4); c > 0; c--)
+                    {
+                        int slot = rng.Next(20);
+                        if (slots.Contains(slot))
+                            continue;
+                        slots.Add(slot);
+                        float lane = (slot / 5) switch { 0 => -10f, 1 => -4.5f, 2 => 4.5f, _ => 10f };
+                        var local = new Vector3(lane, 0.1f, -30f + (slot % 5) * 15f);
+                        string kind = rng.NextDouble() < 0.12 ? "Bus" : CityModels.Cars[rng.Next(3)];
+                        Vector3 at = center + rotation * local;
+                        if (!Footprint.Any(bridges, new Vector2(at.x, at.z), Vector2.zero, kind == "Bus" ? 8f : 4f))
+                            city.PlaceVehicle(kind, group, at, yaw + (lane > 0f ? 0f : 180f));
+                    }
+                }
+            foreach (var c in crossings)
+            {
+                var p = new Vector2(x0 + c.x * CityPitch, z0 + c.y * CityPitch);
+                if (IsFlat(p.x, p.y, roadHalfWidth, roadHalfWidth))
+                    city.Place("Crossing", group, new Vector3(p.x, LandHeight, p.y), Quaternion.identity, Vector3.one, null, castShadows: false);
+            }
+        }
+
+        /// <summary>The city pack's Bridge (build_city.py): deck top over the water, half its length, half its width.</summary>
+        const float BridgeDeckTop = 35.5f, BridgeHalfSpan = 115f, BridgeHalfWidth = 12f;
+        /// <summary>
+        /// The approach ramps: each runs on from a deck end and is back on the street's middle line within
+        /// <see cref="RampSwing"/> m (the bridges are square to the canal, so their ends sit off the street), then comes
+        /// down at an even grade, easing in and out over <see cref="RampEase"/> m, to touch down at least
+        /// <see cref="RampMinRun"/> m out and <see cref="RampCrossingGap"/> m short of a crossing.
+        /// </summary>
+        const float RampMinRun = 210f, RampSwing = 90f, RampEase = 40f, RampCrossingGap = 12f;
+        /// <summary>Ramp deck (the bridge's section): half width at the top, depth, and how far its end sits above the road.</summary>
+        const float RampHalfWidth = 9f, RampDepth = 3f, RampEndLift = 0.25f;
+        const float RampPierSpacing = 24f;
+
+        /// <summary>Ground a bridge or ramp covers: its middle line and half width. Nothing is built or parked there.</summary>
+        readonly struct Footprint
+        {
+            readonly Vector2[] _line;
+            readonly float _halfWidth;
+
+            public Footprint(Vector2[] line, float halfWidth)
+            {
+                _line = line;
+                _halfWidth = halfWidth;
+            }
+
+            /// <summary>Whether it comes within <paramref name="margin"/> of a rectangle (its middle and half size).</summary>
+            public bool Overlaps(Vector2 center, Vector2 half, float margin)
+            {
+                for (int i = 0; i < _line.Length - 1; i++)
+                {
+                    Vector2 a = _line[i], b = _line[i + 1];
+                    int steps = Mathf.Max(1, Mathf.CeilToInt(Vector2.Distance(a, b) / 2f));
+                    for (int k = 0; k <= steps; k++)
+                    {
+                        Vector2 p = Vector2.Lerp(a, b, k / (float)steps) - center;
+                        Vector2 outside = Vector2.Max(new Vector2(Mathf.Abs(p.x), Mathf.Abs(p.y)) - half, Vector2.zero);
+                        if (outside.magnitude < _halfWidth + margin)
+                            return true;
+                    }
+                }
+                return false;
+            }
+
+            public static bool Any(List<Footprint> footprints, Vector2 center, Vector2 half, float margin)
+            {
+                foreach (var f in footprints)
+                    if (f.Overlaps(center, half, margin))
+                        return true;
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Two bridges over the canal, 34 m above the water, with 150 m between their towers to fly under: the city
+        /// pack's cable-stayed bridge square across the canal with a ramp down to the street at each end
+        /// (<see cref="BuildRamp"/>), or greybox boxes without it. Returns the ground they cover.
+        /// </summary>
+        static List<Footprint> BuildBridges(Transform parent, B.Materials m, CityModels city)
         {
             var group = new GameObject("Bridges").transform;
             group.SetParent(parent, false);
+            var footprints = new List<Footprint>();
+            var rampMeshes = new List<Mesh>();
             for (int i = 0; i < BridgeZ.Length; i++)
             {
                 float z = BridgeZ[i], x = CanalX(z);
+                if (city != null)
+                {
+                    // The deck runs along local x: turn it square to the canal.
+                    float yaw = Mathf.Atan(CanalSlope(z)) * Mathf.Rad2Deg;
+                    var rotation = Quaternion.Euler(0f, yaw, 0f);
+                    var placed = city.Place("Bridge", group, new Vector3(x, 0f, z), rotation, Vector3.one, "BridgeCol");
+                    placed.name = $"Bridge {i + 1}";
+                    Vector3 axis = rotation * Vector3.right;
+                    var origin = new Vector2(x, z);
+                    var end = new Vector2(axis.x, axis.z) * BridgeHalfSpan;
+                    footprints.Add(new Footprint(new[] { origin - end, origin + end }, BridgeHalfWidth));
+                    foreach (float side in new[] { 1f, -1f })
+                        footprints.Add(BuildRamp(placed.transform, $"Ramp {(side > 0f ? "East" : "West")}", origin + end * side,
+                            new Vector2(axis.x, axis.z) * side, z, rampMeshes));
+                    continue;
+                }
                 var bridge = new GameObject($"Bridge {i + 1}").transform;
                 bridge.SetParent(group, false);
                 bridge.localPosition = new Vector3(x, 0f, z);
@@ -597,21 +1102,236 @@ namespace WingingIt.Editor
                 foreach (var t in bridge.GetComponentsInChildren<Transform>())
                     t.gameObject.isStatic = true;
             }
+            SaveMeshes(RampMeshesPath, rampMeshes);
+            return footprints;
+        }
+
+        const string RampMeshesPath = TerrainFolder + "/BridgeRamps.asset";
+
+        /// <summary>
+        /// One approach ramp, from a bridge deck's end (<paramref name="start"/>, heading <paramref name="heading"/>) down
+        /// to the street along world z = <paramref name="streetZ"/>: the deck's girder section (asphalt, slate sides, a
+        /// dashed middle line, white railings on posts) on concrete piers, which leave out the crossings so the streets
+        /// across stay open underneath. A mesh in the city pack's style (<see cref="InkMesh"/>) with a collider of its
+        /// girder and piers.
+        /// </summary>
+        static Footprint BuildRamp(Transform bridge, string name, Vector2 start, Vector2 heading, float streetZ, List<Mesh> meshes)
+        {
+            // Along the street u (out from the bridge), across it v (from its middle line): v eases from the deck end's
+            // offset and heading to 0 over RampSwing (a cubic Hermite), then stays on the middle line.
+            float dir = Mathf.Sign(heading.x);
+            float v0 = start.y - streetZ, slope0 = heading.y / Mathf.Abs(heading.x);
+            // Crossings are at x0 + k * pitch: touch down short of the first whose near edge lies far enough out.
+            float x0 = CityCenter.x - CityRadius, run = float.MaxValue;
+            for (int k = 0; k <= Mathf.CeilToInt(2f * CityRadius / CityPitch); k++)
+            {
+                float out_ = (x0 + k * CityPitch - dir * (15f + RampCrossingGap) - start.x) * dir;
+                if (out_ >= RampMinRun)
+                    run = Mathf.Min(run, out_);
+            }
+            float touchdown = start.x + run * dir;
+
+            var line = new List<Vector3>(); // middle of the deck top, heights still to come
+            for (float u = 0f; ; u = Mathf.Min(u + 3f, run))
+            {
+                float t = Mathf.Clamp01(u / RampSwing);
+                float v = u < RampSwing
+                    ? (2f * t * t * t - 3f * t * t + 1f) * v0 + (t * t * t - 2f * t * t + t) * RampSwing * slope0
+                    : 0f;
+                line.Add(new Vector3(start.x + u * dir, 0f, streetZ + v));
+                if (u >= run)
+                    break;
+            }
+            var arc = new float[line.Count];
+            for (int i = 1; i < line.Count; i++)
+                arc[i] = arc[i - 1] + Vector3.Distance(line[i], line[i - 1]);
+            float length = arc[^1], fall = BridgeDeckTop - (LandHeight + RampEndLift);
+            float grade = fall / (length - RampEase);
+            float Top(float s)
+            {
+                if (s < RampEase)
+                    return BridgeDeckTop - grade * s * s / (2f * RampEase);
+                if (s > length - RampEase)
+                    return LandHeight + RampEndLift + grade * Sq(length - s) / (2f * RampEase);
+                return BridgeDeckTop - grade * (RampEase * 0.5f + s - RampEase);
+            }
+            for (int i = 0; i < line.Count; i++)
+                line[i] = new Vector3(line[i].x, Top(arc[i]), line[i].z);
+
+            var rights = new Vector3[line.Count];
+            for (int i = 0; i < line.Count; i++)
+            {
+                Vector3 along = line[Mathf.Min(i + 1, line.Count - 1)] - line[Mathf.Max(i - 1, 0)];
+                rights[i] = Vector3.Cross(Vector3.up, new Vector3(along.x, 0f, along.z)).normalized;
+            }
+            Vector3 At(int i, float across, float up) => line[i] + rights[i] * across + Vector3.up * up;
+
+            var mesh = new InkMesh();
+            // Girder: the bridge deck's section (top 18 m, chamfered down to 14 m), open where it meets the deck.
+            var girder = new List<Vector3[]>();
+            for (int i = 0; i < line.Count; i++)
+                girder.Add(new[]
+                {
+                    At(i, RampHalfWidth, 0f), At(i, RampHalfWidth - 2f, -RampDepth), At(i, 2f - RampHalfWidth, -RampDepth),
+                    At(i, -RampHalfWidth, 0f),
+                });
+            mesh.Solid(girder, (_, side) => side == 3 ? InkMesh.Asphalt : InkMesh.Slate, null, InkMesh.Slate, 0.25f, true);
+
+            // Railings like the bridge's: a white rail on posts every 6 m along each edge.
+            foreach (float across in new[] { -8.6f, 8.6f })
+            {
+                var rail = new List<Vector3[]>();
+                for (int i = 0; i < line.Count; i++)
+                    rail.Add(new[]
+                    {
+                        At(i, across + 0.175f, 0.85f), At(i, across + 0.175f, 1.35f), At(i, across - 0.175f, 1.35f),
+                        At(i, across - 0.175f, 0.85f),
+                    });
+                mesh.Solid(rail, (_, _) => InkMesh.White, InkMesh.White, InkMesh.White, 0.06f, false);
+            }
+            for (int i = 0; i < line.Count; i++)
+                if (i % 2 == 1)
+                    foreach (float across in new[] { -8.6f, 8.6f })
+                    {
+                        Vector3 foot = At(i, across, 0f);
+                        mesh.Box(foot, foot.y + 0.9f, Vector3.Cross(rights[i], Vector3.up), 0.24f, 0.24f, InkMesh.White, 0f, false);
+                    }
+
+            // Dashed middle line, 6 m on and 6 off (the bridge's are 5 and 5), laid along the curve.
+            for (int i = 0; i + 2 < line.Count; i += 4)
+            {
+                const float lift = 0.1f, half = 0.25f;
+                mesh.Decal(At(i, -half, lift), At(i, half, lift), At(i + 1, half, lift), At(i + 1, -half, lift), InkMesh.White);
+                mesh.Decal(At(i + 1, -half, lift), At(i + 1, half, lift), At(i + 2, half, lift), At(i + 2, -half, lift), InkMesh.White);
+            }
+
+            // Piers wherever there's room under the girder, but never on a crossing.
+            for (float s = RampPierSpacing * 0.66f; s < length; s += RampPierSpacing)
+            {
+                int i = System.Array.FindIndex(arc, a => a >= s);
+                float underside = line[i].y - RampDepth;
+                if (underside - LandHeight < 2f)
+                    break;
+                float nearest = x0 + Mathf.Round((line[i].x - x0) / CityPitch) * CityPitch;
+                if (Mathf.Abs(line[i].x - nearest) < 15f + 3f && Mathf.Abs(line[i].z - streetZ) < 15f + 3f)
+                    continue;
+                Vector3 forward = Vector3.Cross(rights[i], Vector3.up);
+                mesh.Box(new Vector3(line[i].x, LandHeight - 1f, line[i].z), underside + 0.3f, forward, 2.4f, 8f, InkMesh.Concrete, 0.15f, true);
+            }
+
+            var paint = mesh.ToMesh($"{bridge.name} {name}");
+            var collider = mesh.ToCollider($"{bridge.name} {name} Col");
+            meshes.Add(paint);
+            meshes.Add(collider);
+            var materials = new ClassModels.PlaneMaterials();
+            var go = new GameObject(name);
+            go.transform.SetParent(bridge, true);
+            go.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity); // the mesh is in world space
+            go.AddComponent<MeshFilter>().sharedMesh = paint;
+            go.AddComponent<MeshRenderer>().sharedMaterials = new[] { materials.Paint, materials.Ink };
+            go.AddComponent<MeshCollider>().sharedMesh = collider;
+            go.isStatic = true;
+
+            var footprint = new Vector2[line.Count];
+            for (int i = 0; i < line.Count; i++)
+                footprint[i] = new Vector2(line[i].x, line[i].z);
+            Debug.Log($"[Winging It] {bridge.name} {name}: {length:0} m down to the street at x {touchdown:0}, {grade * 100f:0.0}% grade");
+            return new Footprint(footprint, RampHalfWidth + 0.5f);
+        }
+
+        /// <summary>Generated meshes into one asset (replaced every build), so the scene references them instead of embedding them.</summary>
+        static void SaveMeshes(string path, List<Mesh> meshes)
+        {
+            AssetDatabase.DeleteAsset(path);
+            if (meshes.Count == 0)
+                return;
+            AssetDatabase.CreateAsset(meshes[0], path);
+            for (int i = 1; i < meshes.Count; i++)
+                AssetDatabase.AddObjectToAsset(meshes[i], path);
+        }
+
+        /// <summary>Quay pieces' depth below street level and promenade width (ArtSource/City/build_city.py).</summary>
+        const float QuayDepth = 16f, QuayPromenade = 12f;
+
+        /// <summary>
+        /// Quay walls down both banks of the canal and round its basin (the city pack's Quay pieces, their face on the
+        /// heightmap's cut <see cref="CanalHalfWidth"/> from the middle), as far as there's land behind them, and boats on
+        /// the water. Without the pack the bare cut stands in.
+        /// </summary>
+        static void BuildCanal(Transform parent, CityModels city)
+        {
+            if (city == null)
+                return;
+            var group = new GameObject("Canal").transform;
+            group.SetParent(parent, false);
+
+            void Quay(string kind, float length, Vector3 position, Vector3 awayFromWater)
+            {
+                // Local +x looks away from the water, local +z runs along the bank.
+                var rotation = Quaternion.LookRotation(Vector3.Cross(awayFromWater, Vector3.up));
+                var go = city.Place(kind, group, position, rotation, Vector3.one, null);
+                var box = go.AddComponent<BoxCollider>();
+                box.center = new Vector3(QuayPromenade * 0.5f, -QuayDepth * 0.5f, 0f);
+                box.size = new Vector3(QuayPromenade, QuayDepth, length);
+            }
+
+            // Down each bank, end to end along the line CanalHalfWidth from the middle, until the land runs out.
+            const float piece = 20f;
+            foreach (float side in new[] { -1f, 1f })
+                for (float z = CanalStartZ; ;)
+                {
+                    float dz = piece / Mathf.Sqrt(1f + Sq(CanalSlope(z)));
+                    float zm = z + dz * 0.5f;
+                    if (Height(CanalX(zm) + side * (CanalHalfWidth + 25f), zm) < 2f)
+                        break; // the coast
+                    var across = new Vector3(1f, 0f, -CanalSlope(zm)).normalized * side;
+                    Quay("Quay", piece, new Vector3(CanalX(zm) + side * CanalHalfWidth, LandHeight, zm), across);
+                    z += dz;
+                }
+
+            // Round the basin at the south end: short pieces on the half circle.
+            const float shortPiece = 7f;
+            var basin = new Vector3(CanalX(CanalStartZ), LandHeight, CanalStartZ);
+            int count = Mathf.CeilToInt(Mathf.PI * CanalHalfWidth / shortPiece);
+            for (int k = 0; k < count; k++)
+            {
+                float a = Mathf.PI + (k + 0.5f) * Mathf.PI / count;
+                var out_ = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                Quay("QuayShort", shortPiece, basin + out_ * CanalHalfWidth, out_);
+            }
+
+            // Boats: tugs and water buses along the middle, heading up or down the canal.
+            var rng = new System.Random(4545);
+            int n = 0;
+            foreach (float z in new[] { 130f, 320f, 430f, 680f, 860f })
+            {
+                float x = CanalX(z) + (n % 2 == 0 ? -18f : 18f);
+                if (Height(x, z) > -5f)
+                    continue;
+                float yaw = Mathf.Atan(CanalSlope(z)) * Mathf.Rad2Deg + (n % 2 == 0 ? 180f : 0f);
+                city.PlaceVehicle(rng.NextDouble() < 0.5 ? "Tugboat" : "Ferry", group, new Vector3(x, 0f, z), yaw);
+                n++;
+            }
         }
 
         // ------------------------------------------------------------------ boundary
 
         /// <summary>
-        /// A ring of marker buoys on the sea at the boundary radius, ~150 m apart: orange floats with a mast and a red
-        /// light that blinks in unison (<see cref="BoundaryBuoys"/>). No colliders: they mark the edge, they aren't in the way.
+        /// A ring of marker buoys on the sea at the boundary radius, ~150 m apart: the markers pack's buoy (orange float,
+        /// cage tower, X topmark) or greybox cylinders, each with a red light that blinks in unison
+        /// (<see cref="BoundaryBuoys"/>). No colliders: they mark the edge, they aren't in the way.
         /// </summary>
-        static void BuildBoundaryBuoys(Transform parent, FlightBoundary boundary)
+        static void BuildBoundaryBuoys(Transform parent, FlightBoundary boundary, MarkerModels markers)
         {
             var root = new GameObject("Boundary Buoys").transform;
             root.SetParent(parent, false);
-            var floatMat = B.Materials.Mat("Greybox_BuoyFloat", new Color(1f, 0.45f, 0.08f));
-            var mastMat = B.Materials.Mat("Greybox_BuoyMast", new Color(0.92f, 0.92f, 0.9f));
-            var lightMat = B.Materials.UnlitMat("Greybox_Beacon", new Color(1f, 0.15f, 0.1f));
+            Material floatMat = null, mastMat = null, lightMat = null;
+            if (markers == null)
+            {
+                floatMat = B.Materials.Mat("Greybox_BuoyFloat", new Color(1f, 0.45f, 0.08f));
+                mastMat = B.Materials.Mat("Greybox_BuoyMast", new Color(0.92f, 0.92f, 0.9f));
+                lightMat = B.Materials.UnlitMat("Greybox_Beacon", new Color(1f, 0.15f, 0.1f));
+            }
 
             int count = Mathf.CeilToInt(2f * Mathf.PI * boundary.radius / BuoySpacing);
             var lights = new Renderer[count];
@@ -622,6 +1342,11 @@ namespace WingingIt.Editor
                 var buoy = new GameObject($"Buoy {i:000}").transform;
                 buoy.SetParent(root, false);
                 buoy.position = new Vector3(c.x, 0f, c.z) + Quaternion.Euler(0f, a, 0f) * Vector3.forward * boundary.radius;
+                if (markers != null)
+                {
+                    lights[i] = markers.Buoy(buoy);
+                    continue;
+                }
                 Cylinder("Float", buoy, new Vector3(0f, 3f, 0f), 7f, 8f, floatMat);
                 Cylinder("Mast", buoy, new Vector3(0f, 16f, 0f), 1.4f, 20f, mastMat);
                 lights[i] = Sphere("Light", buoy, new Vector3(0f, 28f, 0f), 5f, lightMat, false);
@@ -647,7 +1372,7 @@ namespace WingingIt.Editor
         // ------------------------------------------------------------------ landmarks
 
         /// <summary>One big landmark per region, each with a blinking beacon on top (<see cref="Landmark"/>).</summary>
-        static void BuildLandmarks(Transform parent, Terrain terrain, B.Materials m)
+        static void BuildLandmarks(Transform parent, Terrain terrain, B.Materials m, NatureModels nature)
         {
             var group = new GameObject("Landmarks").transform;
             group.SetParent(parent, false);
@@ -655,7 +1380,7 @@ namespace WingingIt.Editor
             BuildSpire(group, m, beacon);
             BuildSummitRadar(group, terrain, m, beacon);
             BuildPyramid(group, terrain, beacon);
-            BuildLighthouse(group, m);
+            BuildLighthouse(group, m, nature);
             foreach (var t in group.GetComponentsInChildren<Transform>())
                 t.gameObject.isStatic = true;
         }
@@ -755,8 +1480,11 @@ namespace WingingIt.Editor
             }
         }
 
-        /// <summary>Ocean: a striped lighthouse on a rocky islet off the south coast. Its lamp is the beacon.</summary>
-        static void BuildLighthouse(Transform parent, B.Materials m)
+        /// <summary>
+        /// Ocean: a striped lighthouse on a rocky islet off the south coast. Its lamp is the beacon. The islet is the
+        /// nature pack's cliff mesh (with a matching collider), its grassy top level with the lighthouse's foot.
+        /// </summary>
+        static void BuildLighthouse(Transform parent, B.Materials m, NatureModels nature)
         {
             var lamp = B.Materials.UnlitMat("Greybox_LighthouseLamp", new Color(1f, 0.92f, 0.55f));
             var root = NewLandmark(parent, "Lighthouse Rock", MapRegion.Ocean, new Vector3(IsletPosition.x, IsletHeight, IsletPosition.y), 70f, lamp, 6f);
@@ -775,6 +1503,7 @@ namespace WingingIt.Editor
             B.Box("Keeper's House", root, new Vector3(16f, 3f, 6f), new Vector3(12f, 8f, 9f), m.Concrete, true);
             root.Find("Top").localPosition = new Vector3(0f, y + 6f, 0f);
             root.Find("Beacon").localPosition = new Vector3(0f, y + 6f, 0f);
+            nature?.Place("Islet", root, new Vector3(IsletPosition.x, 0f, IsletPosition.y), collider: true);
         }
 
         // ------------------------------------------------------------------ approach lanes
@@ -790,26 +1519,49 @@ namespace WingingIt.Editor
 
         /// <summary>
         /// Three lanes into each home field (<see cref="WestLanes"/>, mirrored for the east), each a marked route of
-        /// gate pylons (colored per lane, no collision) ending on the field's final approach fix.
+        /// gate pylons (colored per lane, no collision) ending on the field's final approach fix. The pylons are the
+        /// markers pack's (the marker on a lane-coloured glow material) or greybox poles with a sphere.
         /// </summary>
-        static void BuildApproachLanes(Transform parent, Airfield west, Airfield east)
+        static void BuildApproachLanes(Transform parent, Airfield west, Airfield east, Airfield central, Airfield southWest, Airfield southEast,
+            MarkerModels markers)
         {
             Physics.SyncTransforms(); // the colliders built so far, so the clearance probe sees them
             var group = new GameObject("Approach Lanes").transform;
             group.SetParent(parent, false);
-            var pole = B.Materials.Mat("Greybox_LanePole", new Color(0.85f, 0.85f, 0.82f));
+            var pole = markers == null ? B.Materials.Mat("Greybox_LanePole", new Color(0.85f, 0.85f, 0.82f)) : null;
+            Material Gate(string name, Color color) =>
+                markers != null ? MarkerModels.LaneMaterial(name, color) : B.Materials.UnlitMat($"Greybox_{name}", color);
             for (int i = 0; i < WestLanes.Length; i++)
             {
                 var (name, eastName, color, points, eastPoints) = WestLanes[i];
-                var mat = B.Materials.UnlitMat($"Greybox_Lane{i + 1}", color);
-                BuildLane(group, west, name, points, mat, pole);
-                BuildLane(group, east, eastName, eastPoints ?? MirrorLane(points), mat, pole);
+                var mat = Gate($"Lane{i + 1}", color);
+                BuildLane(group, west, name, points, mat, pole, markers);
+                BuildLane(group, east, eastName, eastPoints ?? MirrorLane(points), mat, pole, markers);
+            }
+            var centralMat = Gate("LaneCentral", new Color(1f, 0.8f, 0.2f));
+            BuildLane(group, central, "West Final", CentralLane, centralMat, pole, markers, reverseEnd: false);
+            BuildLane(group, central, "East Final", MirrorLaneX(CentralLane), centralMat, pole, markers, reverseEnd: true);
+            var southMat = Gate("LaneSouth", new Color(1f, 0.55f, 0.2f));
+            foreach (var (name, points) in SouthFieldLanes)
+            {
+                BuildLane(group, southWest, name, points, southMat, pole, markers);
+                BuildLane(group, southEast, name, MirrorLaneX(points), southMat, pole, markers);
             }
             foreach (var t in group.GetComponentsInChildren<Transform>())
                 t.gameObject.isStatic = true;
         }
 
-        static void BuildLane(Transform parent, Airfield field, string name, (Vector2 xz, float agl)[] points, Material gateMat, Material poleMat)
+        /// <summary>A lane point mirrored across x = 0 (Central's west lane for its east end).</summary>
+        static (Vector2 xz, float agl)[] MirrorLaneX((Vector2 xz, float agl)[] points)
+        {
+            var mirrored = new (Vector2, float)[points.Length];
+            for (int i = 0; i < points.Length; i++)
+                mirrored[i] = (new Vector2(-points[i].xz.x, points[i].xz.y), points[i].agl);
+            return mirrored;
+        }
+
+        static void BuildLane(Transform parent, Airfield field, string name, (Vector2 xz, float agl)[] points, Material gateMat, Material poleMat,
+            MarkerModels markers, bool reverseEnd = false)
         {
             var root = new GameObject($"{field.DisplayName} - {name}").transform;
             root.SetParent(parent, false);
@@ -819,7 +1571,7 @@ namespace WingingIt.Editor
                 var (xz, agl) = points[i];
                 path[i] = new Vector3(xz.x, HighestPointNear(xz, LaneClearanceRadius) + agl, xz.y);
             }
-            path[^1] = field.GlidePathPoint(FinalFixDistance);
+            path[^1] = field.GlidePathPoint(FinalFixDistance, reverseEnd);
             root.position = path[0];
             root.gameObject.AddComponent<ApproachLane>().Configure(name, field, path, LaneHalfWidth);
 
@@ -838,6 +1590,11 @@ namespace WingingIt.Editor
                     var gate = new GameObject(i == 0 ? "Entry Gate" : $"Gate {i}").transform;
                     gate.SetParent(root, false);
                     gate.position = new Vector3(top.x, ground, top.z);
+                    if (markers != null)
+                    {
+                        markers.Pylon(gate, height, gateMat);
+                        continue;
+                    }
                     B.Box("Pole", gate, new Vector3(0f, height * 0.5f, 0f), new Vector3(1.5f, height, 1.5f), poleMat, false);
                     Sphere("Marker", gate, new Vector3(0f, height, 0f), 8f, gateMat, false);
                 }
@@ -851,7 +1608,7 @@ namespace WingingIt.Editor
         /// collider-less white spheres that match the cover volume. Each bank and its mirror share one altitude (the higher
         /// of the two needed to clear the ground), so both teams' clouds are the same.
         /// </summary>
-        static void BuildClouds(Transform parent)
+        static void BuildClouds(Transform parent, NatureModels nature)
         {
             var group = new GameObject("Clouds").transform;
             group.SetParent(parent, false);
@@ -867,11 +1624,11 @@ namespace WingingIt.Editor
                 foreach (var at in new[] { xz, -xz })
                     y = Mathf.Max(y, HighestPointNear(at, radius) + CloudClearance + underside);
 
-                BuildCloudBank(group, $"Cloud {++n}", new Vector3(xz.x, y, xz.y), puffs, mat);
+                BuildCloudBank(group, $"Cloud {++n}", new Vector3(xz.x, y, xz.y), puffs, mat, nature);
                 var mirrored = new CloudPuff[puffs.Length];
                 for (int i = 0; i < puffs.Length; i++)
                     mirrored[i] = new CloudPuff(new Vector3(-puffs[i].center.x, puffs[i].center.y, -puffs[i].center.z), puffs[i].radii);
-                BuildCloudBank(group, $"Cloud {++n}", new Vector3(-xz.x, y, -xz.y), mirrored, mat);
+                BuildCloudBank(group, $"Cloud {++n}", new Vector3(-xz.x, y, -xz.y), mirrored, mat, nature);
             }
         }
 
@@ -903,21 +1660,104 @@ namespace WingingIt.Editor
             return puffs.ToArray();
         }
 
-        static void BuildCloudBank(Transform parent, string name, Vector3 position, CloudPuff[] puffs, Material mat)
+        /// <summary>
+        /// One bank: a faceted puff mesh per cover puff (the nature pack's unit-radius CloudPuffA-C, scaled to its radii),
+        /// or a greybox sphere when the pack hasn't been generated.
+        /// </summary>
+        static void BuildCloudBank(Transform parent, string name, Vector3 position, CloudPuff[] puffs, Material mat, NatureModels nature)
         {
             var root = new GameObject(name).transform;
             root.SetParent(parent, false);
             root.position = position;
             for (int i = 0; i < puffs.Length; i++)
             {
-                var r = Sphere($"Puff {i + 1}", root, puffs[i].center, 1f, mat, false);
-                r.transform.localScale = puffs[i].radii * 2f;
-                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                Renderer r;
+                if (nature != null)
+                {
+                    var go = nature.Place($"CloudPuff{"ABC"[i % 3]}", root, position + puffs[i].center, collider: false, castShadows: false);
+                    go.name = $"Puff {i + 1}";
+                    go.transform.localScale = puffs[i].radii;
+                    r = go.GetComponent<Renderer>();
+                    r.sharedMaterial = nature.CloudMaterial; // unlit: the baked tones are the shading, so no grey undersides
+                }
+                else
+                {
+                    r = Sphere($"Puff {i + 1}", root, puffs[i].center, 1f, mat, false);
+                    r.transform.localScale = puffs[i].radii * 2f;
+                    r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                }
                 r.receiveShadows = false;
             }
             root.gameObject.AddComponent<CloudBank>().Configure(puffs);
             foreach (var t in root.GetComponentsInChildren<Transform>())
                 t.gameObject.isStatic = true;
+        }
+
+        // ------------------------------------------------------------------ mode arenas
+
+        /// <summary>How far past a home runway's far end (m) the banner pole stands, clear of the field's AA corners.</summary>
+        const float BannerStandDistance = 150f;
+        const float BannerPoleHeight = 45f;
+
+        /// <summary>
+        /// Capture the Banner's stands (match-modes.md): one pole past the far end of each home runway, in line with it.
+        /// The grab zone (<see cref="BannerStand"/>) reaches 40 m up, so the pole stands taller; the banner flies from its top.
+        /// </summary>
+        static void BuildBannerStands(Transform parent, Terrain terrain, params Airfield[] homes)
+        {
+            var group = new GameObject("Banner Stands").transform;
+            group.SetParent(parent, false);
+            var pole = B.Materials.Mat("Greybox_BannerPole", new Color(0.82f, 0.82f, 0.85f));
+            foreach (var home in homes)
+            {
+                Color color = home.Team == 0 ? new Color(0.35f, 0.6f, 1f) : new Color(1f, 0.38f, 0.32f);
+                var cloth = B.Materials.UnlitMat($"Greybox_Banner_Team{home.Team}", color);
+
+                Vector3 xz = home.transform.position + home.RunwayDirection * (home.RunwaySize.y * 0.5f + BannerStandDistance);
+                float ground = terrain.SampleHeight(new Vector3(xz.x, 0f, xz.z)) + terrain.transform.position.y;
+
+                var go = new GameObject($"{(home.Team == 0 ? "West" : "East")} Banner Stand");
+                go.transform.SetParent(group, false);
+                go.transform.SetPositionAndRotation(new Vector3(xz.x, ground, xz.z), home.transform.rotation);
+                var mount = new GameObject("Flag Mount").transform;
+                mount.SetParent(go.transform, false);
+                mount.localPosition = new Vector3(0f, BannerPoleHeight, 0f);
+                B.Box("Pole", go.transform, new Vector3(0f, BannerPoleHeight * 0.5f, 0f), new Vector3(1.2f, BannerPoleHeight, 1.2f), pole, true);
+                B.Box("Base", go.transform, new Vector3(0f, 1f, 0f), new Vector3(6f, 2f, 6f), pole, true);
+                var flag = B.Box("Banner", go.transform, new Vector3(0f, BannerPoleHeight - 6f, 5f), new Vector3(0.3f, 10f, 10f), cloth, false);
+                go.AddComponent<BannerStand>().Configure(home.Team, 20f, 40f, mount, flag.transform);
+            }
+        }
+
+        /// <summary>Ram Royale's arena (match-modes.md): a small circle over the sea round Lighthouse Rock.</summary>
+        const float RamArenaRadius = 700f, RamArenaCeiling = 450f, RamArenaWarning = 150f;
+        const float RamStartRadius = 550f, RamStartAltitude = 220f;
+        const float RamPatrolRadius = 350f, RamPatrolAltitude = 200f;
+
+        /// <summary>
+        /// The arenas modes play in instead of the whole Island (<see cref="ModeArena"/>). Teams, Capture the Banner and
+        /// Airfield Domination use the Island as built, so only Ram Royale has one: ~700 m round the lighthouse, 450 m
+        /// ceiling, a hard edge, every airfield closed, everyone starting on a ring in the air facing in, and the bots
+        /// patrolling the lighthouse and four points round it.
+        /// </summary>
+        static void BuildModeArenas(Transform parent)
+        {
+            var group = new GameObject("Mode Arenas").transform;
+            group.SetParent(parent, false);
+
+            var ram = new GameObject("Ram Royale Arena").AddComponent<ModeArena>();
+            ram.transform.SetParent(group, false);
+            ram.transform.position = new Vector3(IsletPosition.x, 0f, IsletPosition.y);
+            ram.Configure("RamRoyale", RamArenaRadius, RamArenaWarning, RamArenaCeiling, true);
+            ram.ConfigureAirfields(true);
+            ram.ConfigureStart(true, RamStartRadius, RamStartAltitude, 16);
+            var areas = new List<Vector3> { new(IsletPosition.x, RamPatrolAltitude, IsletPosition.y) };
+            for (int i = 0; i < 4; i++)
+            {
+                Vector3 offset = Quaternion.Euler(0f, 45f + i * 90f, 0f) * Vector3.forward * RamPatrolRadius;
+                areas.Add(new Vector3(IsletPosition.x + offset.x, RamPatrolAltitude, IsletPosition.y + offset.z));
+            }
+            ram.ConfigureFightAreas(areas.ToArray());
         }
 
         /// <summary>Fills both teams to 8v8 with bots that patrol the <see cref="FightAreas"/>.</summary>

@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using WingingIt.Effects;
 using WingingIt.World;
 
 namespace WingingIt.Flight
@@ -9,7 +10,8 @@ namespace WingingIt.Flight
     /// repair starts (<see cref="RepairRules.GetTier"/>), and once its timer runs out every part, all HP and all ammo
     /// come back (<see cref="PlaneHealth.RestoreAll"/>). Leaving the zone first, or taking off, cancels it: no partial
     /// repair. A finished plane has to leave the zone before it can repair again. While the timer runs the plane is
-    /// invulnerable (<see cref="PlaneHealth.IsInvulnerable"/>) and wears a gold bubble so attackers don't waste ammo.
+    /// invulnerable (<see cref="PlaneHealth.IsInvulnerable"/>) and wears a gold bubble so attackers don't waste ammo,
+    /// with wrenches and sparkles rising off it.
     /// </summary>
     [RequireComponent(typeof(PlaneController), typeof(PlaneHealth))]
     public class PlaneRepair : MonoBehaviour
@@ -17,13 +19,14 @@ namespace WingingIt.Flight
         static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
 
         [SerializeField] RepairRules rules = new();
-        [Tooltip("Transparent unlit material for the invulnerability bubble (tinted by bubbleColor).")]
+        [Tooltip("Transparent unlit material for the invulnerability bubble (tinted by bubbleColor), without the VFX pack.")]
         [SerializeField] Material bubbleMaterial;
         [SerializeField] Color bubbleColor = new Color(1f, 0.82f, 0.25f, 0.22f);
 
         GameObject _bubble;
         Renderer _bubbleRenderer;
         MaterialPropertyBlock _bubbleBlock;
+        VfxEffect _sparkles;
         PlaneController _plane;
         PlaneHealth _health;
         bool _finishedHere; // repaired in the current zone: wait until the plane leaves it
@@ -84,11 +87,17 @@ namespace WingingIt.Flight
             if (_health != null)
                 _health.IsInvulnerable = repairing;
             SetBubbleVisible(repairing);
+            _sparkles?.Stop();
+            _sparkles = repairing ? Vfx.Attach(VfxKind.RepairSparkles, transform, Vector3.zero, BubbleScale) : null;
         }
+
+        float BubbleScale => _plane != null && _plane.Stats != null ? _plane.Stats.visualScale : 1f;
 
         void FixedUpdate()
         {
-            var zone = _plane.IsAlive && _plane.IsGrounded ? FriendlyZoneAt(_plane.Position, _plane.Team) : null;
+            // A banner carrier gets no repair: landing in a zone with it does nothing (Capture the Banner).
+            var zone = _plane.IsAlive && _plane.IsGrounded && !_plane.CarryingBanner
+                ? FriendlyZoneAt(_plane.Position, _plane.Team) : null;
 
             if (IsRepairing)
             {
@@ -107,7 +116,7 @@ namespace WingingIt.Flight
 
             if (zone == null)
                 _finishedHere = false;
-            else if (!_finishedHere && _plane.Speed <= rules.stoppedSpeed)
+            else if (!_finishedHere && _plane.Speed <= rules.stoppedSpeed && !_plane.IsReversing)
                 Begin(zone);
         }
 
@@ -132,26 +141,37 @@ namespace WingingIt.Flight
             Completed?.Invoke(this);
         }
 
-        // ------------------------------------------------------------------ visuals (placeholder)
+        // ------------------------------------------------------------------ visuals
 
+        /// <summary>The VFX pack's faceted bubble (a plain sphere without it), tinted gold.</summary>
         void SetBubbleVisible(bool visible)
         {
             if (visible && _bubble == null)
             {
-                _bubble = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                _bubble.name = "Repair Shield";
-                DestroyImmediate(_bubble.GetComponent<Collider>()); // never a hitbox or an obstacle
+                var library = Vfx.Library;
+                if (library != null && library.shieldMesh != null)
+                {
+                    _bubble = new GameObject("Repair Shield");
+                    _bubble.AddComponent<MeshFilter>().sharedMesh = library.shieldMesh;
+                    _bubbleRenderer = _bubble.AddComponent<MeshRenderer>();
+                    _bubbleRenderer.sharedMaterial = library.shieldMaterial;
+                }
+                else
+                {
+                    _bubble = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                    _bubble.name = "Repair Shield";
+                    DestroyImmediate(_bubble.GetComponent<Collider>()); // never a hitbox or an obstacle
+                    _bubbleRenderer = _bubble.GetComponent<Renderer>();
+                    if (bubbleMaterial != null)
+                        _bubbleRenderer.sharedMaterial = bubbleMaterial;
+                }
                 _bubble.transform.SetParent(transform, false);
-                _bubbleRenderer = _bubble.GetComponent<Renderer>();
-                if (bubbleMaterial != null)
-                    _bubbleRenderer.sharedMaterial = bubbleMaterial;
                 _bubbleRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 _bubbleBlock = new MaterialPropertyBlock();
             }
             if (_bubble == null)
                 return;
-            float scale = _plane != null && _plane.Stats != null ? _plane.Stats.visualScale : 1f;
-            _bubble.transform.localScale = Vector3.one * 11f * scale; // a little bigger than the Armor Shield
+            _bubble.transform.localScale = Vector3.one * 11f * BubbleScale; // a little bigger than the Armor Shield
             _bubble.SetActive(visible);
         }
 

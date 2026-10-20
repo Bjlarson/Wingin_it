@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using WingingIt.Effects;
 using WingingIt.Flight;
 
 namespace WingingIt.World
@@ -19,15 +20,13 @@ namespace WingingIt.World
         [Tooltip("Seconds a wreck stays before the target rebuilds (prototype only).")]
         [SerializeField, Min(0f)] float rebuildDelay = 20f;
         [SerializeField] Renderer[] renderers;
-        [SerializeField] Material fireMaterial;
-        [SerializeField] Material smokeMaterial;
         [SerializeField] Color wreckColor = new Color(0.12f, 0.11f, 0.1f);
 
         Collider[] _colliders;
         MaterialPropertyBlock _block;
         Vector3 _intactScale;
         float _rebuildTimer;
-        float _smokeTimer;
+        VfxEffect _smoke, _fire;
 
         public static IReadOnlyList<GroundTarget> All => s_all;
         /// <summary>Raised when any ground target is destroyed, with whatever destroyed it (a plane, or null).</summary>
@@ -40,14 +39,21 @@ namespace WingingIt.World
         public float MaxHealth => maxHealth;
         public float NormalizedHealth => Health / maxHealth;
         public bool IsDestroyed => Health <= 0f;
+        public float RebuildDelay => rebuildDelay;
+        /// <summary>Seconds until a wreck rebuilds (0 while intact).</summary>
+        public float RebuildTimeLeft => IsDestroyed ? Mathf.Max(0f, _rebuildTimer) : 0f;
 
-        public void Configure(string name, float health, Renderer[] targetRenderers, Material fire, Material smoke)
+        public void Configure(string name, float health, Renderer[] targetRenderers)
         {
             displayName = name;
             maxHealth = health;
             renderers = targetRenderers;
-            fireMaterial = fire;
-            smokeMaterial = smoke;
+        }
+
+        public void Configure(string name, float health, Renderer[] targetRenderers, float rebuildSeconds)
+        {
+            Configure(name, health, targetRenderers);
+            rebuildDelay = rebuildSeconds;
         }
 
         void Awake()
@@ -80,18 +86,23 @@ namespace WingingIt.World
             Health = maxHealth;
             transform.localScale = _intactScale;
             SetTint(null);
+            _smoke?.Stop();
+            _fire?.Stop();
+            _smoke = _fire = null;
         }
 
         void Wreck(UnityEngine.Object source)
         {
             _rebuildTimer = rebuildDelay;
-            _smokeTimer = 0f;
             // Squashed and charred; the collider stays, so it's still something to crash into.
             transform.localScale = Vector3.Scale(_intactScale, new Vector3(1f, 0.45f, 1f));
             SetTint(wreckColor);
             Vector3 center = Center;
-            PlaneVisuals.SpawnFlash(center, smokeMaterial, new Color(0.25f, 0.25f, 0.27f), 4f, 30f, 2.5f, Vector3.up * 4f);
-            PlaneVisuals.SpawnFlash(center, fireMaterial, new Color(1f, 0.5f, 0.08f), 5f, 24f, 0.8f, Vector3.up * 6f);
+            Vfx.Play(VfxKind.ExplosionGround, center, 1.3f);
+            // A rising smoke column over the burning wreck marks it from the air.
+            Vector3 local = transform.InverseTransformPoint(center);
+            _smoke = Vfx.Attach(VfxKind.WreckSmoke, transform, local);
+            _fire = Vfx.Attach(VfxKind.DamageFire, transform, local, 2f);
             AnyDestroyed?.Invoke(this, source);
         }
 
@@ -99,14 +110,6 @@ namespace WingingIt.World
         {
             if (!IsDestroyed)
                 return;
-            // A rising smoke column marks the wreck from the air.
-            _smokeTimer -= Time.deltaTime;
-            if (_smokeTimer <= 0f && smokeMaterial != null)
-            {
-                _smokeTimer = 0.35f;
-                PlaneVisuals.SpawnFlash(Center + UnityEngine.Random.insideUnitSphere * 2f, smokeMaterial,
-                    new Color(0.2f, 0.2f, 0.22f), 3f, 14f, 3f, Vector3.up * 9f);
-            }
             if (rebuildDelay > 0f && (_rebuildTimer -= Time.deltaTime) <= 0f)
                 Rebuild();
         }

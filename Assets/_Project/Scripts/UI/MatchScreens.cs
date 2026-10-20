@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
@@ -49,7 +50,8 @@ namespace WingingIt.UI
         bool _settingsOpen;
         Front _front;
         int _focus;
-        int _mode;           // highlighted game mode card
+        int _mode;           // highlighted game mode card (index into GameModeInfo.All)
+        List<int> _cards;    // the cards on the game mode screen (modes in development only in dev builds)
         int _modeRow;        // 0 = the card, 1 = its BOTS row
         int _highlight = -1; // highlighted class card on class select
         bool _leaveArmed;    // LEAVE MATCH pressed once: the next press confirms
@@ -58,7 +60,12 @@ namespace WingingIt.UI
 
         static bool CanQuit => !Application.isMobilePlatform && Application.platform != RuntimePlatform.WebGLPlayer;
 
-        void Awake() => _settings = new SettingsPanel(_g, actions);
+        void Awake()
+        {
+            useGUILayout = false; // no GUILayout here: skips IMGUI's layout pass
+            _settings = new SettingsPanel(_g, actions);
+            _cards = GameModeInfo.MenuCards(Debug.isDebugBuild);
+        }
 
         void OnDestroy() => _g.Dispose();
 
@@ -121,17 +128,17 @@ namespace WingingIt.UI
                 return;
             }
 
-            var modes = GameModeInfo.All;
-            var mode = modes[Mathf.Clamp(_mode, 0, modes.Count - 1)];
+            int pos = Mathf.Max(0, _cards.IndexOf(_mode));
+            var mode = GameModeInfo.All[_cards[pos]];
             if (_nav.Up || _nav.Down)
                 _modeRow = mode.HasBotDifficulty ? 1 - _modeRow : 0;
             int dir = _nav.Left ? -1 : _nav.Right ? 1 : 0;
             if (dir != 0)
             {
-                if (_modeRow == 1 || modes.Count == 1)
-                    StepDifficulty(dir);
+                if (_modeRow == 1 || _cards.Count == 1)
+                    StepDifficulty(mode, dir);
                 else
-                    _mode = Mathf.Clamp(_mode + dir, 0, modes.Count - 1);
+                    _mode = _cards[Mathf.Clamp(pos + dir, 0, _cards.Count - 1)];
             }
             if (_nav.Confirm)
                 ConfirmMode();
@@ -145,7 +152,7 @@ namespace WingingIt.UI
             {
                 case MainPlay:
                     _front = Front.GameMode;
-                    _mode = 0;
+                    _mode = Mathf.Max(0, match.ModeIndex);
                     _modeRow = 0;
                     if (menuCamera != null)
                         menuCamera.PullBack();
@@ -169,11 +176,15 @@ namespace WingingIt.UI
 
         void ConfirmMode()
         {
+            if (!GameModeInfo.All[_mode].IsPlayable)
+                return; // in development: the card shows, PLAY doesn't
             _highlight = match.SelectedClass;
+            match.SelectMode(_mode);
             match.OpenClassSelect();
         }
 
-        void StepDifficulty(int dir) => match.Difficulty = (BotDifficulty)Mathf.Clamp((int)match.Difficulty + dir, 0, DifficultyNames.Length - 1);
+        void StepDifficulty(GameModeInfo mode, int dir) =>
+            match.SetDifficulty(mode, (BotDifficulty)Mathf.Clamp((int)MatchManager.DifficultyFor(mode) + dir, 0, DifficultyNames.Length - 1));
 
         void ClassSelectInput()
         {
@@ -482,44 +493,55 @@ namespace WingingIt.UI
             _g.Fill(new Rect(0f, 0f, width, ReferenceHeight), Alpha(Dim, 0.25f));
             _g.Shadowed(new Rect(0f, 110f, width, 60f), "GAME MODE", _g.Title, 8f, TextAnchor.MiddleCenter, Color.white);
 
-            var modes = GameModeInfo.All;
-            float total = modes.Count * CardW + (modes.Count - 1) * CardGap;
-            float x0 = (width - total) / 2f;
+            int n = _cards.Count;
+            float total = n * CardW + (n - 1) * CardGap;
+            float s = Mathf.Min(1f, (width - 80f) / total); // narrow screens: shrink to fit
+            var old = GUI.matrix;
+            GUI.matrix = old * Matrix4x4.TRS(new Vector3((width - total * s) / 2f, 230f, 0f), Quaternion.identity, new Vector3(s, s, 1f));
             float glow = OpenGlow();
-            for (int i = 0; i < modes.Count; i++)
+            for (int k = 0; k < n; k++)
             {
-                var mode = modes[i];
-                var card = new Rect(x0 + i * (CardW + CardGap), 230f, CardW, CardH + 100f);
+                int i = _cards[k];
+                var mode = GameModeInfo.All[i];
+                var card = new Rect(k * (CardW + CardGap), 0f, CardW, CardH + 100f);
+                if (_nav.MouseMoved && Event.current.type == EventType.Repaint && _mode != i && card.Contains(Event.current.mousePosition))
+                {
+                    _mode = i; // focus follows the mouse
+                    _modeRow = 0;
+                }
                 bool selected = i == _mode;
                 _g.Panel(card, selected ? Mathf.Max(glow, GlowSettle) : glow * 0.5f);
 
                 var head = new Rect(card.x, card.y + 22f, card.width, 44f);
                 if (selected && _modeRow == 0)
                     _g.Lit(head, 1f, true);
-                _g.Tracked(new Rect(card.x + 28f, head.y, card.width - 56f, head.height), mode.Name.ToUpperInvariant(), _g.Item, 3.4f, TextAnchor.MiddleLeft, Color.white);
+                string name = mode.Name.ToUpperInvariant();
+                float fit = Mathf.Min(1f, (card.width - 56f) / _g.TrackedWidth(name, _g.Item, 3.4f)); // long names shrink
+                _g.Tracked(new Rect(card.x + 28f, head.y, card.width - 56f, head.height), name, _g.Item, 3.4f, TextAnchor.MiddleLeft, Color.white, fit);
                 _g.Fill(new Rect(card.x + 28f, head.yMax + 8f, card.width - 56f, 1f), Alpha(Color.white, 0.14f));
 
-                DrawModeSketch(new Rect(card.x + 28f, head.yMax + 24f, card.width - 56f, 120f));
+                DrawModeSketch(new Rect(card.x + 28f, head.yMax + 24f, card.width - 56f, 120f), mode.Sketch);
                 GUI.color = _g.Faded(Body);
                 GUI.Label(new Rect(card.x + 28f, head.yMax + 158f, card.width - 56f, 96f), mode.Pitch, _g.BodyText);
                 GUI.color = Color.white;
 
                 float y = head.yMax + 262f;
                 Fact(card, y, "PLAYERS", mode.Players);
-                Fact(card, y + 34f, "LENGTH", $"{Mathf.RoundToInt(mode.Length / 60f)}:00");
+                Fact(card, y + 34f, "LENGTH", $"{Mathf.FloorToInt(mode.Length / 60f)}:{Mathf.RoundToInt(mode.Length % 60f):00}");
 
                 if (mode.HasBotDifficulty)
                 {
-                    // BOTS, then the three levels as chips across the card
+                    // BOTS, then the three levels as chips across the card; each mode keeps its own
                     _g.Tracked(new Rect(card.x + 28f, y + 70f, card.width - 56f, 26f), "BOTS", _g.Hint, 2.4f, TextAnchor.MiddleLeft, Steel);
                     var row = new Rect(card.x, y + 96f, card.width, 48f);
                     if (selected && _modeRow == 1)
                         _g.Lit(row, 1f, true);
+                    var level = MatchManager.DifficultyFor(mode);
                     float bw = (card.width - 56f) / DifficultyNames.Length;
                     for (int d = 0; d < DifficultyNames.Length; d++)
                     {
                         var chip = new Rect(row.x + 28f + d * bw, row.y + 6f, bw - 8f, row.height - 12f);
-                        bool on = (int)match.Difficulty == d;
+                        bool on = (int)level == d;
                         if (on)
                             _g.RoundFill(chip, 6f, Alpha(Color.white, 0.14f));
                         _g.RoundStroke(chip, 6f, 1f, Alpha(Color.white, on ? 0.6f : 0.12f));
@@ -528,22 +550,33 @@ namespace WingingIt.UI
                         {
                             _mode = i;
                             _modeRow = 1;
-                            match.Difficulty = (BotDifficulty)d;
+                            match.SetDifficulty(mode, (BotDifficulty)d);
                         }
                     }
                 }
 
                 var play = new Rect(card.x, card.yMax - 78f, card.width, 56f);
-                if (_g.Button(play, "PLAY", _nav.Glyph("ENTER", "A"), selected && _modeRow == 0, false, true))
+                if (!mode.IsPlayable)
+                    _g.Button(play, "IN DEVELOPMENT", null, false, true, true, TextAnchor.MiddleCenter);
+                else if (_g.Button(play, "PLAY", _nav.Glyph("ENTER", "A"), selected && _modeRow == 0, false, true))
                 {
                     _mode = i;
                     ConfirmMode();
                 }
+                if (GUI.Button(card, GUIContent.none, GUIStyle.none)) // a click or tap anywhere else on the card picks it
+                {
+                    _mode = i;
+                    _modeRow = 0;
+                }
             }
 
-            if (BackButton(new Rect(width / 2f - 130f, 230f + CardH + 100f + 36f, 260f, 56f)))
+            if (BackButton(new Rect(total / 2f - 130f, CardH + 100f + 36f, 260f, 56f)))
                 BackToMain();
-            HintStrip(width, "ARROWS  BOTS    ENTER  PLAY    ESC  BACK", "D-PAD  BOTS    A  PLAY    B  BACK");
+            GUI.matrix = old;
+            if (n == 1)
+                HintStrip(width, "ARROWS  BOTS    ENTER  PLAY    ESC  BACK", "D-PAD  BOTS    A  PLAY    B  BACK");
+            else
+                HintStrip(width, "LEFT / RIGHT  MODE    UP / DOWN  BOTS    ENTER  PLAY    ESC  BACK", "D-PAD  MODE / BOTS    A  PLAY    B  BACK");
         }
 
         void Fact(Rect card, float y, string label, string value)
@@ -552,24 +585,91 @@ namespace WingingIt.UI
             _g.Tracked(new Rect(card.x + 28f, y, card.width - 56f, 30f), value, _g.Numeral, 1f, TextAnchor.MiddleRight, White, 0.7f);
         }
 
-        /// <summary>Teams' card picture: two lines of team-coloured planes, nose to nose, over a faint island.</summary>
-        void DrawModeSketch(Rect r)
+        /// <summary>A game mode card's picture: a simple top-down sketch in the team colours.</summary>
+        void DrawModeSketch(Rect r, ModeSketch sketch)
         {
             _g.RoundFill(r, 8f, new Color(0f, 0f, 0f, 0.25f));
-            _g.RoundFill(new Rect(r.x + r.width * 0.3f, r.y + r.height * 0.2f, r.width * 0.4f, r.height * 0.6f), 30f, Alpha(Color.white, 0.05f));
-            for (int team = 0; team < 2; team++)
+            Color west = match.TeamColor(0), east = match.TeamColor(1);
+            switch (sketch)
             {
-                Color c = match.TeamColor(team);
-                for (int k = 0; k < 4; k++)
-                {
-                    float y = r.y + 18f + k * 24f;
-                    float x = team == 0 ? r.x + 26f + (k % 2) * 16f : r.xMax - 42f - (k % 2) * 16f;
-                    // a tiny plane: wing bar + fuselage, pointing at the other team
-                    _g.Fill(new Rect(x + 4f, y, 4f, 16f), c);
-                    _g.Fill(new Rect(team == 0 ? x : x - 4f, y + 6f, 16f, 4f), c);
-                }
+                case ModeSketch.Teams: // two lines of planes, nose to nose
+                    Island(r);
+                    for (int team = 0; team < 2; team++)
+                        for (int k = 0; k < 4; k++)
+                        {
+                            float y = r.y + 26f + k * 24f;
+                            float x = team == 0 ? r.x + 34f + (k % 2) * 16f : r.xMax - 34f - (k % 2) * 16f;
+                            TinyPlane(new Vector2(x, y), team == 0 ? 90f : -90f, team == 0 ? west : east);
+                        }
+                    _g.Tracked(r, "VS", _g.Hint, 4f, TextAnchor.MiddleCenter, Alpha(White, 0.5f));
+                    break;
+
+                case ModeSketch.Banner: // East tows West's banner away from its empty stand, a West plane gives chase
+                    Island(r);
+                    BannerStand(new Vector2(r.x + 30f, r.yMax - 16f), west, false);
+                    BannerStand(new Vector2(r.xMax - 30f, r.yMax - 16f), east, true);
+                    var carrier = new Vector2(r.center.x + 34f, r.y + 40f); // heading home to East's stand
+                    for (int d = 0; d < 6; d++) // the cable
+                        _g.Fill(new Rect(carrier.x - 17f - d * 9f, carrier.y + 3f + d * 3f, 5f, 2f), Alpha(White, 0.55f));
+                    _g.Fill(new Rect(carrier.x - 94f, carrier.y + 18f, 28f, 12f), west); // the banner
+                    TinyPlane(carrier, 90f, east);
+                    TinyPlane(carrier + new Vector2(-8f, -22f), 90f, east); // escort
+                    TinyPlane(carrier + new Vector2(-114f, 50f), 90f, west); // chaser
+                    break;
+
+                case ModeSketch.Domination: // three fields A / B / C, one each and one neutral, a plane landing on B
+                    Island(r);
+                    string[] letters = { "A", "B", "C" };
+                    Color[] owners = { west, Alpha(White, 0.45f), east };
+                    for (int f = 0; f < 3; f++)
+                    {
+                        var c = new Vector2(r.x + r.width * (0.2f + 0.3f * f), r.center.y + (f == 1 ? -16f : 6f));
+                        var field = new Rect(c.x - 22f, c.y - 22f, 44f, 44f);
+                        _g.RoundFill(field, 22f, Alpha(owners[f], 0.22f));
+                        _g.RoundStroke(field, 22f, 2f, owners[f]);
+                        _g.Fill(new Rect(c.x - 16f, c.y + 28f, 32f, 3f), Alpha(White, 0.35f)); // its runway
+                        _g.Tracked(field, letters[f], _g.Item, 0f, TextAnchor.MiddleCenter, Color.white, 0.8f);
+                    }
+                    TinyPlane(new Vector2(r.center.x - 40f, r.center.y + 16f), 90f, east);
+                    break;
+
+                case ModeSketch.RamRoyale: // a ring of planes of every colour, all pointing in
+                    var mid = r.center;
+                    float ring = r.height / 2f - 8f;
+                    _g.RoundStroke(new Rect(mid.x - ring, mid.y - ring, ring * 2f, ring * 2f), ring, 2f, new Color(1f, 0.55f, 0.3f, 0.7f));
+                    for (int p = 0; p < 8; p++)
+                    {
+                        float a = p * 45f + 20f;
+                        var at = mid + (Vector2)(Quaternion.Euler(0f, 0f, a) * Vector3.up) * (ring - 16f);
+                        TinyPlane(at, 180f - a, Color.HSVToRGB(p / 8f, 0.55f, 1f));
+                    }
+                    break;
             }
-            _g.Tracked(r, "VS", _g.Hint, 4f, TextAnchor.MiddleCenter, Alpha(White, 0.5f));
+        }
+
+        /// <summary>The faint island under a sketch.</summary>
+        void Island(Rect r) =>
+            _g.RoundFill(new Rect(r.x + r.width * 0.3f, r.y + r.height * 0.2f, r.width * 0.4f, r.height * 0.6f), 30f, Alpha(Color.white, 0.05f));
+
+        /// <summary>A pole with its team's base, and the flag on it unless it has been taken.</summary>
+        void BannerStand(Vector2 foot, Color team, bool flying)
+        {
+            _g.Fill(new Rect(foot.x - 1f, foot.y - 56f, 2f, 56f), Alpha(White, 0.7f));
+            _g.Fill(new Rect(foot.x - 8f, foot.y - 2f, 16f, 3f), team);
+            if (flying)
+                _g.Fill(new Rect(foot.x - 27f, foot.y - 56f, 26f, 14f), team);
+        }
+
+        /// <summary>A tiny plane (fuselage, wings, tail) centred on <paramref name="at"/>, nose along <paramref name="heading"/> (0 = up, clockwise).</summary>
+        void TinyPlane(Vector2 at, float heading, Color color)
+        {
+            var old = GUI.matrix;
+            // turn about the plane's centre in the current (scaled) GUI space; RotateAroundPivot works in screen space
+            GUI.matrix = old * Matrix4x4.TRS(at, Quaternion.Euler(0f, 0f, heading), Vector3.one) * Matrix4x4.Translate(-at);
+            _g.Fill(new Rect(at.x - 2f, at.y - 8f, 4f, 16f), color);
+            _g.Fill(new Rect(at.x - 8f, at.y - 4f, 16f, 4f), color);
+            _g.Fill(new Rect(at.x - 4f, at.y + 6f, 8f, 2f), color);
+            GUI.matrix = old;
         }
 
         bool BackButton(Rect r)
@@ -724,8 +824,11 @@ namespace WingingIt.UI
         {
             var bar = new Rect(width / 2f - 240f, 16f, 480f, 64f);
             _g.Panel(bar, GlowRest, false);
-            DrawTeamScore(new Rect(bar.x + 22f, bar.y, 150f, bar.height), 0, TextAnchor.MiddleLeft);
-            DrawTeamScore(new Rect(bar.xMax - 172f, bar.y, 150f, bar.height), 1, TextAnchor.MiddleRight);
+            if ((match.Mode.Widgets & MatchWidgets.TeamScores) != 0)
+            {
+                DrawTeamScore(new Rect(bar.x + 22f, bar.y, 150f, bar.height), 0, TextAnchor.MiddleLeft);
+                DrawTeamScore(new Rect(bar.xMax - 172f, bar.y, 150f, bar.height), 1, TextAnchor.MiddleRight);
+            }
             float t = match.Phase == MatchPhase.Countdown ? match.MatchLength : match.TimeLeft;
             bool pulse = match.Phase == MatchPhase.Playing && t <= 30f && GameSettings.Blink(Time.unscaledTime, 1f, 0.5f);
             _g.Tracked(new Rect(bar.x + 170f, bar.y, 140f, bar.height), Clock(t), _g.Numeral, 1.5f, TextAnchor.MiddleCenter,
@@ -793,7 +896,7 @@ namespace WingingIt.UI
 
             var table = new Rect(panelW + gap, 0f, tableW, 96f + 8f * 42f + 40f);
             _g.Panel(table, GlowRest);
-            string line = $"{match.TeamName(0)}  {match.Score.TeamScore(0)}  –  {match.Score.TeamScore(1)}  {match.TeamName(1)}";
+            string line = match.Mode.ResultLine(match.Score, match.TeamName);
             _g.Header(table, "SCOREBOARD", line.ToUpperInvariant());
             DrawPilotTables(table, table.y + 90f);
             GUI.matrix = old;
@@ -807,10 +910,10 @@ namespace WingingIt.UI
             var panel = Centered(width, 1100f, 860f, 110f);
             _g.Panel(panel, OpenGlow());
 
-            int winner = match.Score.Winner();
+            int winner = match.Winner;
             string result = winner == MatchScore.Draw ? "DRAW" : winner == match.PlayerTeam ? "VICTORY" : "DEFEAT";
             _g.Header(panel, result, "FINAL SCORE");
-            string line = $"{match.TeamName(0)}  {match.Score.TeamScore(0)}  –  {match.Score.TeamScore(1)}  {match.TeamName(1)}";
+            string line = match.Mode.ResultLine(match.Score, match.TeamName);
             _g.Tracked(new Rect(panel.x, panel.y + 100f, panel.width, 44f), line.ToUpperInvariant(), _g.Numeral, 3f, TextAnchor.MiddleCenter, Color.white);
             DrawPilotTables(panel, panel.y + 170f);
 
@@ -822,30 +925,46 @@ namespace WingingIt.UI
                 match.PlayAgain();
             if (_g.Button(menu, "MAIN MENU", _nav.Glyph("ESC", "B"), _focus == 1, false, false, TextAnchor.MiddleCenter))
                 match.ReturnToMainMenu();
-            _g.Foot(panel, "WINNER IS THE HIGHEST TEAM SCORE", "");
+            _g.Foot(panel, match.Mode.WinRule, "");
         }
 
-        /// <summary>Both teams' pilots side by side (K / A / D / score, best first), from <paramref name="top"/> down.</summary>
+        /// <summary>
+        /// Lays <paramref name="columns"/> out from the right edge of <paramref name="row"/> (16 px in), drawing each
+        /// one's text. Returns the width left for the name, which starts 16 px in from the left.
+        /// </summary>
+        static float DrawColumns(Rect row, IReadOnlyList<ScoreColumn> columns, Func<ScoreColumn, string> text, Action<ScoreColumn, Rect, string> draw)
+        {
+            float right = row.xMax - 16f;
+            for (int i = columns.Count - 1; i >= 0; i--)
+            {
+                var c = columns[i];
+                draw(c, new Rect(right - c.Width, row.y, c.Width, row.height), text(c));
+                right -= c.Width + c.Gap;
+            }
+            return right - row.x - 10f;
+        }
+
+        /// <summary>Both teams' pilots side by side (the mode's columns, best first), from <paramref name="top"/> down.</summary>
         void DrawPilotTables(Rect panel, float top)
         {
+            var mode = match.Mode;
+            var columns = mode.Columns;
             float colW = (panel.width - 72f - 40f) / 2f;
             for (int team = 0; team < 2; team++)
             {
                 float x = panel.x + 36f + team * (colW + 40f);
                 var head = new Rect(x, top, colW, 34f);
-                _g.Tracked(new Rect(head.x + 16f, head.y, head.width - 236f, head.height), match.TeamName(team).ToUpperInvariant(), _g.Hint, 3.6f,
+                float nameW = DrawColumns(head, columns, c => c.Header, (_, r, text) =>
+                    _g.Tracked(r, text, _g.Hint, 3.6f, TextAnchor.MiddleRight, Steel));
+                _g.Tracked(new Rect(head.x + 16f, head.y, nameW, head.height), match.TeamName(team).ToUpperInvariant(), _g.Hint, 3.6f,
                     TextAnchor.MiddleLeft, match.TeamColor(team));
-                _g.Tracked(new Rect(head.xMax - 226f, head.y, 40f, head.height), "K", _g.Hint, 3.6f, TextAnchor.MiddleRight, Steel);
-                _g.Tracked(new Rect(head.xMax - 186f, head.y, 40f, head.height), "A", _g.Hint, 3.6f, TextAnchor.MiddleRight, Steel);
-                _g.Tracked(new Rect(head.xMax - 146f, head.y, 40f, head.height), "D", _g.Hint, 3.6f, TextAnchor.MiddleRight, Steel);
-                _g.Tracked(new Rect(head.xMax - 96f, head.y, 80f, head.height), "SCORE", _g.Hint, 3.6f, TextAnchor.MiddleRight, Steel);
                 _g.Fill(new Rect(x, head.yMax, colW, 1f), Alpha(Color.white, 0.14f));
 
                 var pilots = new List<PilotScore>();
                 foreach (var p in match.Score.Pilots)
                     if (p.Team == team)
                         pilots.Add(p);
-                pilots.Sort(MatchScore.CompareForScoreboard);
+                pilots.Sort(mode.CompareForScoreboard);
                 float y = head.yMax + 2f;
                 foreach (var p in pilots)
                 {
@@ -856,11 +975,10 @@ namespace WingingIt.UI
                     if (you)
                         _g.Lit(row, 1f, true);
                     var tint = you ? Color.white : Alpha(White, 0.88f);
-                    _g.Tracked(new Rect(row.x + 16f, row.y, row.width - 236f, row.height), p.Name.ToUpperInvariant(), _g.Hint, 1.8f, TextAnchor.MiddleLeft, tint, 1f);
-                    _g.Tracked(new Rect(row.xMax - 226f, row.y, 40f, row.height), p.Kills.ToString(), _g.Numeral, 0f, TextAnchor.MiddleRight, tint, 0.75f);
-                    _g.Tracked(new Rect(row.xMax - 186f, row.y, 40f, row.height), p.Assists.ToString(), _g.Numeral, 0f, TextAnchor.MiddleRight, Alpha(tint, 0.75f), 0.75f);
-                    _g.Tracked(new Rect(row.xMax - 146f, row.y, 40f, row.height), p.Deaths.ToString(), _g.Numeral, 0f, TextAnchor.MiddleRight, Alpha(tint, 0.6f), 0.75f);
-                    _g.Tracked(new Rect(row.xMax - 96f, row.y, 80f, row.height), p.Points.ToString(), _g.Numeral, 0f, TextAnchor.MiddleRight, tint, 0.75f);
+                    var pilot = p;
+                    float rowNameW = DrawColumns(row, columns, c => c.Value(pilot), (c, r, text) =>
+                        _g.Tracked(r, text, _g.Numeral, 0f, TextAnchor.MiddleRight, Alpha(tint, c.Alpha), 0.75f));
+                    _g.Tracked(new Rect(row.x + 16f, row.y, rowNameW, row.height), p.Name.ToUpperInvariant(), _g.Hint, 1.8f, TextAnchor.MiddleLeft, tint, 1f);
                     y += 42f;
                     _g.Fill(new Rect(x, y - 1f, colW, 1f), Alpha(Color.white, 0.05f));
                 }

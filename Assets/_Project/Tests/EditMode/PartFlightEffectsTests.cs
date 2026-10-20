@@ -47,6 +47,7 @@ namespace WingingIt.Tests
             Assert.AreEqual(-_effects.wingRollBias * RollRate, _stack.Get(FlightStat.RollBias), 0.001f);
             Assert.AreEqual(_effects.wingLift, _stack.Get(FlightStat.Lift), 0.001f);
             Assert.Less(_stack.Get(FlightStat.RollStability), 1f);
+            Assert.AreEqual(RollRate * 0.5f, _stack.Get(FlightStat.RollRate), 0.001f); // half the ailerons
         }
 
         [Test]
@@ -73,22 +74,22 @@ namespace WingingIt.Tests
         }
 
         [Test]
-        public void LostHorizontalStabilizer_PitchWobbles_NoPitchAutoLevel()
+        public void LostHorizontalStabilizer_NoPitchControl_Wobbles()
         {
             Apply(PlanePartType.HorizontalStabilizer);
             Assert.Greater(_stack.Get(FlightStat.PitchWobble), 0f);
             Assert.AreEqual(0f, _stack.Get(FlightStat.YawWobble));
-            Assert.Less(_stack.Get(FlightStat.PitchRate), _stats.pitchRate);
+            Assert.AreEqual(0f, _stack.Get(FlightStat.PitchRate), 0.001f); // no elevator, no pitch control
             Assert.AreEqual(0f, _stack.Get(FlightStat.PitchStability), 0.001f);
         }
 
         [Test]
-        public void LostVerticalStabilizer_YawWobbles_SloppyTurns()
+        public void LostVerticalStabilizer_NoYawControl_SloppyTurns()
         {
             Apply(PlanePartType.VerticalStabilizer);
             Assert.Greater(_stack.Get(FlightStat.YawWobble), 0f);
             Assert.AreEqual(0f, _stack.Get(FlightStat.PitchWobble));
-            Assert.Less(_stack.Get(FlightStat.YawRate), _stats.yawRate);
+            Assert.AreEqual(0f, _stack.Get(FlightStat.YawRate), 0.001f); // no rudder, no yaw control
             Assert.Less(_stack.Get(FlightStat.Grip), _stats.grip);
         }
 

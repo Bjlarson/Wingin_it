@@ -7,6 +7,8 @@ Last updated: 2026-10-13
 
 Cartoon but readable. The look is bright, playful, and exaggerated, but gameplay information (class, team, damage state) has to be readable at a distance.
 
+Asset look specs: [lowpoly-asset-style-guide.html](lowpoly-asset-style-guide.html) (visual) and [asset-style-as-built.md](asset-style-as-built.md) (exact values from the finished Fighter).
+
 ## Visual Inspiration
 
 - Fortnite

@@ -26,7 +26,8 @@ namespace WingingIt.Flight
         [Tooltip("Release point under the fuselage. The body never detaches, so bombs survive a lost wing.")]
         [SerializeField] Transform bombBay;
         [SerializeField] Material bombMaterial;
-        [SerializeField] Material flameMaterial;
+        [Tooltip("The bomb model (ArtSource/Weapons); unset drops a placeholder box in bombMaterial.")]
+        [SerializeField] ProjectileVisuals.WeaponModel bombModel;
         [SerializeField] Material smokeMaterial;
 
         struct Bomb
@@ -234,7 +235,7 @@ namespace WingingIt.Flight
             float distance = move.magnitude;
             if (distance > 1e-4f && TryHit(b.Position, move / distance, distance, s.bombRadius, out var hit))
             {
-                Explode(hit.point, hit.collider, b.Velocity);
+                Explode(hit.point, hit.collider);
                 return false;
             }
             b.Position = to;
@@ -268,7 +269,7 @@ namespace WingingIt.Flight
         }
 
         /// <summary>Direct damage to a plane part hit (if any), then the blast: ground targets hard, plane bodies lightly.</summary>
-        void Explode(Vector3 point, Collider directHit, Vector3 velocity)
+        void Explode(Vector3 point, Collider directHit)
         {
             var s = Stats;
             PlaneHealth directHealth = null;
@@ -297,7 +298,7 @@ namespace WingingIt.Flight
             }
             GroundTargets.Clear();
 
-            SpawnBlast(point, velocity);
+            Explosions.PlayBlast(point, directHit, s.splashRadius);
             Exploded?.Invoke(this, point);
         }
 
@@ -308,7 +309,7 @@ namespace WingingIt.Flight
                 HitPlane?.Invoke(this, health, new PartDamageInfo(part, taken, point, _plane));
         }
 
-        // ------------------------------------------------------------------ visuals (placeholder)
+        // ------------------------------------------------------------------ visuals
 
         void LateUpdate()
         {
@@ -324,17 +325,7 @@ namespace WingingIt.Flight
         Transform CreateVisual(BombStats s, Vector3 position, Vector3 velocity) =>
             // No exhaust: just a faint smoke streak so falling bombs are easy to follow.
             ProjectileVisuals.Create("Bomb", _visualRoot, position, velocity, s.bombLength, s.bombWidth,
-                bombMaterial, null, smokeMaterial, smokeTime: 0.4f, smokeEndWidth: 0.6f);
-
-        void SpawnBlast(Vector3 point, Vector3 velocity)
-        {
-            if (flameMaterial == null)
-                return;
-            float size = Stats.splashRadius * 2f;
-            PlaneVisuals.SpawnFlash(point, smokeMaterial, new Color(0.3f, 0.28f, 0.26f), 3f, size * 1.1f, 2.2f, Vector3.up * 5f);
-            PlaneVisuals.SpawnFlash(point, flameMaterial, new Color(1f, 0.55f, 0.12f), 3f, size, 0.5f, Vector3.up * 3f);
-            PlaneVisuals.SpawnFlash(point, flameMaterial, new Color(1f, 0.95f, 0.75f), 2f, size * 0.5f, 0.15f, Vector3.zero);
-        }
+                bombMaterial, null, smokeMaterial, smokeTime: 0.4f, smokeEndWidth: 0.6f, bombModel);
 
         static BombStats FallbackStats()
         {

@@ -2,6 +2,7 @@ using System.Collections;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
+using WingingIt.Effects;
 using WingingIt.Flight;
 
 namespace WingingIt.Tests
@@ -142,7 +143,7 @@ namespace WingingIt.Tests
 
             yield return null;
             Assert.IsNotEmpty(Object.FindObjectsByType<PlaneDebris>(FindObjectsSortMode.None), "the plane breaks into wreckage");
-            Assert.IsNotNull(GameObject.Find("Explosion"), "an explosion plays where it died");
+            Assert.AreEqual(1, Vfx.PlayingCount(VfxKind.ExplosionPlane), "an explosion plays where it died");
 
             yield return new WaitForSeconds(respawner.RespawnDelay - 0.5f);
             Assert.IsFalse(_plane.IsAlive, "still dead until the delay runs out");
@@ -210,7 +211,88 @@ namespace WingingIt.Tests
             }
             Assert.IsTrue(_plane.IsAlive);
             Assert.Greater(_plane.transform.up.y, 0.8f, "counter-steering should hold the wings roughly level");
-            Assert.Greater(_plane.transform.position.y, startAlt - 60f, "one wing should be survivable, not a plummet");
+            Assert.Greater(_plane.transform.position.y, startAlt - 100f, "one wing sinks steadily but is survivable, not a plummet");
+        }
+
+        /// <summary>Pitch angle of the nose: + = up.</summary>
+        float NosePitch => Mathf.Asin(Mathf.Clamp(_plane.transform.forward.y, -1f, 1f)) * Mathf.Rad2Deg;
+
+        float Heading => Mathf.Atan2(_plane.transform.forward.x, _plane.transform.forward.z) * Mathf.Rad2Deg;
+
+        [UnityTest]
+        public IEnumerator LostHorizontalStabilizer_PitchInputDoesNothing()
+        {
+            Destroy(PlanePartType.HorizontalStabilizer);
+            float start = NosePitch;
+            for (float t = 0f; t < 1f; t += Time.fixedDeltaTime)
+            {
+                _plane.SetInput(new FlightInput { Pitch = 1f });
+                yield return new WaitForFixedUpdate();
+            }
+            Assert.Less(NosePitch - start, 20f, "no elevator: full pull-up shouldn't raise the nose");
+        }
+
+        [UnityTest]
+        public IEnumerator LostVerticalStabilizer_YawInputDoesNothing()
+        {
+            Destroy(PlanePartType.VerticalStabilizer);
+            float start = Heading;
+            for (float t = 0f; t < 1f; t += Time.fixedDeltaTime)
+            {
+                _plane.SetInput(new FlightInput { Yaw = 1f });
+                yield return new WaitForFixedUpdate();
+            }
+            Assert.Less(Mathf.Abs(Mathf.DeltaAngle(start, Heading)), 20f, "no rudder: full yaw shouldn't turn the nose");
+        }
+
+        [UnityTest]
+        public IEnumerator WingClipsPillar_RipsWingOff_PlaneSurvives()
+        {
+            var wing = _health.GetPart(PlanePartType.WingLeft);
+            var body = _health.GetPart(PlanePartType.Body);
+            Transform t = _plane.transform;
+            // A thin pillar dead ahead of the outer left wing, clear of the fuselage.
+            Vector3 wingCenter = wing.GetComponentInChildren<Collider>().bounds.center;
+            float side = Vector3.Dot(wingCenter - t.position, t.right);
+            Assert.Less(side, -2f, "left wing should stick out well to the left");
+            var pillar = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            pillar.transform.SetPositionAndRotation(t.position + t.forward * 25f + t.right * side * 1.2f, t.rotation);
+            pillar.transform.localScale = new Vector3(1f, 60f, 1f);
+            Physics.SyncTransforms();
+
+            bool crashed = false;
+            _plane.Crashed += (_, _) => crashed = true;
+            float speed = _plane.Speed;
+            for (float time = 0f; time < 1.5f && !wing.IsDetached; time += Time.fixedDeltaTime)
+            {
+                _plane.SetInput(default);
+                yield return new WaitForFixedUpdate();
+            }
+            Object.Destroy(pillar);
+
+            Assert.IsTrue(wing.IsDetached, "the wing should hit the pillar and break off");
+            Assert.IsFalse(crashed, "clipping a wing shouldn't blow up the plane");
+            Assert.IsTrue(_plane.IsAlive);
+            Assert.AreEqual(body.MaxHealth, body.Health, "the body wasn't touched");
+            Assert.Less(_plane.Speed, speed, "the snag costs some speed");
+        }
+
+        [UnityTest]
+        public IEnumerator FuselageIntoPillar_StillCrashes()
+        {
+            Transform t = _plane.transform;
+            var pillar = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            pillar.transform.SetPositionAndRotation(t.position + t.forward * 25f, t.rotation);
+            pillar.transform.localScale = new Vector3(2f, 60f, 2f);
+            Physics.SyncTransforms();
+
+            for (float time = 0f; time < 1.5f && _plane.IsAlive; time += Time.fixedDeltaTime)
+            {
+                _plane.SetInput(default);
+                yield return new WaitForFixedUpdate();
+            }
+            Object.Destroy(pillar);
+            Assert.IsFalse(_plane.IsAlive, "flying the fuselage into something is still a crash");
         }
 
         [UnityTest]

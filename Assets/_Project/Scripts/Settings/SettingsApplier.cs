@@ -5,7 +5,7 @@ using UnityEngine.Rendering.Universal;
 namespace WingingIt.Settings
 {
     /// <summary>
-    /// Applies the game-wide <see cref="GameSettings"/> (quality, resolution, frame rate cap, render scale, master
+    /// Applies the game-wide <see cref="GameSettings"/> (quality, resolution, frame rate cap, render scale, HDR, master
     /// volume, mute in background) at startup and on every change. Created on its own before the first scene loads and
     /// kept across scenes. Per-object settings (controls, FOV, HUD) are read by the objects themselves.
     /// </summary>
@@ -67,7 +67,10 @@ namespace WingingIt.Settings
             Application.targetFrameRate = s.frameRateCap > 0 ? s.frameRateCap : -1;
             // The URP asset is a project file: in the Editor a change would stick after play mode, so builds only.
             if (!Application.isEditor && GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset urp)
+            {
                 urp.renderScale = s.renderScale;
+                urp.supportsHDR = s.hdr;
+            }
             ApplyVolume();
         }
 

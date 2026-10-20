@@ -1,7 +1,7 @@
 # Open Questions
 
 Status: Living document
-Last updated: 2026-10-17
+Last updated: 2026-10-19
 
 ## Decided
 
@@ -43,6 +43,7 @@ Last updated: 2026-10-17
 2. Weapon button mapping for rockets / bombs (proposed: bombs on their own button, B / gamepad Y); confirm per-class loadouts (implemented as proposed, awaiting a playtest).
 3. Support class role in Free For All. Also: ability tuning (cooldowns, durations, strengths) is first-pass; Support radar is passive (proposed); friendly-fire rule for when teams exist → [aircraft-classes](../02-Mechanics/aircraft-classes.md#abilities-in-the-prototype)
 4. Prize machine: spin price, duplicate rule, rarity tiers.
+9. Mode prototypes (Phase 6.5): Capture the Banner scoring rule and drag, Domination field count and capture method, Ram Royale arena and ram damage, and which modes ship → [match-modes](../01-Game-Design/match-modes.md#open-questions)
 
 ### Business / Scope
 

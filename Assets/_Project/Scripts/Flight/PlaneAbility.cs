@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using WingingIt.Effects;
 
 namespace WingingIt.Flight
 {
@@ -16,9 +17,9 @@ namespace WingingIt.Flight
         static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         static readonly List<PlaneAbility> _all = new();
 
-        [Tooltip("Transparent unlit material for the shield bubble and the repair aura.")]
+        [Tooltip("Transparent unlit material for the repair aura, and the shield bubble without the VFX pack.")]
         [SerializeField] Material shieldMaterial;
-        [Tooltip("Glow for the afterburner flame.")]
+        [Tooltip("Glow for the placeholder afterburner flame, without the VFX pack.")]
         [SerializeField] Material flameMaterial;
         [SerializeField] Color shieldColor = new Color(0.45f, 0.75f, 1f, 0.28f);
         [SerializeField] Color auraColor = new Color(0.35f, 1f, 0.45f, 0.12f);
@@ -27,6 +28,8 @@ namespace WingingIt.Flight
         AbilityStats _active; // the asset that started the running effect (survives a class change)
         bool _triggerLatched;
         GameObject _shield, _aura, _flame;
+        Vector3 _flameScale;
+        float _shieldSize, _shieldPulse;
 
         /// <summary>Raised when the ability starts.</summary>
         public event Action<PlaneAbility> Activated;
@@ -68,6 +71,8 @@ namespace WingingIt.Flight
             _plane.Crashed += OnCrashed;
             _plane.Respawned += OnPlaneReset;
             _plane.StatsChanged += OnPlaneReset;
+            if (Health != null)
+                Health.Damaged += OnDamaged;
         }
 
         void OnDisable()
@@ -76,6 +81,8 @@ namespace WingingIt.Flight
             _plane.Crashed -= OnCrashed;
             _plane.Respawned -= OnPlaneReset;
             _plane.StatsChanged -= OnPlaneReset;
+            if (Health != null)
+                Health.Damaged -= OnDamaged;
             EndEffect();
         }
 
@@ -87,6 +94,17 @@ namespace WingingIt.Flight
         }
 
         void OnCrashed(PlaneController _, Vector3 point) => EndEffect();
+
+        /// <summary>A hit on the shield ripples it and sparkles where it struck.</summary>
+        void OnDamaged(PlaneHealth _, PartDamageInfo info)
+        {
+            if (_shield == null || !_shield.activeSelf)
+                return;
+            _shieldPulse = 1f;
+            Vector3 center = _shield.transform.position;
+            Vector3 onBubble = center + (info.Point - center).normalized * (_shieldSize * 0.5f);
+            Vfx.Play(VfxKind.ShieldHit, onBubble);
+        }
 
         void OnPlaneReset(PlaneController _)
         {
@@ -147,12 +165,15 @@ namespace WingingIt.Flight
 
         /// <summary>
         /// Whether <paramref name="target"/> shows up on <paramref name="team"/>'s radar: a living Support on that
-        /// team (other than the target) is within its radar range. Passive, always on.
+        /// team (other than the target) is within its radar range, or the target is towing a banner (Capture the Banner:
+        /// the carrier shows to every enemy the whole time). Passive, always on.
         /// </summary>
         public static bool IsRevealedTo(PlaneController target, int team)
         {
             if (target == null || !target.IsAlive || target.Team == team)
                 return false;
+            if (target.CarryingBanner)
+                return true;
             foreach (var a in _all)
             {
                 if (a._plane.Team != team || !a._plane.IsAlive || a.Stats is not RepairAuraAbility aura || aura.radarRange <= 0f)
@@ -163,16 +184,21 @@ namespace WingingIt.Flight
             return false;
         }
 
-        // ------------------------------------------------------------------ visuals (placeholder)
+        // ------------------------------------------------------------------ visuals
 
+        /// <summary>The faceted bubble from the VFX pack (a plain sphere without it), 10 m across at class scale 1.</summary>
         public void SetShieldVisible(bool visible)
         {
+            var library = Vfx.Library;
             if (visible && _shield == null)
-                _shield = Bubble("Armor Shield", shieldMaterial, shieldColor, PrimitiveType.Sphere);
+                _shield = library != null && library.shieldMesh != null
+                    ? MeshBubble("Armor Shield", library.shieldMesh, library.shieldMaterial, shieldColor)
+                    : Bubble("Armor Shield", shieldMaterial, shieldColor, PrimitiveType.Sphere);
             if (_shield != null)
             {
-                float size = 10f * (_plane.Stats != null ? _plane.Stats.visualScale : 1f);
-                _shield.transform.localScale = Vector3.one * size;
+                _shieldSize = 10f * (_plane.Stats != null ? _plane.Stats.visualScale : 1f);
+                _shieldPulse = 0f;
+                _shield.transform.localScale = Vector3.one * _shieldSize;
                 _shield.SetActive(visible);
             }
         }
@@ -189,20 +215,48 @@ namespace WingingIt.Flight
             }
         }
 
+        /// <summary>A jagged flame (the VFX pack's; a glowing capsule without it) roaring from the tail, flickering.</summary>
         public void SetFlameVisible(bool visible)
         {
+            var library = Vfx.Library;
+            bool mesh = library != null && library.afterburnerMesh != null;
             if (visible && _flame == null)
             {
-                _flame = Bubble("Afterburner", flameMaterial, new Color(1f, 0.6f, 0.15f), PrimitiveType.Capsule);
-                _flame.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                if (mesh)
+                {
+                    _flame = MeshBubble("Afterburner", library.afterburnerMesh, library.afterburnerMaterial, Color.white);
+                }
+                else
+                {
+                    _flame = Bubble("Afterburner", flameMaterial, new Color(1f, 0.6f, 0.15f), PrimitiveType.Capsule);
+                    _flame.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                }
             }
             if (_flame != null)
             {
                 float s = _plane.Stats != null ? _plane.Stats.visualScale : 1f;
-                _flame.transform.localPosition = new Vector3(0f, 0f, -4.6f * s);
-                _flame.transform.localScale = new Vector3(0.8f, 1.6f, 0.8f) * s;
+                // The mesh starts at the nozzle and runs 1 m back; the capsule is centred.
+                _flame.transform.localPosition = new Vector3(0f, 0f, (mesh ? -3.9f : -4.6f) * s);
+                _flameScale = (mesh ? new Vector3(1.1f, 1.1f, 3.4f) : new Vector3(0.8f, 1.6f, 0.8f)) * s;
+                _flame.transform.localScale = _flameScale;
                 _flame.SetActive(visible);
             }
+        }
+
+        GameObject MeshBubble(string name, Mesh mesh, Material material, Color color)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(transform, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var r = go.AddComponent<MeshRenderer>();
+            r.sharedMaterial = material;
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            r.receiveShadows = false;
+            var block = new MaterialPropertyBlock();
+            block.SetColor(BaseColorId, color);
+            r.SetPropertyBlock(block);
+            go.SetActive(false);
+            return go;
         }
 
         GameObject Bubble(string name, Material material, Color color, PrimitiveType shape)
@@ -227,6 +281,17 @@ namespace WingingIt.Flight
             // The aura disc stays level and centered on the plane.
             if (_aura != null && _aura.activeSelf)
                 _aura.transform.rotation = Quaternion.identity;
+            // The shield swells for a moment when hit; the flame flickers.
+            if (_shield != null && _shield.activeSelf)
+            {
+                _shieldPulse = Mathf.MoveTowards(_shieldPulse, 0f, Time.deltaTime * 5f);
+                _shield.transform.localScale = Vector3.one * (_shieldSize * (1f + 0.08f * _shieldPulse));
+            }
+            if (_flame != null && _flame.activeSelf)
+            {
+                float flicker = Mathf.PerlinNoise(Time.time * 14f, 0.7f);
+                _flame.transform.localScale = Vector3.Scale(_flameScale, new Vector3(1f, 1f, Mathf.Lerp(0.8f, 1.2f, flicker)));
+            }
         }
     }
 }

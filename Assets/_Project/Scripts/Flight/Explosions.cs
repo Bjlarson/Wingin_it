@@ -1,9 +1,10 @@
 using System.Collections.Generic;
 using UnityEngine;
+using WingingIt.Effects;
 
 namespace WingingIt.Flight
 {
-    /// <summary>Blast helpers shared by rockets and missiles.</summary>
+    /// <summary>Blast helpers shared by rockets, missiles and bombs, and the impact effects every weapon plays.</summary>
     public static class Explosions
     {
         static readonly Collider[] Buffer = new Collider[64];
@@ -42,6 +43,46 @@ namespace WingingIt.Flight
                 return 0f;
             float t = radius > 0f ? Mathf.Clamp01(distance / radius) : 0f;
             return damage * Mathf.Lerp(1f, falloffMin, t);
+        }
+
+        /// <summary>
+        /// The blast effect for ordnance bursting at <paramref name="point"/> on <paramref name="surface"/> (null: in the air,
+        /// a plane: in the air too), sized to its splash radius: a fireball in the air, a fireball with dust and flying dirt
+        /// on the ground, a splash on the sea.
+        /// </summary>
+        public static void PlayBlast(Vector3 point, Collider surface, float splashRadius)
+        {
+            if (surface == null || PlanePart.TryGetFromCollider(surface, out _))
+            {
+                Vfx.Play(VfxKind.ExplosionAir, point, splashRadius / 7f);
+            }
+            else if (PlaneController.IsWater(surface))
+            {
+                Vfx.Play(VfxKind.WaterSplash, point, splashRadius / 14f);
+                Vfx.Play(VfxKind.ExplosionAir, point, splashRadius / 14f);
+            }
+            else
+            {
+                Vfx.Play(VfxKind.ExplosionGround, point, splashRadius / 12f);
+            }
+        }
+
+        /// <summary>A bullet or shell hitting <paramref name="hit"/>: sparks off a plane, a glance off the repair bubble, dust off the ground, spray off the sea.</summary>
+        public static void PlayBulletHit(RaycastHit hit, PlaneHealth plane, float scale = 1f)
+        {
+            if (plane != null)
+            {
+                // The repair bubble turns hits away entirely; the Armor Shield ripples on its own (PlaneAbility).
+                Vfx.Play(plane.IsInvulnerable ? VfxKind.ShieldHit : VfxKind.BulletHitPlane, hit.point, scale);
+            }
+            else if (PlaneController.IsWater(hit.collider))
+            {
+                Vfx.Play(VfxKind.BulletHitWater, hit.point, scale);
+            }
+            else
+            {
+                Vfx.Play(VfxKind.BulletHitGround, hit.point, Quaternion.FromToRotation(Vector3.up, hit.normal), scale);
+            }
         }
     }
 }

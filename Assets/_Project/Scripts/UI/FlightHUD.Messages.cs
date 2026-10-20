@@ -36,13 +36,18 @@ namespace WingingIt.UI
                     string killer = kill.Killer != null ? PilotName(kill.Killer) : kill.Source is AAGun aa ? $"{TeamName(aa.Team)} AA" : null;
                     TouchdownFault? crashFault = plane.LastDeathCause == DeathCause.Collision && plane.HasTouchedDown
                         && plane.LastTouchdown.Result == TouchdownResult.Crashed ? plane.LastTouchdown.Fault : null;
-                    string death = HudText.Death(plane.LastDeathCause == DeathCause.ShotDown, crashFault, killer);
+                    string death = plane.LastDeathCause == DeathCause.OutOfBounds ? "OUT OF THE ARENA"
+                        : HudText.Death(plane.LastDeathCause == DeathCause.ShotDown, crashFault, killer);
                     return respawner != null ? $"{death}  —  RESPAWN IN {respawner.RespawnTimeLeft:0.0}" : death;
                 }
+                var boundary = FlightBoundary.Active;
+                bool hardEdge = boundary != null && boundary.hardEdge;
                 if (plane.IsOutOfBounds)
-                    return "LEAVING COMBAT AREA — TURNING BACK";
+                    return hardEdge
+                        ? $"OUTSIDE THE ARENA — GET BACK IN {Mathf.Max(0f, boundary.outOfBoundsGrace - plane.OutOfBoundsTime):0.0}"
+                        : "LEAVING COMBAT AREA — TURNING BACK";
                 if (plane.IsNearBoundary)
-                    return "COMBAT AREA EDGE";
+                    return hardEdge ? "ARENA EDGE" : "COMBAT AREA EDGE";
                 if (plane.IsNearCeiling)
                     return "ALTITUDE LIMIT";
                 if (IsUnderAAFire())

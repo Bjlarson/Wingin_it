@@ -13,24 +13,27 @@ namespace WingingIt.Flight
     {
         [Header("One wing lost")]
         [Tooltip("Constant roll toward the missing wing, as a fraction of the class roll rate.")]
-        [Range(0f, 1f)] public float wingRollBias = 0.35f;
-        [Range(0f, 1f)] public float wingLift = 0.6f;
-        [Range(0f, 1f)] public float wingRollRate = 0.75f;
+        [Range(0f, 1f)] public float wingRollBias = 0.3f;
+        [Range(0f, 1f)] public float wingLift = 0.45f;
+        [Tooltip("Half the ailerons: roll rate multiplier.")]
+        [Range(0f, 1f)] public float wingRollRate = 0.5f;
         [Range(0f, 1f)] public float wingRollStability = 0.4f;
 
         [Header("Horizontal stabilizer lost")]
-        [Range(0f, 1f)] public float hStabPitchRate = 0.45f;
+        [Tooltip("Elevator gone: 0 = no pitch control at all.")]
+        [Range(0f, 1f)] public float hStabPitchRate = 0f;
         [Range(0f, 1f)] public float hStabPitchStability = 0f;
         [Tooltip("deg/s of random pitch shake (porpoising).")]
-        public float hStabPitchWobble = 40f;
+        public float hStabPitchWobble = 15f;
 
         [Header("Vertical stabilizer lost")]
-        [Range(0f, 1f)] public float vStabYawRate = 0.35f;
+        [Tooltip("Rudder gone: 0 = no yaw control at all (banking still turns the plane).")]
+        [Range(0f, 1f)] public float vStabYawRate = 0f;
         [Range(0f, 1f)] public float vStabRollStability = 0.7f;
         [Tooltip("Lower = the plane slides through turns (sloppy).")]
         [Range(0f, 1f)] public float vStabGrip = 0.6f;
         [Tooltip("deg/s of random yaw shake (fishtailing).")]
-        public float vStabYawWobble = 30f;
+        public float vStabYawWobble = 20f;
 
         [Header("Combinations")]
         [Tooltip("Both stabilizers gone: no roll auto-leveling at all.")]

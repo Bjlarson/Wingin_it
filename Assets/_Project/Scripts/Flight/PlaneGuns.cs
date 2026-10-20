@@ -21,7 +21,13 @@ namespace WingingIt.Flight
 
         [Tooltip("Bullet spawn points. Each sits under the wing PlanePart that carries it; a lost wing silences its guns.")]
         [SerializeField] Transform[] muzzles;
+        [Tooltip("The placeholder tracer box, when there's no tracer model.")]
         [SerializeField] Material tracerMaterial;
+        [Tooltip("The tracer model (ArtSource/Weapons), a unit box scaled by GunStats' tracer width and length.")]
+        [SerializeField] ProjectileVisuals.WeaponModel tracerModel;
+        [Tooltip("Shown at a muzzle for a moment per shot. Unset: no flash.")]
+        [SerializeField] ProjectileVisuals.WeaponModel muzzleFlashModel;
+        [SerializeField, Min(0f)] float muzzleFlashSize = 1.1f;
 
         struct Bullet
         {
@@ -34,6 +40,7 @@ namespace WingingIt.Flight
         PlaneController _plane;
         PlaneHealth _health;
         PlanePart[] _muzzleParts;
+        ProjectileVisuals.MuzzleFlash[] _flashes;
         readonly List<Bullet> _bullets = new();
         readonly Stack<Transform> _tracerPool = new();
         Transform _tracerRoot;
@@ -85,6 +92,9 @@ namespace WingingIt.Flight
                     Debug.LogError($"{name}: gun {i} has no muzzle", this);
             }
             _tracerRoot = new GameObject($"{name} Bullets").transform;
+            _flashes = new ProjectileVisuals.MuzzleFlash[GunCount];
+            for (int i = 0; i < GunCount; i++)
+                _flashes[i] = ProjectileVisuals.CreateFlash(muzzles[i], muzzleFlashModel, Vector3.zero, muzzleFlashSize);
         }
 
         void OnEnable()
@@ -111,6 +121,8 @@ namespace WingingIt.Flight
             IsOverheated = false;
             _shotCooldown = 0f;
             _jamTimeLeft = 0f;
+            foreach (var flash in _flashes)
+                flash?.Hide();
         }
 
         bool IsGunActive(int i) => muzzles[i] != null && (_muzzleParts[i] == null || !_muzzleParts[i].IsDestroyed);
@@ -211,6 +223,7 @@ namespace WingingIt.Flight
                 TimeLeft = s.bulletLifetime,
                 Tracer = GetTracer(s),
             };
+            _flashes[muzzle]?.Show();
             Fired?.Invoke(this);
 
             if (age > 0f && !Step(ref bullet, age))
@@ -295,21 +308,24 @@ namespace WingingIt.Flight
             var health = hit.collider.GetComponentInParent<PlaneHealth>();
             if (health != null && PlanePart.TryGetFromCollider(hit.collider, out var part))
             {
+                Explosions.PlayBulletHit(hit, health); // before the damage: a killing shot still sparks, not glances
                 float taken = health.ApplyDamage(part, Stats.damage, hit.point, _plane);
                 if (taken > 0f)
                     HitPlane?.Invoke(this, health, new PartDamageInfo(part, taken, hit.point, _plane));
-                SpawnSpark(hit.point, 1.2f);
             }
             else
             {
-                SpawnSpark(hit.point, 0.6f);
+                Explosions.PlayBulletHit(hit, null);
             }
         }
 
-        // ------------------------------------------------------------------ tracers (placeholder visuals)
+        // ------------------------------------------------------------------ tracers and muzzle flashes
 
         void LateUpdate()
         {
+            foreach (var flash in _flashes)
+                flash?.Tick(Time.deltaTime);
+
             // Extrapolate from the last physics step so tracers move smoothly every frame.
             float ahead = Time.time - Time.fixedTime;
             foreach (var b in _bullets)
@@ -322,7 +338,7 @@ namespace WingingIt.Flight
 
         Transform GetTracer(GunStats s)
         {
-            if (tracerMaterial == null)
+            if (tracerMaterial == null && !tracerModel.IsSet)
                 return null;
             Transform t = _tracerPool.Count > 0 ? _tracerPool.Pop() : CreateTracer();
             t.localScale = new Vector3(s.tracerWidth, s.tracerWidth, s.tracerLength);
@@ -332,6 +348,8 @@ namespace WingingIt.Flight
 
         Transform CreateTracer()
         {
+            if (tracerModel.IsSet)
+                return ProjectileVisuals.MeshObject("Tracer", _tracerRoot, tracerModel).transform;
             var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
             go.name = "Tracer";
             DestroyImmediate(go.GetComponent<Collider>()); // never let a plane's sweep hit it
@@ -348,21 +366,6 @@ namespace WingingIt.Flight
                 return;
             tracer.gameObject.SetActive(false);
             _tracerPool.Push(tracer);
-        }
-
-        void SpawnSpark(Vector3 point, float size)
-        {
-            if (tracerMaterial == null)
-                return;
-            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            go.name = "Bullet Spark";
-            DestroyImmediate(go.GetComponent<Collider>()); // never let a plane's sweep hit it
-            var r = go.GetComponent<Renderer>();
-            r.sharedMaterial = tracerMaterial;
-            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            go.transform.SetPositionAndRotation(point, UnityEngine.Random.rotation);
-            go.transform.localScale = Vector3.one * size;
-            Destroy(go, 0.08f);
         }
 
         static GunStats FallbackStats()

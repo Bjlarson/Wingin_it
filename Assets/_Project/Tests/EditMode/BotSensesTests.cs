@@ -236,5 +236,20 @@ namespace WingingIt.Tests
             Assert.AreEqual(GoAroundReason.Overshot, BotSenses.ShouldGoAround(true, 0f, -300f, 0f, 20f, false), "floated way past the aim point");
             Assert.AreEqual(GoAroundReason.OffCenter, BotSenses.ShouldGoAround(true, 0f, 80f, 45f, 20f, false), "about to touch down beside the runway");
         }
+
+        [Test]
+        public void OrbitInside_KeepsTheCircleClearOfTheEdge()
+        {
+            var center = new Vector3(100f, 0f, 0f);
+            var near = new Vector3(100f, 90f, 1000f);
+            Assert.AreEqual(near, BotSenses.OrbitInside(near, 300f, center, 2800f, 300f), "far enough in: unchanged");
+
+            var edge = new Vector3(100f, 90f, 2690f); // 300 m orbit would reach 190 m past the edge
+            Vector3 hold = BotSenses.OrbitInside(edge, 300f, center, 2800f, 300f);
+            Assert.AreEqual(new Vector3(100f, 90f, 2200f).ToString(), hold.ToString(), "pulled straight in, height kept");
+
+            Vector3 tiny = BotSenses.OrbitInside(edge, 300f, center, 500f, 300f);
+            Assert.AreEqual(new Vector3(100f, 90f, 0f).ToString(), tiny.ToString(), "an area too small to clear: circle the middle");
+        }
     }
 }

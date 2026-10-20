@@ -17,12 +17,14 @@ namespace WingingIt.UI
         // This frame's approach to the nearest friendly runway (default when there is none, or on the ground).
         Airfield _approachField;
         ApproachGuide _approach;
+        bool _approachReverse; // landing at the far end of a two-way field
 
         void UpdateApproach()
         {
             _approachField = plane.IsAlive ? Airfield.NearestFriendly(plane.Position, plane.Team) : null;
+            _approachReverse = _approachField != null && _approachField.ApproachesFromReverseEnd(plane.Position, plane.Velocity);
             _approach = _approachField != null && !plane.IsGrounded
-                ? _approachField.GetApproach(plane.Position, plane.Velocity) : default;
+                ? _approachField.GetApproach(plane.Position, plane.Velocity, _approachReverse) : default;
         }
 
         /// <summary>
@@ -52,14 +54,14 @@ namespace WingingIt.UI
             {
                 float d = k * GlideRingSpacing;
                 float radius = Mathf.Min(field.GlideSlope.ToleranceAt(d), GlideRingMaxRadius);
-                DrawGlideRing(field, field.GlidePathPoint(d), radius, Alpha(pathColor, Mathf.Lerp(0.95f, 0.3f, shown / (float)GlideRingsShown)), scale);
+                DrawGlideRing(field, field.GlidePathPoint(d, _approachReverse), radius, Alpha(pathColor, Mathf.Lerp(0.95f, 0.3f, shown / (float)GlideRingsShown)), scale);
             }
 
             // Aim bar across the runway at the touchdown point.
             if (guide.Distance > 0f)
             {
-                Vector3 aim = field.GlidePathPoint(0f) + Vector3.up * 0.3f;
-                Vector3 half = field.transform.right * (field.RunwaySize.x * 0.5f);
+                Vector3 aim = field.GlidePathPoint(0f, _approachReverse) + Vector3.up * 0.3f;
+                Vector3 half = field.RunwayRightFor(_approachReverse) * (field.RunwaySize.x * 0.5f);
                 if (ToScreen(aim - half, scale, out Vector2 a) && ToScreen(aim + half, scale, out Vector2 b))
                 {
                     DottedLine(a, b, Green, 4f);
