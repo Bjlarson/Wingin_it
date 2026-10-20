@@ -9,6 +9,8 @@ Cartoon but readable. The look is bright, playful, and exaggerated, but gameplay
 
 Asset look specs: [lowpoly-asset-style-guide.html](lowpoly-asset-style-guide.html) (visual) and [asset-style-as-built.md](asset-style-as-built.md) (exact values from the finished Fighter).
 
+Making the world move and react (ground dust, waves, drifting clouds, traffic, smoother shadows): [living-world.md](living-world.md).
+
 ## Visual Inspiration
 
 - Fortnite

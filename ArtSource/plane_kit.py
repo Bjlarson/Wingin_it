@@ -86,6 +86,8 @@ COLORS = [
     ("olive", "6E8050"),  # AA guns, crates, the radar cabin
     ("khaki", "C9B07C"),  # sandbags, canvas
     ("orange", "FF8A2A"),  # windsock, mechanics' overalls
+    # Landmarks (ArtSource/Landmarks): the Pyramid's pale stone, so it stands off the sand and the orange mesas.
+    ("limestone", "EBDDB9"),
 ]
 FLAT = {"glint", "ember", "ink", "flame"}
 TEAM_KEYS = {"team"}

@@ -737,14 +737,14 @@ namespace WingingIt.Flight
 
         /// <summary>
         /// How far ahead (along <paramref name="heading"/>) the auto-brake should stop: the middle of the repair zone
-        /// of the runway we're on, if it's ours and not behind us; else null (just stop).
+        /// of the runway we're on, if it's ours (or one we're capturing) and not behind us; else null (just stop).
         /// </summary>
         float? StopDistance(Vector3 heading)
         {
             var runway = Airfield.RunwayUnder(_position);
             var zone = runway != null ? runway.RepairZone : null;
             // A plane that spawned on the runway (never landed) stays parked instead of taxiing to the repair zone.
-            if (zone == null || !runway.IsFriendlyTo(team) || !HasTouchedDown)
+            if (zone == null || !(runway.IsFriendlyTo(team) || runway.IsCapturableBy(team)) || !HasTouchedDown)
                 return null;
             float distance = Vector3.Dot(zone.transform.position - _position, heading);
             return distance >= 0f || zone.Contains(_position) ? distance : null; // past the middle but inside: stop now

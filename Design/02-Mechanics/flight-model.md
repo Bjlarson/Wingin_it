@@ -1,7 +1,7 @@
 # Flight Model
 
 Status: Draft
-Last updated: 2026-10-15
+Last updated: 2026-10-20
 
 ## Summary
 
@@ -88,7 +88,8 @@ Tuning target: one wing missing should be **way harder** but survivable for a fo
 
 - The mode covers respawns at an airfield and, in Runway levels, the player's first spawn. A plane with its own spawn point (the test drones) always air-spawns there.
 - **Takeoff slots:** a runway spawn takes the first free one of 9 slots: rows of three side by side (center, 13 m left, 13 m right), each row 50 m further down the runway. A slot is taken when another live plane is within 10 m of it.
-- A runway-spawned plane **stays parked** at idle. The auto-brake only taxis planes that have landed to the repair zone.
+- A runway-spawned plane **stays parked** at idle. The auto-brake only taxis planes that have landed to the repair zone (on their own field, or on a field they're capturing in Airfield Domination).
+- **Which field (2026-10-20):** the friendly field nearest where the plane died. In Airfield Domination the fields a team holds count too, and the player can pick one on the respawn screen instead (see [match-modes](../01-Game-Design/match-modes.md#owned-fields-built-2026-10-20)).
 - Takeoff is the same as after a repair: throttle up (W) or boost, then pitch up once at stall speed. The gear retracts above 35 m.
 - **Touch:** touch has no throttle control and auto-throttle idles while the gear is locked. Boosting on the wheels starts a *takeoff run*, which holds auto-throttle at cruise until the gear is up, so the plane doesn't fall back to idle on the climb-out. This also fixes the touch takeoff after a repair.
 - Debug HUD: "READY FOR TAKEOFF" while parked after a runway spawn. Dev key **N** flips the level between Air and Runway and respawns you with the new mode.

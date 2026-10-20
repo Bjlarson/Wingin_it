@@ -45,6 +45,8 @@ Last updated: 2026-10-19
 4. Prize machine: spin price, duplicate rule, rarity tiers.
 9. Mode prototypes (Phase 6.5): Capture the Banner scoring rule and drag, Domination field count and capture method, Ram Royale arena and ram damage, and which modes ship → [match-modes](../01-Game-Design/match-modes.md#open-questions)
 
+10. **Sky Racing** (Phase 6.6, design decided 2026-10-20): still open are the track theme, box count and placement, and mobile item aiming → [match-modes](../01-Game-Design/match-modes.md#sky-racing-prototype)
+
 ### Business / Scope
 
 5. **Loot box compliance:** selling coins for random items needs odds disclosure and region handling → [economy](../01-Game-Design/economy-and-monetization.md#-loot-box-regulation)

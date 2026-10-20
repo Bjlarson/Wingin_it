@@ -15,7 +15,7 @@ Four classes. Each has a clear silhouette, a role, a fixed loadout, and one cool
 
 **Built (2026-10-17), in `MatchManager` + `MatchScreens`:**
 
-- **On respawn:** dying in a match opens the class picker over the running world, titled with the respawn countdown. Picking (1–4, click or touch) sets the class you come back in; the respawn timer doesn't change, and you can change your mind until it runs out. `PlaneRespawner.Spawning` applies the pick just before the plane is put back.
+- **On respawn:** dying in a match opens the class picker over the running world, titled with the respawn countdown. Picking (1–4, click or touch) sets the class you come back in; the respawn timer doesn't change, and you can change your mind until it runs out. `PlaneRespawner.Spawning` applies the pick just before the plane is put back. When the team holds more than one field (Airfield Domination), a **SPAWN AT** row under the cards also picks where you come back (click or TAB).
 - **At a home airfield:** once you're stopped on the wheels in a **home** field's repair zone and the repair has finished (every part at full HP; even an undamaged plane does the 5 s Light repair first), a CHANGE PLANE button appears (**Tab**). It opens the picker; SWAP puts you in the new class on the spot, still parked, as a fresh plane (full HP, ammo, ability ready). Esc or Tab keeps your plane. A captured Central field doesn't count. The rule is `ClassSwap.CanSwapAtAirfield` (pure, EditMode-tested).
 - Each class card shows **ON YOUR TEAM n**: how many teammates fly it (before the match, the bots planned for your team).
 - While a picker is open your flight controls and the flight HUD are off (the mouse is free); the match clock and score bar keep running.

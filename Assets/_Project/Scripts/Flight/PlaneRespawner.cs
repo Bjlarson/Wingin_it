@@ -111,7 +111,13 @@ namespace WingingIt.Flight
                 return modePose;
             if (spawnPoint != null)
                 return new Pose(spawnPoint.position, spawnPoint.rotation);
-            var field = Airfield.NearestFriendly(deathPosition, _plane.Team);
+            return SpawnPoseAt(Airfield.NearestFriendly(deathPosition, _plane.Team), out onRunway);
+        }
+
+        /// <summary>The usual spawn at <paramref name="field"/> (a free air or takeoff slot, per the level); where the plane is if null.</summary>
+        public Pose SpawnPoseAt(Airfield field, out bool onRunway)
+        {
+            onRunway = false;
             if (field == null)
                 return new Pose(transform.position, transform.rotation);
             if (LevelSettings.CurrentSpawnMode == SpawnMode.Runway && field.RunwaySpawn != null)

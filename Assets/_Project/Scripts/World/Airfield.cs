@@ -55,6 +55,8 @@ namespace WingingIt.World
         public bool IsOpen { get; private set; } = true;
         /// <summary>Its control tower is bombed out (<see cref="FieldDefenses"/>): no repair and no AA until it rebuilds.</summary>
         public bool TowerDown { get; private set; }
+        /// <summary>A capture field in play (Airfield Domination): planes of other teams land on it to take it.</summary>
+        public bool IsCapturable { get; private set; }
 
         public string DisplayName => displayName;
         public int Team => team;
@@ -100,6 +102,26 @@ namespace WingingIt.World
 
         /// <summary>Set by the field's <see cref="FieldDefenses"/> while its tower is a wreck.</summary>
         public void SetTowerDown(bool down) => TowerDown = down;
+
+        /// <summary>Makes the field one to capture this match (see <see cref="IsCapturable"/>), or not.</summary>
+        public void SetCapturable(bool capturable) => IsCapturable = capturable && !isHome;
+
+        /// <summary><paramref name="planeTeam"/> can land here to take it: an open capture field that isn't already theirs.</summary>
+        public bool IsCapturableBy(int planeTeam) => IsOpen && IsCapturable && team != planeTeam;
+
+        /// <summary>
+        /// The fields <paramref name="planeTeam"/> can respawn at (see <see cref="IsFriendlyTo"/>): its home first, then
+        /// the rest by name. Usually just home; owned capture fields join in Airfield Domination.
+        /// </summary>
+        public static List<Airfield> SpawnFieldsFor(int planeTeam)
+        {
+            var fields = new List<Airfield>();
+            foreach (var field in s_all)
+                if (field.IsFriendlyTo(planeTeam) && (field.airSpawn != null || field.runwaySpawn != null))
+                    fields.Add(field);
+            fields.Sort((a, b) => a.isHome != b.isHome ? (a.isHome ? -1 : 1) : string.CompareOrdinal(a.displayName, b.displayName));
+            return fields;
+        }
 
         /// <summary><paramref name="team"/>'s home airfield, or null.</summary>
         public static Airfield HomeOf(int team)

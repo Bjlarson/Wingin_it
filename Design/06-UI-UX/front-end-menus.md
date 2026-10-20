@@ -1,7 +1,7 @@
 # Front-End Menus
 
 Status: Built (offline vertical slice), 2026-10-17
-Last updated: 2026-10-17
+Last updated: 2026-10-20
 
 ## Summary
 
@@ -28,7 +28,7 @@ The screens outside the cockpit: the main menu, class select, the in-match menu,
 |---|---|---|---|---|
 | Lobby (`MatchScreens`) | Both rosters, bot difficulty, Start | Level load | Yes (world frozen) | **Merge**: bot difficulty moves to the game mode screen, rosters to class select and the in-match scoreboard |
 | Class select (pre-match) | Four class cards | Start | Yes | **Keep**, plus the picked plane shown in the world behind it (later) |
-| Respawn / airfield pickers | Class cards over the running match | Death / Tab when parked + repaired at home | No | **Keep** as is |
+| Respawn / airfield pickers | Class cards over the running match (+ a SPAWN AT row when the team holds more than one field) | Death / Tab when parked + repaired at home | No | **Keep** as is |
 | 3-2-1 countdown | Frozen start | After class select | Yes | **Keep** (it's the match start, not a menu) |
 | Score bar | Clock + team scores | Always in play | No | **Keep** (HUD) |
 | End scoreboard | Result, pilots' K / A / D / score, Play Again | Time's up | Yes | **Keep**, add MAIN MENU |
@@ -82,7 +82,7 @@ The existing four cards (stats, loadout, ability, ON YOUR TEAM n), restyled to t
 - The highlighted class's plane replaces the one parked in the hangar, so the pick is seen in the world, not just on a card. **Built:** the cards sit in the lower half (shorter than the in-play picker's, no dark wash) and the camera eases in to 26 m and tilts down so the plane shows above them; BACK puts the class picked last back in the hangar.
 - Esc / B goes back to the game mode screen.
 
-The respawn and home-airfield pickers stay exactly as built ([aircraft-classes](../02-Mechanics/aircraft-classes.md#class-selection)).
+The respawn and home-airfield pickers stay as built ([aircraft-classes](../02-Mechanics/aircraft-classes.md#class-selection)). Added 2026-10-20: while dead with more than one field to spawn at (Airfield Domination), a SPAWN AT row of field buttons (HOME first, then held fields) sits under the class cards; click one or press TAB / Shift+TAB.
 
 ## In-Match Menu
 

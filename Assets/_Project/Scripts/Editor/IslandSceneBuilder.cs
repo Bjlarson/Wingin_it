@@ -240,6 +240,7 @@ namespace WingingIt.Editor
             var nature = NatureModels.Load();
             var city = CityModels.Load();
             var markers = MarkerModels.Load();
+            var landmarks = LandmarkModels.Load();
             var world = new GameObject("World").transform;
             var terrain = BuildTerrain(world, nature);
             BuildMesas(world, nature);
@@ -247,7 +248,7 @@ namespace WingingIt.Editor
             var bridges = BuildBridges(world, m, city);
             BuildCity(world, m, city, nature, bridges);
             BuildCanal(world, city);
-            BuildLandmarks(world, terrain, m, nature);
+            BuildLandmarks(world, terrain, m, nature, landmarks);
 
             var boundary = new GameObject("Flight Boundary").AddComponent<FlightBoundary>();
             boundary.transform.SetParent(world, false);
@@ -1371,33 +1372,44 @@ namespace WingingIt.Editor
 
         // ------------------------------------------------------------------ landmarks
 
-        /// <summary>One big landmark per region, each with a blinking beacon on top (<see cref="Landmark"/>).</summary>
-        static void BuildLandmarks(Transform parent, Terrain terrain, B.Materials m, NatureModels nature)
+        /// <summary>
+        /// One big landmark per region, each with a blinking beacon on top (<see cref="Landmark"/>): the landmarks pack's
+        /// models when it's been generated, else greybox.
+        /// </summary>
+        static void BuildLandmarks(Transform parent, Terrain terrain, B.Materials m, NatureModels nature, LandmarkModels models)
         {
             var group = new GameObject("Landmarks").transform;
             group.SetParent(parent, false);
             var beacon = B.Materials.UnlitMat("Greybox_Beacon", new Color(1f, 0.15f, 0.1f));
-            BuildSpire(group, m, beacon);
-            BuildSummitRadar(group, terrain, m, beacon);
-            BuildPyramid(group, terrain, beacon);
-            BuildLighthouse(group, m, nature);
+            BuildSpire(group, m, beacon, models);
+            BuildSummitRadar(group, terrain, m, beacon, models);
+            BuildPyramid(group, terrain, beacon, models);
+            BuildLighthouse(group, m, nature, models);
             foreach (var t in group.GetComponentsInChildren<Transform>())
-                t.gameObject.isStatic = true;
+                t.gameObject.isStatic = t.GetComponent<Spinner>() == null; // the radar antenna and lighthouse lens turn
         }
 
-        /// <summary>A landmark root at ground level, with a top marker and a collider-less beacon sphere there.</summary>
-        static Transform NewLandmark(Transform parent, string name, MapRegion region, Vector3 ground, float topHeight, Material beaconMat, float beaconSize)
+        /// <summary>A landmark's root, on the ground at <paramref name="ground"/>.</summary>
+        static Transform NewLandmark(Transform parent, string name, Vector3 ground)
         {
             var root = new GameObject(name).transform;
             root.SetParent(parent, false);
             root.position = ground;
-            var top = new GameObject("Top").transform;
-            top.SetParent(root, false);
-            top.localPosition = new Vector3(0f, topHeight, 0f);
-            var beacon = Sphere("Beacon", root, top.localPosition, beaconSize, beaconMat, false);
-            root.gameObject.AddComponent<Landmark>().Configure(name, region, top, beacon);
             return root;
         }
+
+        /// <summary>Makes <paramref name="root"/> a <see cref="Landmark"/>: a top marker at <paramref name="top"/> and the beacon it blinks.</summary>
+        static void Light(Transform root, MapRegion region, Vector3 top, Renderer beacon)
+        {
+            var marker = new GameObject("Top").transform;
+            marker.SetParent(root, false);
+            marker.localPosition = top;
+            root.gameObject.AddComponent<Landmark>().Configure(root.name, region, marker, beacon);
+        }
+
+        /// <summary>A collider-less beacon <paramref name="size"/> across at <paramref name="localPos"/>: the pack's gem, or a greybox sphere.</summary>
+        static Renderer Beacon(Transform root, Vector3 localPos, float size, Material greybox, LandmarkModels models) =>
+            models != null ? models.Beacon(root, localPos, size) : Sphere("Beacon", root, localPos, size, greybox, false);
 
         static Renderer Sphere(string name, Transform parent, Vector3 localPos, float diameter, Material mat, bool collider)
         {
@@ -1414,25 +1426,35 @@ namespace WingingIt.Editor
         }
 
         /// <summary>City: a ~540 m stepped needle tower, nearly twice the height of downtown, on its own plaza.</summary>
-        static void BuildSpire(Transform parent, B.Materials m, Material beacon)
+        static void BuildSpire(Transform parent, B.Materials m, Material beacon, LandmarkModels models)
         {
-            var root = NewLandmark(parent, "The Spire", MapRegion.City, new Vector3(SpirePosition.x, LandHeight, SpirePosition.y), 545f, beacon, 9f);
-            var glass = B.Materials.Mat("Greybox_SpireGlass", new Color(0.42f, 0.56f, 0.7f), smoothness: 0.8f);
-            B.Box("Podium", root, new Vector3(0f, 6f, 0f), new Vector3(70f, 12f, 70f), m.ConcreteDark, true);
-            float y = 12f;
-            foreach (var (width, height) in new[] { (44f, 220f), (34f, 120f), (24f, 80f), (14f, 40f) })
+            var root = NewLandmark(parent, "The Spire", new Vector3(SpirePosition.x, LandHeight, SpirePosition.y));
+            var top = new Vector3(0f, 545f, 0f);
+            if (models != null)
             {
-                B.Box("Shaft", root, new Vector3(0f, y + height * 0.5f, 0f), new Vector3(width, height, width), glass, true);
-                y += height;
-                B.Box("Band", root, new Vector3(0f, y - 2f, 0f), new Vector3(width + 4f, 4f, width + 4f), m.Concrete, true);
+                models.Body("Spire", root);
+                top = models.Top("Spire");
             }
-            // Observation deck above the first stage: the widest part, so the silhouette reads as a tower, not a box.
-            B.Box("Observation Deck", root, new Vector3(0f, 236f, 0f), new Vector3(62f, 8f, 62f), m.Concrete, true);
-            B.Box("Needle", root, new Vector3(0f, y + 35f, 0f), new Vector3(2.5f, 70f, 2.5f), m.Concrete, true);
+            else
+            {
+                var glass = B.Materials.Mat("Greybox_SpireGlass", new Color(0.42f, 0.56f, 0.7f), smoothness: 0.8f);
+                B.Box("Podium", root, new Vector3(0f, 6f, 0f), new Vector3(70f, 12f, 70f), m.ConcreteDark, true);
+                float y = 12f;
+                foreach (var (width, height) in new[] { (44f, 220f), (34f, 120f), (24f, 80f), (14f, 40f) })
+                {
+                    B.Box("Shaft", root, new Vector3(0f, y + height * 0.5f, 0f), new Vector3(width, height, width), glass, true);
+                    y += height;
+                    B.Box("Band", root, new Vector3(0f, y - 2f, 0f), new Vector3(width + 4f, 4f, width + 4f), m.Concrete, true);
+                }
+                // Observation deck above the first stage: the widest part, so the silhouette reads as a tower, not a box.
+                B.Box("Observation Deck", root, new Vector3(0f, 236f, 0f), new Vector3(62f, 8f, 62f), m.Concrete, true);
+                B.Box("Needle", root, new Vector3(0f, y + 35f, 0f), new Vector3(2.5f, 70f, 2.5f), m.Concrete, true);
+            }
+            Light(root, MapRegion.City, top, Beacon(root, top, 9f, beacon, models));
         }
 
         /// <summary>Mountains: a radar station (mast + dome) on the highest peak, sitting on a plinth sunk into the rock.</summary>
-        static void BuildSummitRadar(Transform parent, Terrain terrain, B.Materials m, Material beacon)
+        static void BuildSummitRadar(Transform parent, Terrain terrain, B.Materials m, Material beacon, LandmarkModels models)
         {
             Vector3 peak = Vector3.zero;
             float best = float.MinValue;
@@ -1447,19 +1469,28 @@ namespace WingingIt.Editor
                 }
             }
 
-            var root = NewLandmark(parent, "Summit Radar", MapRegion.Mountains, peak, 152f, beacon, 7f);
-            var white = B.Materials.Mat("Greybox_RadarWhite", new Color(0.93f, 0.93f, 0.95f));
-            B.Box("Plinth", root, new Vector3(0f, -12f, 0f), new Vector3(44f, 30f, 44f), m.ConcreteDark, true);
-            Sphere("Radome", root, new Vector3(-10f, 14f, 6f), 24f, white, true);
-            B.Box("Mast", root, new Vector3(6f, 78f, -6f), new Vector3(5f, 150f, 5f), m.PlaneDark, true);
-            for (float h = 40f; h <= 140f; h += 50f)
-                B.Box("Mast Arm", root, new Vector3(6f, h, -6f), new Vector3(18f, 1.5f, 1.5f), m.PlaneDark, true);
-            root.Find("Top").localPosition = new Vector3(6f, 156f, -6f);
-            root.Find("Beacon").localPosition = new Vector3(6f, 156f, -6f);
+            var root = NewLandmark(parent, "Summit Radar", peak);
+            var top = new Vector3(6f, 156f, -6f);
+            if (models != null)
+            {
+                models.Body("SummitRadar", root);
+                models.RadarAntenna(root);
+                top = models.Top("SummitRadar");
+            }
+            else
+            {
+                var white = B.Materials.Mat("Greybox_RadarWhite", new Color(0.93f, 0.93f, 0.95f));
+                B.Box("Plinth", root, new Vector3(0f, -12f, 0f), new Vector3(44f, 30f, 44f), m.ConcreteDark, true);
+                Sphere("Radome", root, new Vector3(-10f, 14f, 6f), 24f, white, true);
+                B.Box("Mast", root, new Vector3(6f, 78f, -6f), new Vector3(5f, 150f, 5f), m.PlaneDark, true);
+                for (float h = 40f; h <= 140f; h += 50f)
+                    B.Box("Mast Arm", root, new Vector3(6f, h, -6f), new Vector3(18f, 1.5f, 1.5f), m.PlaneDark, true);
+            }
+            Light(root, MapRegion.Mountains, top, Beacon(root, top, 7f, beacon, models));
         }
 
         /// <summary>Desert: a stepped pyramid, 280 m across and ~210 m tall, the biggest thing on the open sand.</summary>
-        static void BuildPyramid(Transform parent, Terrain terrain, Material beacon)
+        static void BuildPyramid(Transform parent, Terrain terrain, Material beacon, LandmarkModels models)
         {
             // Stand it on the lowest ground under its footprint and sink the bottom step in, so no edge floats.
             float ground = float.MaxValue;
@@ -1468,41 +1499,62 @@ namespace WingingIt.Editor
                 ground = Mathf.Min(ground, terrain.SampleHeight(new Vector3(PyramidPosition.x + dx, 0f, PyramidPosition.y + dz)) + terrain.transform.position.y);
 
             float height = PyramidSteps * PyramidStepHeight;
-            var root = NewLandmark(parent, "The Pyramid", MapRegion.Desert, new Vector3(PyramidPosition.x, ground, PyramidPosition.y), height + 6f, beacon, 8f);
-            var stone = B.Materials.Mat("Greybox_Sandstone", new Color(0.8f, 0.66f, 0.45f), B.Materials.CheckerTexture(), new Vector2(4f, 2f));
-            const float sink = 12f;
-            for (int i = 0; i < PyramidSteps; i++)
+            var root = NewLandmark(parent, "The Pyramid", new Vector3(PyramidPosition.x, ground, PyramidPosition.y));
+            var top = new Vector3(0f, height + 6f, 0f);
+            if (models != null)
             {
-                float width = PyramidBase * (1f - i / (float)PyramidSteps);
-                float bottom = i == 0 ? -sink : i * PyramidStepHeight;
-                float top = (i + 1) * PyramidStepHeight;
-                B.Box($"Step {i + 1}", root, new Vector3(0f, (bottom + top) * 0.5f, 0f), new Vector3(width, top - bottom, width), stone, true);
+                models.Body("Pyramid", root);
+                top = models.Top("Pyramid");
             }
+            else
+            {
+                var stone = B.Materials.Mat("Greybox_Sandstone", new Color(0.8f, 0.66f, 0.45f), B.Materials.CheckerTexture(), new Vector2(4f, 2f));
+                const float sink = 12f;
+                for (int i = 0; i < PyramidSteps; i++)
+                {
+                    float width = PyramidBase * (1f - i / (float)PyramidSteps);
+                    float bottom = i == 0 ? -sink : i * PyramidStepHeight;
+                    float stepTop = (i + 1) * PyramidStepHeight;
+                    B.Box($"Step {i + 1}", root, new Vector3(0f, (bottom + stepTop) * 0.5f, 0f), new Vector3(width, stepTop - bottom, width), stone, true);
+                }
+            }
+            Light(root, MapRegion.Desert, top, Beacon(root, top, 8f, beacon, models));
         }
 
         /// <summary>
-        /// Ocean: a striped lighthouse on a rocky islet off the south coast. Its lamp is the beacon. The islet is the
-        /// nature pack's cliff mesh (with a matching collider), its grassy top level with the lighthouse's foot.
+        /// Ocean: a striped lighthouse on a rocky islet off the south coast. Its lamp is the beacon (the pack's lens
+        /// turns round it). The islet is the nature pack's cliff mesh (with a matching collider), its grassy top level
+        /// with the lighthouse's foot.
         /// </summary>
-        static void BuildLighthouse(Transform parent, B.Materials m, NatureModels nature)
+        static void BuildLighthouse(Transform parent, B.Materials m, NatureModels nature, LandmarkModels models)
         {
-            var lamp = B.Materials.UnlitMat("Greybox_LighthouseLamp", new Color(1f, 0.92f, 0.55f));
-            var root = NewLandmark(parent, "Lighthouse Rock", MapRegion.Ocean, new Vector3(IsletPosition.x, IsletHeight, IsletPosition.y), 70f, lamp, 6f);
-            var red = B.Materials.Mat("Greybox_LighthouseRed", new Color(0.78f, 0.16f, 0.14f));
-            B.Box("Base", root, new Vector3(0f, -2f, 0f), new Vector3(20f, 8f, 20f), m.ConcreteDark, true);
-            float y = 2f;
-            for (int i = 0; i < 4; i++)
+            var root = NewLandmark(parent, "Lighthouse Rock", new Vector3(IsletPosition.x, IsletHeight, IsletPosition.y));
+            if (models != null)
             {
-                float width = 13f - i * 1.6f;
-                B.Box($"Tower {i + 1}", root, new Vector3(0f, y + 7.5f, 0f), new Vector3(width, 15f, width), i % 2 == 0 ? m.Concrete : red, true);
-                y += 15f;
+                models.Body("Lighthouse", root);
+                models.LighthouseLens(root);
+                var lamp = models.LighthouseLamp(root);
+                Light(root, MapRegion.Ocean, lamp.transform.localPosition, lamp);
             }
-            B.Box("Gallery", root, new Vector3(0f, y + 1f, 0f), new Vector3(12f, 2f, 12f), m.PlaneDark, true);
-            B.Box("Lamp Room", root, new Vector3(0f, y + 6f, 0f), new Vector3(6f, 8f, 6f), m.Glass, true);
-            B.Box("Roof", root, new Vector3(0f, y + 11f, 0f), new Vector3(7f, 2f, 7f), red, true);
-            B.Box("Keeper's House", root, new Vector3(16f, 3f, 6f), new Vector3(12f, 8f, 9f), m.Concrete, true);
-            root.Find("Top").localPosition = new Vector3(0f, y + 6f, 0f);
-            root.Find("Beacon").localPosition = new Vector3(0f, y + 6f, 0f);
+            else
+            {
+                var red = B.Materials.Mat("Greybox_LighthouseRed", new Color(0.78f, 0.16f, 0.14f));
+                B.Box("Base", root, new Vector3(0f, -2f, 0f), new Vector3(20f, 8f, 20f), m.ConcreteDark, true);
+                float y = 2f;
+                for (int i = 0; i < 4; i++)
+                {
+                    float width = 13f - i * 1.6f;
+                    B.Box($"Tower {i + 1}", root, new Vector3(0f, y + 7.5f, 0f), new Vector3(width, 15f, width), i % 2 == 0 ? m.Concrete : red, true);
+                    y += 15f;
+                }
+                B.Box("Gallery", root, new Vector3(0f, y + 1f, 0f), new Vector3(12f, 2f, 12f), m.PlaneDark, true);
+                B.Box("Lamp Room", root, new Vector3(0f, y + 6f, 0f), new Vector3(6f, 8f, 6f), m.Glass, true);
+                B.Box("Roof", root, new Vector3(0f, y + 11f, 0f), new Vector3(7f, 2f, 7f), red, true);
+                B.Box("Keeper's House", root, new Vector3(16f, 3f, 6f), new Vector3(12f, 8f, 9f), m.Concrete, true);
+                var lamp = B.Materials.UnlitMat("Greybox_LighthouseLamp", new Color(1f, 0.92f, 0.55f));
+                var top = new Vector3(0f, y + 6f, 0f);
+                Light(root, MapRegion.Ocean, top, Sphere("Beacon", root, top, 6f, lamp, false));
+            }
             nature?.Place("Islet", root, new Vector3(IsletPosition.x, 0f, IsletPosition.y), collider: true);
         }
 

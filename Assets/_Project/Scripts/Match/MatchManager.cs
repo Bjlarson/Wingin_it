@@ -68,6 +68,8 @@ namespace WingingIt.Match
         ModeArena _arena;
         List<Vector3> _levelFightAreas;
         BannerWorld _banners;
+        DominationWorld _fields;
+        Airfield _spawnChoice; // the player's pick on the respawn screen; null = the usual (nearest friendly field)
         bool _dismissed;
         PlaneRespawner _respawner;
         PlaneHealth _health;
@@ -93,6 +95,8 @@ namespace WingingIt.Match
         public int PlayerTeam => player != null ? player.Team : 0;
         /// <summary>Capture the Banner's banners in the level; null in other modes and before the first frame of a Banner match.</summary>
         public BannerWorld Banners => _banners;
+        /// <summary>Airfield Domination's capture fields in the level; null in other modes and before the first frame of a Domination match.</summary>
+        public DominationWorld Fields => _fields;
         public int TeamCount => roster != null ? roster.TeamCount : 2;
         public BotRoster Roster => roster;
         public IReadOnlyList<FlightStats> Classes => classes;
@@ -124,6 +128,42 @@ namespace WingingIt.Match
         }
 
         public bool CanChangeClassAtAirfield => SwapAirfield != null;
+
+        /// <summary>
+        /// Where the player can respawn: home, then any field their team holds (Airfield Domination). The respawn screen
+        /// offers a choice only when there's more than one.
+        /// </summary>
+        public List<Airfield> SpawnFields => player != null ? Airfield.SpawnFieldsFor(player.Team) : new List<Airfield>();
+
+        /// <summary>The field the player will respawn at: their pick while it's still theirs, else the nearest friendly one.</summary>
+        public Airfield SpawnField
+        {
+            get
+            {
+                if (player == null)
+                    return null;
+                if (_spawnChoice != null && _spawnChoice.IsFriendlyTo(player.Team))
+                    return _spawnChoice;
+                return Airfield.NearestFriendly(player.Position, player.Team);
+            }
+        }
+
+        /// <summary>While dead: respawn at <paramref name="field"/> (one of <see cref="SpawnFields"/>).</summary>
+        public void ChooseSpawnField(Airfield field)
+        {
+            if (Picker == ClassPicker.Respawn && field != null && player != null && field.IsFriendlyTo(player.Team))
+                _spawnChoice = field;
+        }
+
+        /// <summary>While dead: the next (or previous) of <see cref="SpawnFields"/>.</summary>
+        public void CycleSpawnField(int dir)
+        {
+            var fields = SpawnFields;
+            if (fields.Count < 2)
+                return;
+            int at = fields.IndexOf(SpawnField);
+            ChooseSpawnField(fields[((at + dir) % fields.Count + fields.Count) % fields.Count]);
+        }
 
         public float MatchLength
         {
@@ -252,7 +292,7 @@ namespace WingingIt.Match
 
         void UseMode(MatchMode mode)
         {
-            DropBanners();
+            DropModeWorlds();
             _mode = mode;
             _score = mode.CreateScore(TeamCount);
             if (mode.Info != null)
@@ -271,8 +311,14 @@ namespace WingingIt.Match
             onRunway = false;
             if (_dismissed)
                 return false;
-            return _mode.TryGetSpawnPose(plane, deathPosition, out pose, out onRunway)
-                || (_arena != null && _arena.TryGetSpawnPose(plane, out pose));
+            if (_mode.TryGetSpawnPose(plane, deathPosition, out pose, out onRunway))
+                return true;
+            if (plane == player && _respawner != null && _spawnChoice != null && _spawnChoice.IsFriendlyTo(plane.Team))
+            {
+                pose = _respawner.SpawnPoseAt(_spawnChoice, out onRunway);
+                return true;
+            }
+            return _arena != null && _arena.TryGetSpawnPose(plane, out pose);
         }
 
         void ISpawnRules.OnSpawned(PlaneController plane)
@@ -302,7 +348,7 @@ namespace WingingIt.Match
             if (_respawner != null)
                 _respawner.Spawning -= OnPlayerSpawning;
             DropArena();
-            DropBanners();
+            DropModeWorlds();
             Time.timeScale = 1f; // never leave the game frozen (scene unload, tests)
         }
 
@@ -317,6 +363,7 @@ namespace WingingIt.Match
                 return;
             _mode.Tick(_score, dt);
             TickBanners(dt);
+            TickFields(dt);
             if (_mode.EarlyWinner(_score) != null)
             {
                 EndMatch();
@@ -334,10 +381,23 @@ namespace WingingIt.Match
             _banners?.Tick(_score, dt);
         }
 
-        void DropBanners()
+        /// <summary>Airfield Domination: the capture fields, their defenses and the handover on capture (made on first use).</summary>
+        void TickFields(float dt)
+        {
+            if (_mode is not DominationMode domination)
+                return;
+            _fields ??= DominationWorld.Create(domination);
+            _fields?.Tick(dt);
+        }
+
+        /// <summary>The level as built again: no banners out, every capture field neutral and dormant.</summary>
+        void DropModeWorlds()
         {
             _banners?.Dispose();
             _banners = null;
+            _fields?.Dispose();
+            _fields = null;
+            _spawnChoice = null;
         }
 
         /// <summary>Opens the respawn picker on death and closes it on respawn; drops the airfield picker once a swap isn't allowed.</summary>
@@ -602,7 +662,7 @@ namespace WingingIt.Match
             Picker = ClassPicker.None;
             MenuOpen = false;
             DropArena(); // free flight is the level as built
-            DropBanners();
+            DropModeWorlds();
             RefreshPlayOnly();
             if (_parked && player != null && player.TryGetComponent<PlaneRespawner>(out var respawner))
                 respawner.SpawnNow(); // out of the hangar, as free flight always started

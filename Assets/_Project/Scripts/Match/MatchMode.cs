@@ -234,4 +234,34 @@ namespace WingingIt.Match
 
         public override IReadOnlyList<ScoreColumn> Columns => s_columns;
     }
+
+    /// <summary>
+    /// Airfield Domination: Teams scoring on top of the capture fields. A plane takes a field by landing and stopping in
+    /// its zone (the <see cref="Board"/>'s rules); the team that holds it repairs and can respawn there. The world layer
+    /// (<see cref="DominationWorld"/>) feeds the board with the parked planes each frame and hands captured fields over.
+    /// Capture and holding points, the early win and the HUD come next (see the development plan).
+    /// </summary>
+    public sealed class DominationMode : MatchMode
+    {
+        static readonly ScoreColumn[] s_columns =
+        {
+            new("K", p => p.Kills.ToString()),
+            new("A", p => p.Assists.ToString(), 0.75f),
+            new("D", p => p.Deaths.ToString(), 0.6f),
+            new("SCORE", p => p.Points.ToString(), 1f, 80f, 10f),
+        };
+
+        readonly TeamsMode _teams = new();
+
+        /// <summary>The capture fields of this match; null until the level's are known (<see cref="SetFields"/>).</summary>
+        public FieldBoard Board { get; private set; }
+
+        public void SetFields(int count) => Board = new FieldBoard(count);
+
+        public override MatchScore CreateScore(int teamCount) => _teams.CreateScore(teamCount);
+
+        public override void RecordKill(MatchScore score, in KillRecord kill) => _teams.RecordKill(score, kill);
+
+        public override IReadOnlyList<ScoreColumn> Columns => s_columns;
+    }
 }

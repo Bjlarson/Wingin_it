@@ -281,10 +281,14 @@ namespace WingingIt.UI
                     match.OpenAirfieldPicker();
                 return;
             }
-            if (match.Picker == ClassPicker.Airfield && keyboard.tabKey.wasPressedThisFrame)
+            if (keyboard.tabKey.wasPressedThisFrame)
             {
-                match.CloseAirfieldPicker();
-                return;
+                if (match.Picker == ClassPicker.Airfield)
+                {
+                    match.CloseAirfieldPicker();
+                    return;
+                }
+                match.CycleSpawnField(keyboard.shiftKey.isPressed ? -1 : 1);
             }
             for (int i = 0; i < 4; i++)
                 if (keyboard[Key.Digit1 + i].wasPressedThisFrame)
@@ -728,6 +732,35 @@ namespace WingingIt.UI
                 PickInPlay(picked);
             if (!respawn && !match.MenuOpen && _g.Button(new Rect(width / 2f - 130f, 250f + CardH + 36f, 260f, 56f), "KEEP", "ESC", false, false, false, TextAnchor.MiddleCenter))
                 match.CloseAirfieldPicker();
+            if (respawn)
+                DrawSpawnFields(width, 250f + CardH + 36f);
+        }
+
+        /// <summary>
+        /// While dead with more than one field to come back at (home plus fields the team holds): one button per field,
+        /// the one the player will respawn at lit. TAB cycles them.
+        /// </summary>
+        void DrawSpawnFields(float width, float top)
+        {
+            var fields = match.SpawnFields;
+            if (fields.Count < 2)
+                return;
+            var chosen = match.SpawnField;
+            const float buttonW = 260f, gap = 16f;
+            float rowW = fields.Count * buttonW + (fields.Count - 1) * gap;
+            float s = Mathf.Min(1f, (width - 80f) / rowW); // narrow screens: shrink to fit
+            var old = GUI.matrix;
+            GUI.matrix = old * Matrix4x4.TRS(new Vector3((width - rowW * s) / 2f, top, 0f), Quaternion.identity, new Vector3(s, s, 1f));
+            _g.Tracked(new Rect(0f, 0f, rowW, 24f), "SPAWN AT  ·  TAB TO SWITCH", _g.Hint, 3.4f, TextAnchor.MiddleCenter, Steel);
+            for (int i = 0; i < fields.Count; i++)
+            {
+                var r = new Rect(i * (buttonW + gap), 34f, buttonW, 56f);
+                _g.Panel(r, fields[i] == chosen ? GlowSettle : GlowRest, false);
+                string label = fields[i].IsHome ? "HOME" : fields[i].DisplayName.Replace(" Airfield", "").ToUpperInvariant();
+                if (_g.Button(r, label, null, fields[i] == chosen, false, false, TextAnchor.MiddleCenter) && !match.MenuOpen)
+                    match.ChooseSpawnField(fields[i]);
+            }
+            GUI.matrix = old;
         }
 
         /// <summary>Parked and repaired at home: a small clickable (and touchable) "change plane" prompt above the HUD's bottom edge.</summary>

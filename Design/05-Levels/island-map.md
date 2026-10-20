@@ -87,10 +87,10 @@ One large island map with distinct biomes, each designed to encourage a differen
 |---|---|---|---|
 | City | **The Spire**: stepped glass needle tower with an observation deck, on its own plaza west of the canal | (-230, 260) | ~545 m to the beacon, nearly twice downtown's tallest towers |
 | Mountains | **Summit Radar**: lattice mast + radome on the highest peak | highest point of the range (found at build time) | mast 150 m above the summit, ~800 m above the sea |
-| Desert | **The Pyramid**: 8-step stepped pyramid | (804, 794), on the north edge of the desert: the mirror image of Summit Radar | 280 m base, ~210 m tall |
+| Desert | **The Pyramid**: 8-step stepped pyramid | (804, 794), on the north edge of the desert: the mirror image of Summit Radar | 280 m base, 208 m to the top step, a shrine and gold capstone above (beacon ~229 m) |
 | Ocean | **Lighthouse Rock**: red-and-white lighthouse on a rocky islet | (0, -1950), ~600 m off the south coast, on the center line | islet 24 m, lamp ~92 m above the sea |
 
-All four are in sight from the middle of the map at 600 m (tested in `IslandSceneTests`). They're solid: flying into one is a crash, and the Spire and the radar mast are things to weave around.
+All four are in sight from the middle of the map at 600 m (tested in `IslandSceneTests`). Their models are asset Pack 6 (`ArtSource/Landmarks/build_landmarks.py`), at the greybox's sizes; Summit Radar's antenna and the lighthouse's lens turn. They're solid: flying into one is a crash, and the Spire and the radar mast are things to weave around.
 
 **Airfields** (same prefab as the test range, on flattened pads):
 

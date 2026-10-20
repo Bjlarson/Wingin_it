@@ -1,11 +1,11 @@
 # Match Modes
 
 Status: Draft
-Last updated: 2026-10-19
+Last updated: 2026-10-20
 
 ## Summary
 
-Four core modes use the primary loop (fight + repair). Every mode awards player XP. One party mode uses the secondary "ram" loop.
+Four core modes use the primary loop (fight + repair). Every mode awards player XP. One party mode uses the secondary "ram" loop. A racing mode ([Sky Racing](#sky-racing-prototype), proposed 2026-10-20) is a third loop.
 
 **Mode prototypes (added 2026-10-19):** before networking, three more modes get built offline against bots to see how they feel: [Capture the Banner](#capture-the-banner-prototype), [Airfield Domination](#airfield-domination-prototype) and [Ram Royale](#ram-royale-prototype). Each is a quick prototype. A playtest then decides which ones ship (see [development plan, Phase 6.5](../development-plan.md#phase-65--mode-prototypes-offline)). Everything in those sections is **proposed** unless it says decided.
 
@@ -142,7 +142,19 @@ Pure rules in `FieldBoard` (`Scripts/Match/DominationRules.cs`); nothing in the 
 - **Control tower:** the tower and its cab are one `GroundTarget`, **300 HP** (2 direct bomb hits), rebuilt **45 s** after it falls. While it's down the field has no AA and no repair (`Airfield.TowerDown`; `IsFriendlyTo` is false, so the RETURN TO BASE marker, bots' retreats and respawns skip it too), and `FieldDefenses.TowerUp` is false for the capture board's 3× slowdown.
 - **Light AA:** of the prefab's four guns, the two on one diagonal stay (the others are removed), on lighter `LightAAGuns` stats (600 m, 3 rounds/s, 1.5 damage, wider spread). Each is a `GroundTarget`, **120 HP** (one bomb, or a few rocket hits: rockets now deal `RocketStats.groundDamage`, 40 at the center), rebuilt after **30 s**. A gun fires only while it's intact, the field is owned and its tower stands. Home fields' four guns are unchanged and can't be destroyed.
 - **Changing hands:** a wreck stays a wreck when a field is captured (`Airfield.SetTeam`) and rebuilds on its own timer for the new owner. Home fields can't change hands.
-- **Dormant outside Domination:** until a match calls `SetActive(true)` nothing can be hit and the AA stays quiet, so Teams and Banner see only scenery. Switching on or off rebuilds everything. Nothing switches it on yet: that arrives with the Domination world (owned-field repair + respawn).
+- **Dormant outside Domination:** until a match calls `SetActive(true)` nothing can be hit and the AA stays quiet, so Teams and Banner see only scenery. Switching on or off rebuilds everything. The Domination world switches it on (below).
+
+### Owned fields (built 2026-10-20)
+
+`DominationMode` (Teams scoring for now, plus the `FieldBoard`) and `DominationWorld` (`Scripts/Match/DominationWorld.cs`), which `MatchManager` runs from the first frame of a Domination match.
+
+- **Start:** every open, non-home field with `FieldDefenses` is a capture field (board order by name: Central, South East, South West). Each starts neutral and capturable (`Airfield.SetCapturable`) with its defenses on.
+- **Capturing:** each frame the planes parked in a capture field's zone go to the board, along with whether each owner's tower stands. A field the board flips goes to the capturer (`Airfield.SetTeam`; the hangar and tower colors follow) and `DominationWorld.Captured` fires for the score and callouts that come next.
+- **Landing:** the auto-brake now rolls a plane into the zone of a field it can capture, as it does on its own fields, so a capture landing stops in the right place.
+- **Owned field benefits:** nothing new: a held field is friendly (`Airfield.IsFriendlyTo`), so the existing rules give its owner repair (with the usual invulnerability), RETURN TO BASE, the bots' retreats and respawns there. With the tower down none of that works, the same as for any field.
+- **Respawn choice:** while dead, the picker shows a **SPAWN AT** row under the plane cards once there's more than one field to come back at: HOME first, then held fields by name. Click one or press TAB (Shift+TAB back). Default is the nearest friendly field to where you died; a pick that's lost before the timer runs out falls back to that. Bots respawn at the friendly field nearest where they died. The row is general (`Airfield.SpawnFieldsFor`), so in Teams it never shows.
+- **Match over:** Dismiss, a mode change or leaving the scene puts every capture field back to neutral, not capturable, defenses dormant.
+- The card stays **IN DEVELOPMENT** until capture scoring, the HUD and the bots exist.
 
 ## Ram Royale (prototype)
 
@@ -157,6 +169,30 @@ Pure rules in `FieldBoard` (`Scripts/Match/DominationRules.cs`); nothing in the 
 - **Win:** the last plane flying. If time runs out, the plane with the most body HP left wins, then the most rams. **Scoring** (for XP / coins later): a placement bonus plus points per ram knock-out.
 - **HUD:** planes left (e.g. 7 / 16), a big arrow or marker on the nearest plane, the shrinking-edge warning, and a ram hit flash ("RAMMED X!").
 - **Bots:** a new ram behavior: steer at a **collision intercept point** (not the gun lead point), boost in the last second, and break away from anyone lining up on them. In this mode the existing plane-avoidance reflex only dodges planes that are coming at the bot.
+
+## Sky Racing (prototype)
+
+*Working name. Added 2026-10-20; design decided below, nothing built.* A kart-racer in the air, in the spirit of Diddy Kong Racing and Mario Kart: fly a lap course through gates, fly through **colored mystery boxes** to get an item, and use it on the pack. Finish first.
+
+- **Scene:** its own `Race` scene with a purpose-built track (not the Island).
+- **Size / length:** free for all, up to 8 racers (bots fill; fewer if the track is too tight for 8), **3 laps**, about 2–3 minutes a lap, with a cap on total time.
+- **Planes:** everyone flies the main plane (the Fighter). Racers are told apart by the **color of the wingtips**.
+- **Course (decided):** a **curvy circular loop**, lapped. An ordered loop of **gate rings** with a start/finish line. Gates must be flown through in order; a wrong-way arrow shows if you turn around, and a missed gate has to be flown before the lap counts.
+- **Start:** a 3-2-1 grid start in the air on a staggered block. No runway, no airfields.
+- **Mystery boxes (decided):** boxes float along the course, and **the color tells you the item**, as in Diddy Kong Racing: **blue = Boost**, **red = Homing Missile**, **green = Shield**. One item held at a time; the box returns after a few seconds. Use it with a button (secondary fire / ability on PC and gamepad, a touch button on mobile). **No position-weighted odds** for now.
+- **Items (decided, only these three):**
+
+| Item | Box | Effect | Source |
+|---|---|---|---|
+| Boost | Blue | A long burst of speed | Boost / Afterburner |
+| Homing Missile | Red | Locks the plane ahead; the existing missile, **built first** | `PlaneMissiles` |
+| Shield | Green | A short bubble that cuts damage | Armor Shield |
+
+- **Weapons:** guns, rockets and bombs are off; only the collected items hurt.
+- **Damage (decided):** the normal part-damage system applies, so a missile hit can shoot off a part and the plane flies on damaged. **Only a crash respawns you** (terrain, water, obstacle, or destroyed): close to where you were in the race (last gate passed, facing the next), after **up to 3 s**, fully repaired. A lost wing or other part is not a respawn: you race on damaged. No repair stops.
+- **Scoring:** finishing order gives placement points (for XP / coins later). Best lap time is shown.
+- **HUD:** position (3 / 8), lap, next-gate marker and arrow, held item, minimap with the track, lap times, wrong-way warning.
+- **Bots:** follow a racing line through the gates, grab boxes, and use items (missile at the plane ahead, shield with a missile inbound, boost on a straight). Difficulty changes line quality and item use.
 
 ## King of the Sky
 
@@ -194,6 +230,7 @@ Each team has an aircraft carrier at sea. Destroy the enemy carrier to win.
 | King of the Sky | 2 | Home | Zone control |
 | Carrier War | 2 | Carrier | Destroy carrier |
 | Ram Royale | No | No | Survival (one life, no weapons) |
+| Sky Racing | No | No | Lap race, mystery-box items |
 
 ## Open Questions
 
@@ -205,4 +242,5 @@ Each team has an aircraft carrier at sea. Destroy the enemy carrier to win.
 - [ ] Capture the Banner, still open: how strong is the drag? Should home AA stay on around the stand?
 - [ ] Airfield Domination: **3 capture fields, decided 2026-10-19** (Central plus South West / South East at (±750, −900), one-way, landing north). Should landing be the only way to capture, or should a low flyover also start a slow capture?
 - [ ] Ram Royale: arena size and whether it shrinks; class pick or one plane for all; ram damage split (rear hit vs head-on).
+- [ ] Sky Racing, still open: track layout and theme, how many boxes and where, and mobile item aiming.
 - [ ] Which prototype modes ship at launch, which go to Later, and which get cut (decide after the Phase 6.5 playtest).
