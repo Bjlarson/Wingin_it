@@ -225,6 +225,82 @@ namespace WingingIt.UI
             _ => "HOME",
         };
 
+        /// <summary>A capture field's letter by board index: A, B, C …</summary>
+        public static string FieldLetter(int field) => ((char)('A' + field)).ToString();
+
+        /// <summary>A field's name for the HUD: "Central Airfield" → "CENTRAL".</summary>
+        public static string FieldName(string displayName)
+        {
+            string name = (displayName ?? "").ToUpperInvariant().Trim();
+            return name.EndsWith(" AIRFIELD") ? name.Substring(0, name.Length - " AIRFIELD".Length) : name;
+        }
+
+        /// <summary>
+        /// One capture field's state for the top bar: "CONTESTED", "EAST 45%" (a capture under way), "TOWER DOWN", or
+        /// the owner ("WEST", "NEUTRAL"). <paramref name="ownerName"/> is null for a neutral field.
+        /// </summary>
+        public static string FieldStatus(string ownerName, bool contested, string capturingName, float progress, bool towerDown)
+        {
+            if (contested)
+                return "CONTESTED";
+            if (capturingName != null && progress > 0f)
+                return $"{capturingName} {Mathf.FloorToInt(Mathf.Clamp01(progress) * 100f)}%";
+            if (ownerName != null && towerDown)
+                return "TOWER DOWN";
+            return ownerName ?? "NEUTRAL";
+        }
+
+        /// <summary>
+        /// What a field changing hands says to a pilot on <paramref name="viewerTeam"/>: "YOU CAPTURED CENTRAL",
+        /// "WE CAPTURED CENTRAL", "CENTRAL CAPTURED BY EAST".
+        /// </summary>
+        public static string FieldCallout(string field, int team, int viewerTeam, bool youCaptured, string teamName, out Tone tone)
+        {
+            bool ours = team == viewerTeam;
+            tone = ours ? Tone.Good : Tone.Bad;
+            return youCaptured ? $"YOU CAPTURED {field}" : ours ? $"WE CAPTURED {field}" : $"{field} CAPTURED BY {teamName}";
+        }
+
+        /// <summary>
+        /// An owned field's control tower fell or came back: "CENTRAL TOWER DOWN: NO AA OR REPAIR" for the owner,
+        /// "CENTRAL TOWER DOWN: FULL-SPEED CAPTURE" for everyone else. Null on a neutral field (its tower does nothing).
+        /// </summary>
+        public static string TowerCallout(string field, int owner, int viewerTeam, bool down, out Tone tone)
+        {
+            tone = Tone.Neutral;
+            if (owner < 0)
+                return null;
+            bool ours = owner == viewerTeam;
+            tone = ours == down ? Tone.Bad : Tone.Good;
+            if (down)
+                return ours ? $"{field} TOWER DOWN: NO AA OR REPAIR" : $"{field} TOWER DOWN: FULL-SPEED CAPTURE";
+            return ours ? $"{field} TOWER REBUILT" : $"ENEMY TOWER AT {field} REBUILT";
+        }
+
+        /// <summary>A team now holds every capture field: "WE HOLD EVERY FIELD: 30 S TO WIN" / "EAST HOLDS EVERY FIELD: TAKE ONE BACK".</summary>
+        public static string HoldAllCallout(int team, int viewerTeam, string teamName, float toWin, out Tone tone)
+        {
+            bool ours = team == viewerTeam;
+            tone = ours ? Tone.Good : Tone.Bad;
+            return ours ? $"WE HOLD EVERY FIELD: {Mathf.CeilToInt(toWin)} S TO WIN" : $"{teamName} HOLDS EVERY FIELD: TAKE ONE BACK";
+        }
+
+        /// <summary>
+        /// Under the capture ring while parked in a capture field's zone: what's happening to it from where we sit.
+        /// "CONTESTED: ENEMY ON THE FIELD", "CAPTURING 45%", "UNDOING EAST 30%", "HELD BY YOUR TEAM".
+        /// </summary>
+        public static string CaptureHint(int viewerTeam, int owner, int capturingTeam, float progress, bool contested, string capturingName)
+        {
+            if (contested)
+                return "CONTESTED: ENEMY ON THE FIELD";
+            int pct = Mathf.FloorToInt(Mathf.Clamp01(progress) * 100f);
+            if (capturingTeam >= 0 && capturingTeam != viewerTeam && progress > 0f)
+                return $"UNDOING {capturingName} {pct}%";
+            if (owner == viewerTeam)
+                return "HELD BY YOUR TEAM";
+            return $"CAPTURING {pct}%";
+        }
+
         /// <summary>A distance for a marker: metres up close, then kilometres to one decimal.</summary>
         public static string Distance(float metres) => metres < 1000f ? $"{metres:0} M" : $"{metres / 1000f:0.0} KM";
 

@@ -63,8 +63,19 @@ namespace WingingIt.Flight
             }
             else
             {
-                Vfx.Play(VfxKind.ExplosionGround, point, splashRadius / 12f);
+                PlayGround(point, EffectsSurface.Classify(surface, point), splashRadius / 12f);
             }
+        }
+
+        /// <summary>A ground blast whose dust and dirt take the colour of <paramref name="ground"/> (sand on a beach, soil on grass).</summary>
+        public static void PlayGround(Vector3 point, GroundSurface ground, float scale)
+        {
+            var effect = Vfx.Play(VfxKind.ExplosionGround, point, scale);
+            if (effect == null || ground is GroundSurface.None or GroundSurface.Water)
+                return;
+            Color color = EffectsSurface.Color(ground);
+            effect.SetColor("Dust", color);
+            effect.SetColor("Dirt", VfxEffect.Shade(color, 0.75f));
         }
 
         /// <summary>A bullet or shell hitting <paramref name="hit"/>: sparks off a plane, a glance off the repair bubble, dust off the ground, spray off the sea.</summary>
@@ -81,7 +92,10 @@ namespace WingingIt.Flight
             }
             else
             {
-                Vfx.Play(VfxKind.BulletHitGround, hit.point, Quaternion.FromToRotation(Vector3.up, hit.normal), scale);
+                var effect = Vfx.Play(VfxKind.BulletHitGround, hit.point, Quaternion.FromToRotation(Vector3.up, hit.normal), scale);
+                var ground = effect != null ? EffectsSurface.Classify(hit.collider, hit.point) : GroundSurface.None;
+                if (ground != GroundSurface.None)
+                    effect.SetColor("Dust", EffectsSurface.Color(ground));
             }
         }
     }

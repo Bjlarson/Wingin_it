@@ -407,7 +407,7 @@ namespace WingingIt.Flight
             else if (Physics.CheckSphere(point, 2f, 1 << PlaneController.WaterLayer, QueryTriggerInteraction.Ignore))
                 Vfx.Play(VfxKind.WaterSplash, point, ClassScale); // ditched
             else
-                Vfx.Play(VfxKind.ExplosionGround, point, 1.2f * ClassScale);
+                Explosions.PlayGround(point, EffectsSurface.Below(point), 1.2f * ClassScale);
         }
 
         void OnRespawned(PlaneController _)

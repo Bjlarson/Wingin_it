@@ -37,6 +37,40 @@ namespace WingingIt.Tests
         }
 
         [Test]
+        public void Shadows_HighOnPc_MediumOnPhones_AndAnUnknownLevelResets()
+        {
+            Assert.AreEqual(ShadowDetail.High, new GameSettings(false, new MemoryStore()).Data.shadows);
+            var phone = new GameSettings(true, new MemoryStore());
+            Assert.AreEqual(ShadowDetail.Medium, phone.Data.shadows);
+            phone.Set(s => s.shadows = (ShadowDetail)42);
+            Assert.AreEqual(ShadowDetail.High, phone.Data.shadows);
+            phone.Set(s => s.shadows = ShadowDetail.Off);
+            phone.ResetTab(SettingsTab.Graphics);
+            Assert.AreEqual(ShadowDetail.Medium, phone.Data.shadows);
+        }
+
+        [Test]
+        public void ShadowLevels_ReachFurtherAndFilterMore_AsTheyGoUp()
+        {
+            Assert.IsFalse(ShadowProfile.For(ShadowDetail.Off).Enabled);
+            var low = ShadowProfile.For(ShadowDetail.Low);
+            var medium = ShadowProfile.For(ShadowDetail.Medium);
+            var high = ShadowProfile.For(ShadowDetail.High);
+            Assert.IsTrue(low.Enabled && medium.Enabled && high.Enabled);
+            Assert.Less(low.Distance, medium.Distance);
+            Assert.Less(medium.Distance, high.Distance);
+            Assert.LessOrEqual(low.Resolution, medium.Resolution);
+            Assert.LessOrEqual(medium.Resolution, high.Resolution);
+            Assert.Less(low.Cascades, medium.Cascades);
+            Assert.Less(medium.Cascades, high.Cascades);
+            Assert.Less(low.SoftQuality, medium.SoftQuality);
+            Assert.Less(medium.SoftQuality, high.SoftQuality);
+            Assert.That(high.Splits.x, Is.LessThan(high.Splits.y).And.GreaterThan(0f));
+            Assert.That(high.Splits.y, Is.LessThan(high.Splits.z));
+            Assert.That(high.Splits.z, Is.LessThan(1f));
+        }
+
+        [Test]
         public void Phones_Offer90Fps_AndTouchSensitivityClamps()
         {
             var phone = new GameSettings(true, new MemoryStore());

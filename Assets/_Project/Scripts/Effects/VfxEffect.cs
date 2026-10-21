@@ -20,11 +20,13 @@ namespace WingingIt.Effects
         float _lifetime;
         bool _looping;
         float _endTime = float.PositiveInfinity;
+        float _scale = 1f;
 
         /// <summary>What a system's scaled values are at scale 1.</summary>
         struct Base
         {
-            public float size, sizeX, sizeY, sizeZ, speed, radius, gravity, velX, velY, velZ;
+            public float size, sizeX, sizeY, sizeZ, speed, radius, gravity, velX, velY, velZ, rate;
+            public ParticleSystem.MinMaxGradient color;
         }
 
         public VfxKind Kind { get; internal set; }
@@ -59,6 +61,7 @@ namespace WingingIt.Effects
                     size = main.startSizeMultiplier, sizeX = main.startSizeXMultiplier, sizeY = main.startSizeYMultiplier,
                     sizeZ = main.startSizeZMultiplier, speed = main.startSpeedMultiplier, radius = shape.radius,
                     gravity = main.gravityModifierMultiplier, velX = vel.xMultiplier, velY = vel.yMultiplier, velZ = vel.zMultiplier,
+                    rate = ps.emission.rateOverTimeMultiplier, color = main.startColor,
                 };
                 _looping |= main.loop;
                 float emit = main.loop ? 0f : main.duration;
@@ -76,6 +79,7 @@ namespace WingingIt.Effects
         /// <summary>Scales sizes, speeds, emitter shapes and gravity together, so a bigger blast looks the same, only bigger.</summary>
         void ApplyScale(float scale)
         {
+            _scale = scale;
             for (int i = 0; i < _systems.Length; i++)
             {
                 var ps = _systems[i];
@@ -93,6 +97,9 @@ namespace WingingIt.Effects
                 }
                 main.startSpeedMultiplier = b.speed * scale;
                 main.gravityModifierMultiplier = b.gravity * scale;
+                main.startColor = b.color; // undo a tint from its last use
+                var emission = ps.emission;
+                emission.rateOverTimeMultiplier = b.rate;
                 var shape = ps.shape;
                 shape.radius = b.radius * scale;
                 var vel = ps.velocityOverLifetime;
@@ -124,6 +131,56 @@ namespace WingingIt.Effects
             }
             _endTime = _looping ? float.PositiveInfinity : Time.time + _lifetime;
         }
+
+        /// <summary>The index of the particle system called <paramref name="systemName"/> (for <see cref="Tune"/>), or -1.</summary>
+        public int IndexOf(string systemName)
+        {
+            Init();
+            for (int i = 0; i < _systems.Length; i++)
+                if (_systems[i].name == systemName)
+                    return i;
+            return -1;
+        }
+
+        /// <summary>
+        /// Scales one system's emission rate and puff size against what <see cref="Vfx"/> played it at, so a looping
+        /// emitter can swell and fade (a rate of 0 stops new puffs; those already out keep going).
+        /// </summary>
+        public void Tune(int system, float rate, float size)
+        {
+            Init();
+            if (system < 0 || system >= _systems.Length)
+                return;
+            var ps = _systems[system];
+            var b = _base[system];
+            var emission = ps.emission;
+            emission.rateOverTimeMultiplier = b.rate * Mathf.Max(0f, rate);
+            var main = ps.main;
+            if (!main.startSize3D)
+                main.startSizeMultiplier = b.size * _scale * Mathf.Max(0f, size);
+        }
+
+        /// <summary>Tints one system's new puffs: a random colour between <paramref name="a"/> and <paramref name="b"/>.</summary>
+        public void SetColor(int system, Color a, Color b)
+        {
+            Init();
+            if (system < 0 || system >= _systems.Length)
+                return;
+            var main = _systems[system].main;
+            main.startColor = new ParticleSystem.MinMaxGradient(a, b);
+        }
+
+        /// <summary>Tints the systems called <paramref name="systemName"/>, light tone <paramref name="color"/> (a one-shot's dust).</summary>
+        public void SetColor(string systemName, Color color, float shade = 0.82f)
+        {
+            Init();
+            for (int i = 0; i < _systems.Length; i++)
+                if (_systems[i].name == systemName)
+                    SetColor(i, color, Shade(color, shade));
+        }
+
+        /// <summary><paramref name="color"/> darkened by <paramref name="shade"/> (alpha kept): the second tone of a tinted puff.</summary>
+        public static Color Shade(Color color, float shade) => new(color.r * shade, color.g * shade, color.b * shade, color.a);
 
         /// <summary>Pauses or resumes emission of a looping effect (its puffs already out keep going).</summary>
         public void SetEmitting(bool emitting)

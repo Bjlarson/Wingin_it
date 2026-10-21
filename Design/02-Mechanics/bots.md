@@ -166,6 +166,19 @@ Runs relax the terrain check to the landing minimum (20 m) and skip the pole's c
 
 **Not yet seen in a match** (only the EditMode `BannerPlanTests` ran). Check: do runners actually pass inside the 20 m zone below 40 m, do they clip the pole, and is 2 runners too many or too few.
 
+## Airfield Domination (built 2026-10-21, prototype)
+
+Each bot gets a **role** from its roster slot (`DominationPlan.RoleForSlot`: Capturer, Cover repeating, so 4 / 3 in 7). The role only matters while a Domination match is on (`DominationWorld.Active`). Every 2 s (`ReplanInterval`) `BotBrain.UpdateDomination` picks a field and a duty:
+
+- **Field values** (`DominationPlan.FieldValue`, per team): our field under attack (an enemy capturing or contesting it) 4, a neutral field or an enemy field with its tower down 3, a defended enemy field 2, our own quiet field 1. Slots spread over the fields in proportion (`PickField`, a low-discrepancy walk), so the team splits rather than all chasing one field.
+- **BombTower:** any bot with bombs left (Heavies) goes for the nearest **defended enemy field** first, whatever its role: a level run at 120 m straight over the tower, dropping when the predicted impact is on it or within 10 m of its foot, then 1 km out and back round for another pass. Ignores enemies on the way. Ends when the tower is down, the bombs are gone or the field is ours.
+- **Capture** (Capturer, field not ours): flies the retreat trip (approach lane, final, roll-out) into the field and sits stopped in the zone until it flips. It won't start onto a contested field (the cover strafes the enemy parked there first), it calls the trip off before final if the plan changes, and once on final it's committed. Parked, it **takes off again** once the field is ours or can't be taken, or an enemy lands too (unless it's hurt and the field is now ours: then it stays for the repair).
+- **Cover** (Cover role, or a Capturer whose field is already ours or can't be landed on): orbits 250 m over the field at 600 m radius, fights enemies within 1.5 km of it, and always targets an enemy on the wheels on its runway.
+
+Tested: EditMode `DominationPlanTests` (11); PlayMode `DominationBotTests`: a full 8v8 of bots (the player flown as a cover bot) for 240 s at 4× speed. First run: 8 captures, every field changed hands at least once, 4 bombs dropped, towers knocked down, 2 deaths nobody caused.
+
+**Not yet watched in a match** (only the test's log). Check: do capturers queue on final behind each other, is 4 / 3 the right split, and is cover at 250 m too high to stop a capturer landing.
+
 ## Tested
 
 - EditMode (`BotSteeringTests`): throttle commands (air, ground, lost thrust, dead engine), intercept lead + cap, formation slot frame + speed trim, orbit point, stick slew.
@@ -188,7 +201,7 @@ Runs relax the terrain check to the landing minimum (20 m) and skip the pole's c
 - Difficulty online: one level for the whole match, or matched to the players' skill? Should a team's bots get harder to make up for a missing player? Decide with matchmaking (Phase 7).
 - The difficulty numbers are a first guess. **Needs a hands-on session** against each level: is Easy beatable by a new player, and is Hard a challenge without feeling like aimbots?
 - A Support bot doesn't fly toward hurt allies to heal them; it only switches the aura on when one happens to be close.
-- Bombs aren't used: there are no ground objectives until Phase 8.
+- Bombs are only used on control towers in Airfield Domination; nothing else in the world is a bombing target until Phase 8.
 - Bots don't avoid flying through allies' line of fire yet.
 - A bot that climbed over an obstacle can be slow to settle onto a low waypoint (it circles down to it).
 - Two bots on final into the same runway: the second only notices the first once it's on the wheels (then it goes around or holds). Spacing on final isn't planned.

@@ -816,23 +816,186 @@ namespace WingingIt.Editor
 
         // ------------------------------------------------------------------ ocean
 
+        const string OceanSurfacePath = TerrainFolder + "/OceanSurface.asset";
+        const string OceanShorePath = TerrainFolder + "/OceanShore.asset";
+        const string WaterMaterialPath = B.MaterialsFolder + "/Water.mat";
+        const int ShoreResolution = 1024;
+        /// <summary>Water this deep or deeper is the open-sea blue; shallower shades to teal.</summary>
+        const float ShallowDepth = 20f;
+        /// <summary>How far the shore foam band's map reaches out from the land (the shader draws the inner half of it).</summary>
+        const float ShoreFoamReach = 16f;
+
         /// <summary>
-        /// A 30 km sea plane at y = 0 on the Water layer: solid (flying into it is a crash), but never landable
-        /// (<see cref="PlaneController.IsWater"/>).
+        /// The sea. What you hit is "Ocean": a flat 30 km box at y = 0 on the Water layer, solid (flying into it is a crash)
+        /// but never landable (<see cref="PlaneController.IsWater"/>). What you see is "Ocean Surface" beside it: the wave
+        /// shader on a grid that follows the camera (<see cref="OceanSurface"/>), with the shallows and shore foam baked
+        /// from the heightmap (<see cref="BakeShore"/>). The canal is the same sea, so it gets both for free.
         /// </summary>
         static void BuildOcean(Transform parent)
         {
-            var ocean = GameObject.CreatePrimitive(PrimitiveType.Plane);
-            ocean.name = "Ocean";
+            var ocean = new GameObject("Ocean");
             ocean.layer = PlaneController.WaterLayer;
             ocean.transform.SetParent(parent, false);
             ocean.transform.localScale = new Vector3(3000f, 1f, 3000f); // 30 km: the edge is always lost in the fog
-            Object.DestroyImmediate(ocean.GetComponent<MeshCollider>());
             var box = ocean.AddComponent<BoxCollider>(); // 10 m thick, top at the surface
             box.center = new Vector3(0f, -5f, 0f);
             box.size = new Vector3(10f, 10f, 10f);
-            ocean.GetComponent<Renderer>().sharedMaterial = B.Materials.Mat("Greybox_Water", new Color(0.16f, 0.4f, 0.6f), smoothness: 0.85f);
             ocean.isStatic = true;
+
+            var mesh = AssetDatabase.LoadAssetAtPath<Mesh>(OceanSurfacePath);
+            if (mesh == null)
+            {
+                mesh = OceanSurface.BuildMesh();
+                AssetDatabase.CreateAsset(mesh, OceanSurfacePath);
+            }
+            var surface = new GameObject("Ocean Surface", typeof(MeshFilter), typeof(MeshRenderer));
+            surface.layer = PlaneController.WaterLayer;
+            surface.transform.SetParent(parent, false);
+            surface.GetComponent<MeshFilter>().sharedMesh = mesh;
+            var renderer = surface.GetComponent<MeshRenderer>();
+            renderer.sharedMaterial = WaterMaterial(BakeShore());
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            surface.AddComponent<OceanSurface>();
+        }
+
+        /// <summary>The water material (kept between builds for hand tuning), pointed at this build's shore map.</summary>
+        static Material WaterMaterial(Texture2D shore)
+        {
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(WaterMaterialPath);
+            if (mat == null)
+            {
+                // The palette's water swatches (ArtSource/plane_kit.py: water_deep, foam).
+                mat = new Material(Shader.Find("Winging It/Water"));
+                mat.SetColor("_Deep", Hex("1E6E9C"));
+                mat.SetColor("_Foam", Hex("F4FBFF"));
+                AssetDatabase.CreateAsset(mat, WaterMaterialPath);
+            }
+            mat.SetTexture("_ShoreTex", shore);
+            mat.SetTexture("_FoamTex", FoamTexture());
+            mat.SetVector("_ShoreRect", new Vector4(-TerrainSize * 0.5f, -TerrainSize * 0.5f, 1f / TerrainSize, 0f));
+            EditorUtility.SetDirty(mat);
+            return mat;
+        }
+
+        static Color Hex(string hex) => ColorUtility.TryParseHtmlString("#" + hex, out var c) ? c : Color.magenta;
+
+        const string WaterFoamPath = B.Root + "/Art/Textures/WaterFoam.asset";
+
+        /// <summary>
+        /// The white caps' froth (the water shader reveals it where a crest is high enough, lowest values first): a
+        /// tileable Worley pattern, distance to the nearest cell border, big cells plus a finer layer. So a cap starts as a
+        /// web of foam lines and fills in toward the peak. Made once; delete the asset to regenerate it.
+        /// </summary>
+        static Texture2D FoamTexture()
+        {
+            var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(WaterFoamPath);
+            if (tex != null)
+                return tex;
+
+            const int size = 256;
+            float[] coarse = CellBorders(size, 6, 5151), fine = CellBorders(size, 15, 5252);
+            var pixels = new byte[size * size];
+            for (int i = 0; i < pixels.Length; i++)
+                pixels[i] = (byte)Mathf.RoundToInt((0.03f + 0.97f * Mathf.Clamp01(0.7f * coarse[i] + 0.3f * fine[i])) * 255f);
+
+            tex = new Texture2D(size, size, TextureFormat.R8, true, true)
+            {
+                name = "Water Foam",
+                wrapMode = TextureWrapMode.Repeat,
+                filterMode = FilterMode.Trilinear,
+            };
+            tex.SetPixelData(pixels, 0);
+            tex.Apply(true);
+            AssetDatabase.CreateAsset(tex, WaterFoamPath);
+            return tex;
+        }
+
+        /// <summary>
+        /// Tileable Worley noise over a <paramref name="size"/>² image with <paramref name="cells"/>² jittered points:
+        /// per pixel, how far it is from the border between its two nearest points (F2 - F1), 0 on the border .. 1.
+        /// </summary>
+        static float[] CellBorders(int size, int cells, int seed)
+        {
+            var rng = new System.Random(seed);
+            var points = new Vector2[cells * cells];
+            for (int i = 0; i < points.Length; i++)
+                points[i] = new Vector2((float)rng.NextDouble(), (float)rng.NextDouble());
+
+            var result = new float[size * size];
+            for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                var p = new Vector2((x + 0.5f) * cells / size, (y + 0.5f) * cells / size);
+                int cx = Mathf.FloorToInt(p.x), cy = Mathf.FloorToInt(p.y);
+                float f1 = float.MaxValue, f2 = float.MaxValue;
+                for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    int nx = cx + dx, ny = cy + dy;
+                    var point = points[((ny % cells + cells) % cells) * cells + (nx % cells + cells) % cells];
+                    float d = Vector2.Distance(p, new Vector2(nx, ny) + point);
+                    if (d < f1)
+                    {
+                        f2 = f1;
+                        f1 = d;
+                    }
+                    else if (d < f2)
+                        f2 = d;
+                }
+                result[y * size + x] = Mathf.Clamp01((f2 - f1) / 0.6f);
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// The water shader's shore map over the terrain square, from <see cref="Height"/>: R is how shallow the water is
+        /// (0 at <see cref="ShallowDepth"/> and deeper, 1 at the waterline and on land), G the shore foam (1 on land,
+        /// falling to 0 <see cref="ShoreFoamReach"/> m out). Beyond the square it's open sea (the sampler clamps).
+        /// </summary>
+        static Texture2D BakeShore()
+        {
+            const int res = ShoreResolution;
+            float cell = TerrainSize / res, half = TerrainSize * 0.5f;
+            var land = new bool[res * res];
+            var shallow = new byte[res * res];
+            for (int z = 0; z < res; z++)
+            for (int x = 0; x < res; x++)
+            {
+                float h = Height(-half + (x + 0.5f) * cell, -half + (z + 0.5f) * cell);
+                land[z * res + x] = h > 0f;
+                shallow[z * res + x] = (byte)Mathf.RoundToInt(Mathf.Clamp01(1f + h / ShallowDepth) * 255f);
+            }
+
+            int reach = Mathf.CeilToInt(ShoreFoamReach / cell);
+            var pixels = new byte[res * res * 2];
+            for (int z = 0; z < res; z++)
+            for (int x = 0; x < res; x++)
+            {
+                int i = z * res + x;
+                float nearest = land[i] ? 0f : float.MaxValue;
+                for (int dz = -reach; dz <= reach && nearest > 0f; dz++)
+                for (int dx = -reach; dx <= reach; dx++)
+                {
+                    int nx = x + dx, nz = z + dz;
+                    if (nx >= 0 && nz >= 0 && nx < res && nz < res && land[nz * res + nx])
+                        nearest = Mathf.Min(nearest, Mathf.Sqrt(dx * dx + dz * dz) * cell);
+                }
+                pixels[i * 2] = shallow[i];
+                pixels[i * 2 + 1] = (byte)Mathf.RoundToInt(Mathf.Clamp01(1f - nearest / ShoreFoamReach) * 255f);
+            }
+
+            var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(OceanShorePath);
+            if (tex == null)
+            {
+                tex = new Texture2D(res, res, TextureFormat.RG16, true, true) { name = "Ocean Shore" };
+                AssetDatabase.CreateAsset(tex, OceanShorePath);
+            }
+            tex.wrapMode = TextureWrapMode.Clamp;
+            tex.filterMode = FilterMode.Bilinear;
+            tex.SetPixelData(pixels, 0);
+            tex.Apply(true);
+            EditorUtility.SetDirty(tex);
+            return tex;
         }
 
         // ------------------------------------------------------------------ city
@@ -1750,10 +1913,15 @@ namespace WingingIt.Editor
         /// <summary>How far past a home runway's far end (m) the banner pole stands, clear of the field's AA corners.</summary>
         const float BannerStandDistance = 150f;
         const float BannerPoleHeight = 45f;
+        /// <summary>Height of the line the banner hangs from, strung between the poles inside the grab zone (m).</summary>
+        const float BannerLineHeight = 30f;
+        const float BannerZoneRadius = 20f, BannerZoneHeight = 40f;
 
         /// <summary>
-        /// Capture the Banner's stands (match-modes.md): one pole past the far end of each home runway, in line with it.
-        /// The grab zone (<see cref="BannerStand"/>) reaches 40 m up, so the pole stands taller; the banner flies from its top.
+        /// Capture the Banner's stands (match-modes.md): a gate past the far end of each home runway, in line with it — two
+        /// poles either side of the grab zone (<see cref="BannerStand"/>), across the runway's line, with the banner hanging
+        /// from a line between them. Fly through the gap to grab it. Nothing on a stand has a collider, so a plane that
+        /// clips a pole flies on through it.
         /// </summary>
         static void BuildBannerStands(Transform parent, Terrain terrain, params Airfield[] homes)
         {
@@ -1773,11 +1941,25 @@ namespace WingingIt.Editor
                 go.transform.SetPositionAndRotation(new Vector3(xz.x, ground, xz.z), home.transform.rotation);
                 var mount = new GameObject("Flag Mount").transform;
                 mount.SetParent(go.transform, false);
-                mount.localPosition = new Vector3(0f, BannerPoleHeight, 0f);
-                B.Box("Pole", go.transform, new Vector3(0f, BannerPoleHeight * 0.5f, 0f), new Vector3(1.2f, BannerPoleHeight, 1.2f), pole, true);
-                B.Box("Base", go.transform, new Vector3(0f, 1f, 0f), new Vector3(6f, 2f, 6f), pole, true);
-                var flag = B.Box("Banner", go.transform, new Vector3(0f, BannerPoleHeight - 6f, 5f), new Vector3(0.3f, 10f, 10f), cloth, false);
-                go.AddComponent<BannerStand>().Configure(home.Team, 20f, 40f, mount, flag.transform);
+                mount.localPosition = new Vector3(0f, BannerLineHeight, 0f);
+                foreach (float side in new[] { -1f, 1f })
+                {
+                    float x = side * BannerZoneRadius;
+                    // Each pole stands on its own ground, so the gate sits right on a slope.
+                    Vector3 footWorld = go.transform.TransformPoint(new Vector3(x, 0f, 0f));
+                    float foot = terrain.SampleHeight(footWorld) + terrain.transform.position.y - ground;
+                    float height = BannerPoleHeight - foot;
+                    Cylinder(side < 0f ? "Pole L" : "Pole R", go.transform, new Vector3(x, foot + height * 0.5f, 0f), 1.2f, height, pole);
+                    Cylinder(side < 0f ? "Base L" : "Base R", go.transform, new Vector3(x, foot + 0.5f, 0f), 4f, 1f, pole);
+                    // A team-coloured cap, so the gate reads from a distance.
+                    Cylinder(side < 0f ? "Cap L" : "Cap R", go.transform, new Vector3(x, BannerPoleHeight - 1.5f, 0f), 1.6f, 3f, cloth);
+                }
+                B.Box("Line", go.transform, new Vector3(0f, BannerLineHeight, 0f), new Vector3(BannerZoneRadius * 2f, 0.15f, 0.15f), pole, false);
+                // The cloth hangs from the middle of the line, its face across the gap; its long side (local z) runs along
+                // the line, which is how the towed banner trails it.
+                var flag = B.Box("Banner", go.transform, new Vector3(0f, BannerLineHeight - 5f, 0f), new Vector3(0.3f, 10f, 14f), cloth, false);
+                flag.transform.localRotation = Quaternion.Euler(0f, 90f, 0f);
+                go.AddComponent<BannerStand>().Configure(home.Team, BannerZoneRadius, BannerZoneHeight, mount, flag.transform);
             }
         }
 
@@ -1841,6 +2023,7 @@ namespace WingingIt.Editor
                 player.GetComponent<PlayerFlightInput>(), player.GetComponent<DamageTester>(),
             });
             B.SetArray(match, "sandboxOnlyBehaviours", new Behaviour[] { player.GetComponent<ClassSwitcher>() });
+            B.SetField(match, "cameraRig", Object.FindAnyObjectByType<FlightCameraRig>());
             var hud = GameObject.Find("Flight HUD");
             var debugHud = GameObject.Find("Flight Debug HUD");
             B.SetArray(match, "playOnlyObjects", new[] { hud, debugHud });

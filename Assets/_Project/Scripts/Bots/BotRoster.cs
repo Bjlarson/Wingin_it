@@ -145,6 +145,24 @@ namespace WingingIt.Bots
         /// </summary>
         public void SetFightAreas(IEnumerable<Vector3> areas) => fightAreas = new List<Vector3>(areas);
 
+        /// <summary>
+        /// Fills teams 0 .. <paramref name="count"/> - 1 to <paramref name="size"/> planes each from now on (free for
+        /// all: 16 teams of 1). Bots on a team that no longer exists leave at once. Set it before the bots join.
+        /// </summary>
+        public void SetTeams(int count, int size)
+        {
+            teamCount = Mathf.Max(1, count);
+            teamSize = Mathf.Max(0, size);
+            for (int i = _bots.Count - 1; i >= 0; i--)
+            {
+                if (_bots[i] != null && _bots[i].GetComponent<PlaneController>().Team < teamCount)
+                    continue;
+                if (_bots[i] != null)
+                    Destroy(_bots[i].gameObject);
+                _bots.RemoveAt(i);
+            }
+        }
+
         void Start() => Refresh();
 
         void Update()
@@ -226,23 +244,26 @@ namespace WingingIt.Bots
             return n;
         }
 
-        /// <summary>A new bot on <paramref name="team"/>, over (or on) its home airfield. Null if the team has no airfield or there's nothing to fly.</summary>
+        /// <summary>
+        /// A new bot on <paramref name="team"/>, over (or on) its home airfield, or wherever the match's spawn rules put
+        /// it (an arena's air start) for a team with no airfield. Null if there's nowhere to put it or nothing to fly.
+        /// </summary>
         BotBrain Spawn(int team)
         {
             Airfield home = HomeField(team);
             int cls = TeamFill.PickClass(ClassCounts(team), classWeights);
-            if (home == null || planePrefab == null || cls < 0 || cls >= classes.Length || classes[cls] == null)
+            if ((home == null && PlaneRespawner.Rules == null) || planePrefab == null || cls < 0 || cls >= classes.Length || classes[cls] == null)
             {
-                Debug.LogWarning($"BotRoster: can't add a bot to team {team} (no home airfield, plane prefab or class).", this);
+                Debug.LogWarning($"BotRoster: can't add a bot to team {team} (no home airfield or spawn rules, plane prefab or class).", this);
                 return null;
             }
 
             _spawned.TryGetValue(team, out int index);
             _spawned[team] = index + 1;
 
-            Transform spawn = home.AirSpawn != null ? home.AirSpawn : home.transform;
+            Transform spawn = home == null ? transform : home.AirSpawn != null ? home.AirSpawn : home.transform;
             var go = Instantiate(planePrefab, spawn.position, spawn.rotation, transform);
-            go.name = $"Bot {team}-{index + 1} ({classes[cls].displayName})";
+            go.name = teamSize == 1 ? $"Bot {team} ({classes[cls].displayName})" : $"Bot {team}-{index + 1} ({classes[cls].displayName})";
             var plane = go.GetComponent<PlaneController>();
             plane.Team = team;
             plane.SetStats(classes[cls]);
@@ -251,9 +272,11 @@ namespace WingingIt.Bots
             var brain = go.AddComponent<BotBrain>();
             brain.Difficulty = difficulty;
             brain.BannerRole = BannerPlan.RoleForSlot(index); // only used while a Capture the Banner match is on
+            brain.DominationRole = DominationPlan.RoleForSlot(index); // ...and these while a Domination match is on
+            brain.RosterSlot = index;
             if (go.TryGetComponent<PlaneRespawner>(out var respawner))
                 respawner.SpawnNow();
-            brain.SetPatrol(PatrolRoute(home.transform.position, index));
+            brain.SetPatrol(PatrolRoute(home != null ? home.transform.position : go.transform.position, home != null ? index : team));
             _bots.Add(brain);
             return brain;
         }

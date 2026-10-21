@@ -59,8 +59,13 @@ namespace WingingIt.CameraSystem
         float _deathBlend; // 0 = chase framing, 1 = fully pulled back
         float _aimScale = 1f, _lookScale = 1f, _fovOffset;
         bool _speedFov = true;
+        bool _lockToPlane;
+
+        PlaneController _own; // the player's plane while spectating someone else
 
         public PlaneController Target => target;
+        /// <summary>Following another plane (the player is out): a plain chase view, no mouse aim or lock to the plane.</summary>
+        public bool Spectating => _own != null;
         public bool MouseAimMode { get; set; }
         public bool FreeLookHeld { get; set; }
 
@@ -94,6 +99,7 @@ namespace WingingIt.CameraSystem
             _lookScale = s.freeLookSensitivity;
             _fovOffset = s.fieldOfView - baseFov; // the speed and boost widening keep their offsets
             _speedFov = s.speedFov;
+            _lockToPlane = s.cameraLockedToPlane;
         }
 
         public void SetTarget(PlaneController plane)
@@ -106,6 +112,30 @@ namespace WingingIt.CameraSystem
                 target.Respawned += OnRespawned;
                 SnapBehindTarget();
             }
+        }
+
+        /// <summary>
+        /// Follows <paramref name="plane"/> as a spectator (chase view, snapped behind it), or goes back to the player's
+        /// own plane with null.
+        /// </summary>
+        public void Spectate(PlaneController plane)
+        {
+            if (plane == null || plane == (_own != null ? _own : target))
+            {
+                if (_own != null)
+                {
+                    var own = _own;
+                    _own = null;
+                    SetTarget(own);
+                }
+                return;
+            }
+            if (_own == null)
+                _own = target;
+            FreeLookHeld = false;
+            _stickLook = Vector2.zero;
+            if (plane != target)
+                SetTarget(plane);
         }
 
         public void SetCinemachineCamera(CinemachineCamera cam) => cinemachineCamera = cam;
@@ -178,10 +208,15 @@ namespace WingingIt.CameraSystem
             Quaternion chaseTarget = Quaternion.LookRotation(plane.forward, desiredUp);
             _chaseRotation = Quaternion.Slerp(_chaseRotation, chaseTarget, 1f - Mathf.Exp(-chaseRotationSmoothing * dt));
 
-            if (!MouseAimMode && !FreeLookHeld)
+            if ((!MouseAimMode && !FreeLookHeld) || Spectating)
                 GetYawPitch(plane.forward, out _aimYaw, out _aimPitch); // keep in sync for switching modes
 
-            Quaternion baseView = MouseAimMode ? AimRotation : _chaseRotation;
+            // Locked to the plane: the view is the plane's own orientation, so the camera spins with it.
+            Quaternion baseView = Spectating ? _chaseRotation
+                : _lockToPlane && target.IsAlive ? plane.rotation
+                : MouseAimMode ? AimRotation : _chaseRotation;
+            if (_lockToPlane && !Spectating)
+                _chaseRotation = plane.rotation; // no swing-back when switching the setting off
             Quaternion view = baseView * Quaternion.Euler(-_lookPitch, _lookYaw, 0f);
 
             // The dead plane's transform stays where it died, so the camera holds on the explosion and backs away.

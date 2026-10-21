@@ -117,10 +117,10 @@ namespace WingingIt.Tests
 
             var health = _plane.GetComponent<PlaneHealth>();
             var wing = health.GetPart(PlanePartType.WingRight);
-            // The wing carries its engine: the prop (casts shadows) and its blur disc (doesn't) sit off the wing's pivot.
+            // The wing carries its engine: the prop and its blur disc (the prop-blur material) sit off the wing's pivot.
             var prop = wing.GetComponentsInChildren<MeshRenderer>()
                 .Single(r => IsModel(r) && r.transform.localPosition != Vector3.zero
-                             && r.shadowCastingMode != UnityEngine.Rendering.ShadowCastingMode.Off).transform;
+                             && r.sharedMaterials.All(m => m.name != "Plane_PropBlur")).transform;
             Quaternion before = prop.localRotation;
             yield return new WaitForSeconds(0.2f);
             Assert.Greater(Quaternion.Angle(before, prop.localRotation), 1f, "the wing prop spins");

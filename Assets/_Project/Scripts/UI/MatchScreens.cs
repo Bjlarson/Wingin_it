@@ -98,7 +98,7 @@ namespace WingingIt.UI
         }
 
         /// <summary>What's on screen, to re-run the open glow when it changes.</summary>
-        object ScreenKey() => (match.Phase, _front, _settingsOpen, match.MenuOpen, match.Picker);
+        object ScreenKey() => (match.Phase, _front, _settingsOpen, match.MenuOpen, match.Picker, match.IsSpectating);
 
         /// <summary>Notes when the screen changes, for the open glow and the fade-in. Checked in OnGUI too, so a screen
         /// opened by input this frame starts faded out rather than flashing in for a frame.</summary>
@@ -218,11 +218,14 @@ namespace WingingIt.UI
                     // Esc closes an open airfield picker first; a second Esc opens the menu.
                     if (_nav.Back && match.Picker == ClassPicker.Airfield)
                         match.CloseAirfieldPicker();
-                    else
-                        OpenMenu();
+                    else if (!(_nav.PadBack && !_nav.MenuButton && !(Keyboard.current?.escapeKey.wasPressedThisFrame ?? false)))
+                        OpenMenu(); // the gamepad's B is Boost in flight, so only Esc / Start open the menu
                     return;
                 }
-                PickerInput();
+                if (match.IsSpectating)
+                    SpectateInput();
+                else
+                    PickerInput();
                 return;
             }
 
@@ -272,27 +275,60 @@ namespace WingingIt.UI
 
         void PickerInput()
         {
-            var keyboard = Keyboard.current;
-            if (keyboard == null || match.Phase != MatchPhase.Playing)
+            if (match.Phase != MatchPhase.Playing)
                 return;
+            var keyboard = Keyboard.current;
+            var pad = Gamepad.current;
+            bool tab = keyboard != null && keyboard.tabKey.wasPressedThisFrame;
+            bool padToggle = pad != null && pad.buttonNorth.wasPressedThisFrame; // Y: change plane / next spawn field
             if (match.Picker == ClassPicker.None)
             {
-                if (keyboard.tabKey.wasPressedThisFrame)
+                _pickerWas = false;
+                if (tab || padToggle)
                     match.OpenAirfieldPicker();
                 return;
             }
-            if (keyboard.tabKey.wasPressedThisFrame)
+            if (!_pickerWas)
+            {
+                _pickerWas = true;
+                _pickHighlight = match.SelectedClass;
+                return; // the press that opened the picker must not also pick
+            }
+            int n = match.Classes.Count;
+            if (_nav.Left) _pickHighlight = MenuMath.Step(_pickHighlight, -1, n);
+            if (_nav.Right) _pickHighlight = MenuMath.Step(_pickHighlight, 1, n);
+            if (tab || padToggle)
             {
                 if (match.Picker == ClassPicker.Airfield)
                 {
                     match.CloseAirfieldPicker();
                     return;
                 }
-                match.CycleSpawnField(keyboard.shiftKey.isPressed ? -1 : 1);
+                match.CycleSpawnField(keyboard != null && keyboard.shiftKey.isPressed ? -1 : 1);
             }
+            if (_nav.Confirm)
+            {
+                PickInPlay(_pickHighlight);
+                return;
+            }
+            if (keyboard == null)
+                return;
             for (int i = 0; i < 4; i++)
                 if (keyboard[Key.Digit1 + i].wasPressedThisFrame)
                     PickInPlay(i);
+        }
+
+        bool _pickerWas;
+        int _pickHighlight;
+
+        /// <summary>Out of lives: left / right (or the shoulder buttons) switch the survivor being watched.</summary>
+        void SpectateInput()
+        {
+            var pad = Gamepad.current;
+            if (_nav.Left || (pad != null && pad.leftShoulder.wasPressedThisFrame))
+                match.CycleSpectated(-1);
+            else if (_nav.Right || (pad != null && pad.rightShoulder.wasPressedThisFrame))
+                match.CycleSpectated(1);
         }
 
         void PickInPlay(int index)
@@ -364,6 +400,8 @@ namespace WingingIt.UI
                 case MatchPhase.Playing:
                     if (match.Phase == MatchPhase.Countdown)
                         DrawCountdown(width);
+                    else if (match.IsSpectating)
+                        DrawSpectating(width);
                     else if (match.Picker != ClassPicker.None)
                         DrawPicker(width);
                     else if (match.CanChangeClassAtAirfield && !match.MenuOpen)
@@ -722,18 +760,63 @@ namespace WingingIt.UI
             Backdrop(width);
             bool respawn = match.Picker == ClassPicker.Respawn;
             string title = respawn ? $"RESPAWN IN {Mathf.CeilToInt(match.RespawnTimeLeft)}" : "CHANGE PLANE";
-            string hint = respawn ? "1 – 4 OR CLICK TO PICK YOUR NEXT PLANE" : $"AT {match.SwapAirfield?.DisplayName.ToUpperInvariant()}  ·  1 – 4 OR CLICK  ·  ESC OR TAB KEEP THIS ONE";
+            string hint = respawn ? (_nav.Glyph("1 – 4 OR CLICK TO PICK YOUR NEXT PLANE", "D-PAD + A TO PICK YOUR NEXT PLANE") ?? "TAP TO PICK YOUR NEXT PLANE") : $"AT {match.SwapAirfield?.DisplayName.ToUpperInvariant()}  ·  " + (_nav.Glyph("1 – 4 OR CLICK  ·  ESC OR TAB KEEP THIS ONE", "D-PAD + A  ·  B OR Y KEEP THIS ONE") ?? "TAP TO PICK");
             _g.Tracked(new Rect(0f, 110f, width, 60f), title, _g.Title, 8f, TextAnchor.MiddleCenter, Color.white);
             _g.Tracked(new Rect(0f, 176f, width, 24f), hint, _g.Hint, 3.4f, TextAnchor.MiddleCenter, Steel);
             int n = match.Classes.Count;
             float cardsW = n * CardW + (n - 1) * CardGap;
-            int picked = ClassCards((width - cardsW) / 2f, 250f, CardH, respawn ? "PICK" : "SWAP", match.SelectedClass, false);
+            int picked = ClassCards((width - cardsW) / 2f, 250f, CardH, respawn ? "PICK" : "SWAP", _pickHighlight, false);
             if (picked >= 0 && !match.MenuOpen)
                 PickInPlay(picked);
             if (!respawn && !match.MenuOpen && _g.Button(new Rect(width / 2f - 130f, 250f + CardH + 36f, 260f, 56f), "KEEP", "ESC", false, false, false, TextAnchor.MiddleCenter))
                 match.CloseAirfieldPicker();
             if (respawn)
                 DrawSpawnFields(width, 250f + CardH + 36f);
+        }
+
+        /// <summary>
+        /// Out of lives (Ram Royale): YOU'RE OUT up top, the plane being watched with &lt; &gt; to switch at the bottom, and who's
+        /// still flying down the right. No backdrop: the point is to watch.
+        /// </summary>
+        void DrawSpectating(float width)
+        {
+            _g.Shadowed(new Rect(0f, 104f, width, 60f), "YOU'RE OUT", _g.Title, 8f, TextAnchor.MiddleCenter, Color.white);
+            _g.Shadowed(new Rect(0f, 166f, width, 24f), "SPECTATING UNTIL THE MATCH ENDS", _g.Hint, 3.4f, TextAnchor.MiddleCenter, Steel);
+
+            var survivors = match.Survivors;
+            var watched = match.Spectated;
+            var bar = new Rect(width / 2f - 300f, ReferenceHeight - 150f, 600f, 64f);
+            _g.Panel(bar, GlowRest, false);
+            string name = watched != null ? match.PilotName(watched).ToUpperInvariant() : survivors.Count > 0 ? "—" : "NOBODY LEFT";
+            if (watched != null)
+                _g.Fill(new Rect(bar.x + 92f, bar.center.y - 5f, 10f, 10f), match.TeamColor(watched.Team));
+            _g.Tracked(new Rect(bar.x + 112f, bar.y, bar.width - 224f, bar.height), name, _g.Item, 2.4f, TextAnchor.MiddleLeft, Color.white);
+            if (!match.MenuOpen && survivors.Count > 1)
+            {
+                if (_g.Button(new Rect(bar.x, bar.y, 76f, bar.height), "<", null, false, false, false, TextAnchor.MiddleCenter))
+                    match.CycleSpectated(-1);
+                if (_g.Button(new Rect(bar.xMax - 76f, bar.y, 76f, bar.height), ">", null, false, false, false, TextAnchor.MiddleCenter))
+                    match.CycleSpectated(1);
+            }
+            string hint = _nav.Glyph("LEFT · RIGHT  WATCH SOMEONE ELSE", "LB · RB  WATCH SOMEONE ELSE");
+            if (!string.IsNullOrEmpty(hint) && survivors.Count > 1)
+                _g.Shadowed(new Rect(0f, bar.yMax + 8f, width, 24f), hint, _g.Hint, 3f, TextAnchor.MiddleCenter, Alpha(White, 0.75f));
+
+            const float listW = 280f, rowH = 30f;
+            var list = new Rect(width - listW - 24f, 300f, listW, 56f + survivors.Count * rowH);
+            _g.Panel(list, GlowRest, false);
+            _g.Tracked(new Rect(list.x + 20f, list.y + 8f, listW - 40f, 40f), "STILL FLYING", _g.Hint, 3f, TextAnchor.MiddleLeft, Steel);
+            _g.Tracked(new Rect(list.x + 20f, list.y + 8f, listW - 40f, 40f), survivors.Count.ToString(), _g.Numeral, 0f, TextAnchor.MiddleRight, Color.white, 0.6f);
+            for (int i = 0; i < survivors.Count; i++)
+            {
+                var row = new Rect(list.x, list.y + 52f + i * rowH, listW, rowH);
+                bool lit = survivors[i] == watched;
+                if (lit)
+                    _g.Lit(row, 1f, true);
+                _g.Fill(new Rect(row.x + 20f, row.center.y - 4f, 8f, 8f), match.TeamColor(survivors[i].Team));
+                _g.Tracked(new Rect(row.x + 38f, row.y, listW - 58f, rowH), match.PilotName(survivors[i]).ToUpperInvariant(), _g.Hint, 1.8f,
+                    TextAnchor.MiddleLeft, lit ? Color.white : Alpha(White, 0.8f));
+            }
         }
 
         /// <summary>
@@ -768,7 +851,7 @@ namespace WingingIt.UI
         {
             var r = new Rect(width / 2f - 170f, ReferenceHeight - 270f, 340f, 56f);
             _g.Panel(r, GlowRest, false);
-            if (_g.Button(r, "CHANGE PLANE", "TAB", false, false, false, TextAnchor.MiddleCenter))
+            if (_g.Button(r, "CHANGE PLANE", _nav.Glyph("TAB", "Y"), false, false, false, TextAnchor.MiddleCenter))
                 match.OpenAirfieldPicker();
         }
 
@@ -977,44 +1060,75 @@ namespace WingingIt.UI
             return right - row.x - 10f;
         }
 
-        /// <summary>Both teams' pilots side by side (the mode's columns, best first), from <paramref name="top"/> down.</summary>
+        /// <summary>
+        /// Both teams' pilots side by side (the mode's columns, best first), from <paramref name="top"/> down. Free for all:
+        /// one ranking, the first 8 on the left and the next 8 on the right, each name with its pilot colour.
+        /// </summary>
         void DrawPilotTables(Rect panel, float top)
         {
             var mode = match.Mode;
-            var columns = mode.Columns;
             float colW = (panel.width - 72f - 40f) / 2f;
+            if (mode.IsFreeForAll)
+            {
+                var all = new List<PilotScore>(match.Score.Pilots);
+                all.Sort(mode.CompareForScoreboard);
+                for (int side = 0; side < 2; side++)
+                {
+                    var pilots = all.GetRange(Mathf.Min(all.Count, side * 8), Mathf.Clamp(all.Count - side * 8, 0, 8));
+                    DrawPilotTable(panel.x + 36f + side * (colW + 40f), top, colW, side == 0 ? "PILOTS" : "", Steel, pilots, side * 8);
+                }
+                return;
+            }
             for (int team = 0; team < 2; team++)
             {
-                float x = panel.x + 36f + team * (colW + 40f);
-                var head = new Rect(x, top, colW, 34f);
-                float nameW = DrawColumns(head, columns, c => c.Header, (_, r, text) =>
-                    _g.Tracked(r, text, _g.Hint, 3.6f, TextAnchor.MiddleRight, Steel));
-                _g.Tracked(new Rect(head.x + 16f, head.y, nameW, head.height), match.TeamName(team).ToUpperInvariant(), _g.Hint, 3.6f,
-                    TextAnchor.MiddleLeft, match.TeamColor(team));
-                _g.Fill(new Rect(x, head.yMax, colW, 1f), Alpha(Color.white, 0.14f));
-
                 var pilots = new List<PilotScore>();
                 foreach (var p in match.Score.Pilots)
                     if (p.Team == team)
                         pilots.Add(p);
                 pilots.Sort(mode.CompareForScoreboard);
-                float y = head.yMax + 2f;
-                foreach (var p in pilots)
+                DrawPilotTable(panel.x + 36f + team * (colW + 40f), top, colW, match.TeamName(team).ToUpperInvariant(), match.TeamColor(team), pilots, -1);
+            }
+        }
+
+        /// <summary>
+        /// One column of the scoreboard: a header (<paramref name="title"/> in <paramref name="titleColor"/>) and up to 8
+        /// pilots in the order given. With <paramref name="rankFrom"/> ≥ 0 (free for all), each row starts with its place
+        /// and a dot in the pilot's colour.
+        /// </summary>
+        void DrawPilotTable(float x, float top, float colW, string title, Color titleColor, List<PilotScore> pilots, int rankFrom)
+        {
+            var columns = match.Mode.Columns;
+            var head = new Rect(x, top, colW, 34f);
+            float nameW = DrawColumns(head, columns, c => c.Header, (_, r, text) =>
+                _g.Tracked(r, text, _g.Hint, 3.6f, TextAnchor.MiddleRight, Steel));
+            _g.Tracked(new Rect(head.x + 16f, head.y, nameW, head.height), title, _g.Hint, 3.6f, TextAnchor.MiddleLeft, titleColor);
+            _g.Fill(new Rect(x, head.yMax, colW, 1f), Alpha(Color.white, 0.14f));
+
+            float y = head.yMax + 2f;
+            for (int i = 0; i < pilots.Count; i++)
+            {
+                if (y > head.yMax + 8f * 42f)
+                    break;
+                var p = pilots[i];
+                bool you = p.Name == "You";
+                var row = new Rect(x, y, colW, 42f);
+                if (you)
+                    _g.Lit(row, 1f, true);
+                var tint = you ? Color.white : Alpha(White, 0.88f);
+                float rowNameW = DrawColumns(row, columns, c => c.Value(p), (c, r, text) =>
+                    _g.Tracked(r, text, _g.Numeral, 0f, TextAnchor.MiddleRight, Alpha(tint, c.Alpha), 0.75f));
+                float nameX = row.x + 16f;
+                if (rankFrom >= 0)
                 {
-                    if (y > head.yMax + 8f * 42f)
-                        break;
-                    bool you = p.Name == "You";
-                    var row = new Rect(x, y, colW, 42f);
-                    if (you)
-                        _g.Lit(row, 1f, true);
-                    var tint = you ? Color.white : Alpha(White, 0.88f);
-                    var pilot = p;
-                    float rowNameW = DrawColumns(row, columns, c => c.Value(pilot), (c, r, text) =>
-                        _g.Tracked(r, text, _g.Numeral, 0f, TextAnchor.MiddleRight, Alpha(tint, c.Alpha), 0.75f));
-                    _g.Tracked(new Rect(row.x + 16f, row.y, rowNameW, row.height), p.Name.ToUpperInvariant(), _g.Hint, 1.8f, TextAnchor.MiddleLeft, tint, 1f);
-                    y += 42f;
-                    _g.Fill(new Rect(x, y - 1f, colW, 1f), Alpha(Color.white, 0.05f));
+                    _g.Tracked(new Rect(nameX, row.y, 30f, row.height), (rankFrom + i + 1).ToString(), _g.Numeral, 0f, TextAnchor.MiddleRight,
+                        Alpha(tint, 0.6f), 0.6f);
+                    _g.Fill(new Rect(nameX + 40f, row.center.y - 4f, 8f, 8f), match.TeamColor(p.Team));
+                    nameX += 58f;
                 }
+                _g.Tracked(new Rect(nameX, row.y, rowNameW - (nameX - row.x - 16f), row.height), p.Name.ToUpperInvariant(), _g.Hint, 1.8f,
+                    TextAnchor.MiddleLeft, tint, 1f);
+                y += 42f;
+                _g.Fill(new Rect(x, y - 1f, colW, 1f), Alpha(Color.white, 0.05f));
             }
         }
     }

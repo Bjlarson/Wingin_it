@@ -5,9 +5,11 @@ namespace WingingIt.World
 {
     /// <summary>
     /// A team's banner stand for Capture the Banner (Design/01-Game-Design/match-modes.md#capture-the-banner-prototype):
-    /// a tall pole standing past the far end of its home runway, so a grab run isn't straight through the field's AA.
-    /// This transform is the foot of the pole. The grab / capture zone is a cylinder round it (<see cref="ZoneRadius"/>
-    /// wide, counting only below <see cref="ZoneHeight"/> above the ground); the rules that use it are
+    /// a gate of two tall poles past the far end of its home runway (so a grab run isn't straight through the field's AA),
+    /// with the banner hanging between them. The poles have no colliders: planes fly through them.
+    /// This transform is the middle of the gate, on the ground. The grab / capture zone is a cylinder round it
+    /// (<see cref="ZoneRadius"/> wide, the poles at its edge, counting only below <see cref="ZoneHeight"/> above the
+    /// ground); the rules that use it are
     /// <see cref="Match.BannerBoard"/>, which the level's stands feed through <see cref="Position"/>.
     /// </summary>
     public class BannerStand : MonoBehaviour
@@ -23,7 +25,7 @@ namespace WingingIt.World
         [SerializeField, Min(1f)] float zoneRadius = 20f;
         [Tooltip("The zone only counts below this height above the ground (m).")]
         [SerializeField, Min(1f)] float zoneHeight = 40f;
-        [Tooltip("Where the banner flies from while it's home: the top of the pole.")]
+        [Tooltip("Where the banner hangs from while it's home: the middle of the line between the poles.")]
         [SerializeField] Transform flagMount;
         [Tooltip("The cloth that flies from the pole; the towed banner takes it along while it's carried. Empty: one is made at runtime.")]
         [SerializeField] Transform cloth;
@@ -33,7 +35,7 @@ namespace WingingIt.World
         public float ZoneRadius => zoneRadius;
         public float ZoneHeight => zoneHeight;
         public Transform FlagMount => flagMount;
-        /// <summary>The foot of the pole: what the banner rules take as the stand's place.</summary>
+        /// <summary>The middle of the gate, on the ground: what the banner rules take as the stand's place.</summary>
         public Vector3 Position => transform.position;
 
         void OnEnable() => s_all.Add(this);

@@ -15,12 +15,16 @@ namespace WingingIt.Bots
         Chase,
         /// <summary>Enemy in weapons range: tracking it and firing when lined up.</summary>
         Attack,
+        /// <summary>Flying a bomb run over an enemy control tower (Airfield Domination).</summary>
+        Bomb,
         /// <summary>Damaged (or out of ammo): flying an approach lane home to repair, shooting only what crosses its nose.</summary>
         Retreat,
         /// <summary>On final: tracking the glide path down to the runway, then rolling out.</summary>
         Land,
         /// <summary>Parked in the repair zone while the repair timer runs.</summary>
         Repair,
+        /// <summary>Parked in a capture field's zone, taking it (Airfield Domination).</summary>
+        Capture,
         /// <summary>Rolling down the runway and climbing out, after a repair or a runway spawn.</summary>
         TakeOff,
         /// <summary>A missile is closing: breaking hard (and barrel rolling if the class can).</summary>
@@ -37,6 +41,7 @@ namespace WingingIt.Bots
     /// A bot's decisions. Each physics step it picks a <see cref="BotState"/> and turns it into orders and buttons for
     /// its <see cref="BotPilot"/>: patrol a route, chase and attack the best visible enemy, break from incoming
     /// missiles, pull up from terrain, and when it's hurt fly an approach lane home, land, repair and take off again.
+    /// In a Capture the Banner or Airfield Domination match its role adds the mode's duties on top.
     /// Like the pilot it never touches the plane directly, and it only knows what a
     /// player could: it sees enemies within its detection range unless cloud hides them (or an allied Support's
     /// radar reveals them), and the missile warning tells it what's chasing it.
@@ -128,6 +133,7 @@ namespace WingingIt.Bots
         PlaneGuns _guns;
         PlaneMissiles _missiles;
         PlaneRockets _rockets;
+        PlaneBombs _bombs;
         PlaneAbility _ability;
         PlaneHealth _health;
         PlaneRepair _repair;
@@ -142,7 +148,8 @@ namespace WingingIt.Bots
         bool _threatNoticed;
 
         // Retreat: the field, the route into it (an approach lane's points, ending on the final approach fix) and progress.
-        bool _retreating;
+        // A capture landing (Domination) flies the same trip into a field to take, not to repair at.
+        bool _retreating, _capturing;
         Airfield _field;
         ApproachLane _lane;
         readonly List<Vector3> _route = new();
@@ -157,10 +164,32 @@ namespace WingingIt.Bots
         Vector3 _dutyPoint;
         bool _dutyOrdered;
 
+        // Airfield Domination: the field this bot is working on (board index), what it's doing there, when to re-plan.
+        DominationDuty _domDuty;
+        int _domField = -1;
+        float _domReplanAt = -1f;
+        bool _bombExtending;
+        static readonly List<float> s_fieldValues = new();
+        static readonly List<FieldBoard.Field> s_fields = new();
+        static readonly List<Vector3> s_fieldPositions = new();
+
         /// <summary>This bot's part in Capture the Banner (None outside it).</summary>
         public BannerRole BannerRole { get; set; }
         /// <summary>What it is doing about the banners right now.</summary>
         public BannerDuty Duty => _duty;
+        /// <summary>This bot's part in Airfield Domination (None outside it).</summary>
+        public DominationRole DominationRole { get; set; }
+        /// <summary>Its slot on the team's roster: spreads the team's bots over the capture fields.</summary>
+        public int RosterSlot { get; set; }
+        /// <summary>What it is doing about the capture fields right now.</summary>
+        public DominationDuty DominationDuty => _domDuty;
+        /// <summary>The capture field it's working on, or null.</summary>
+        public Airfield DominationField =>
+            _domDuty != DominationDuty.None && DominationWorld.Active is { } w && _domField >= 0 && _domField < w.Fields.Count
+                ? w.Fields[_domField]
+                : null;
+        /// <summary>Flying in to land on a field to capture it, or parked there capturing.</summary>
+        public bool IsCapturing => _retreating && _capturing;
 
         /// <summary>Every active brain, for debug views and tests.</summary>
         public static readonly List<BotBrain> All = new();
@@ -200,8 +229,8 @@ namespace WingingIt.Bots
         /// <summary>Where the last terrain probe saw something in the way (for debug drawing).</summary>
         public Vector3? Obstacle { get; private set; }
         /// <summary>Heading home to repair: from the decision until the repair finishes (or the plane dies).</summary>
-        public bool IsRetreating => _retreating;
-        /// <summary>The airfield it's retreating to, or null.</summary>
+        public bool IsRetreating => _retreating && !_capturing;
+        /// <summary>The airfield it's retreating to (or landing on to capture), or null.</summary>
         public Airfield RetreatField => _retreating ? _field : null;
         /// <summary>The approach lane it's flying home, or null (none, or the field has no lanes: a straight-in final).</summary>
         public ApproachLane RetreatLane => _retreating ? _lane : null;
@@ -241,6 +270,7 @@ namespace WingingIt.Bots
             _guns = GetComponent<PlaneGuns>();
             _missiles = GetComponent<PlaneMissiles>();
             _rockets = GetComponent<PlaneRockets>();
+            _bombs = GetComponent<PlaneBombs>();
             _ability = GetComponent<PlaneAbility>();
             _health = GetComponent<PlaneHealth>();
             _repair = GetComponent<PlaneRepair>();
@@ -278,12 +308,17 @@ namespace WingingIt.Bots
             _patrolOrdered = false;
             _gunsFiring = false;
             _threatSince = _avoidUntil = _lockedSince = _lastHitAt = -1f;
-            _retreating = _forced = false;
+            _retreating = _forced = _capturing = _bombExtending = false;
+            _domReplanAt = -1f;
             State = BotState.Patrol;
         }
 
         /// <summary>Repaired (or respawned): nothing left to go home for.</summary>
-        void OnRestored(PlaneHealth _) => _retreating = _forced = false;
+        void OnRestored(PlaneHealth _)
+        {
+            if (!_capturing)
+                _retreating = _forced = false;
+        }
 
         void OnDamaged(PlaneHealth _, PartDamageInfo __) => _lastHitAt = Time.fixedTime;
 
@@ -293,7 +328,7 @@ namespace WingingIt.Bots
                 return;
 
             float now = Time.fixedTime;
-            _pilot.FireGuns = _pilot.FireRockets = _pilot.Boost = false;
+            _pilot.FireGuns = _pilot.FireRockets = _pilot.DropBomb = _pilot.Boost = false;
             // Missile and ability triggers act on a press: let go every other step so the next press counts.
             _pulse = !_pulse;
             _pilot.FireMissile = _pilot.UseAbility = false;
@@ -307,6 +342,7 @@ namespace WingingIt.Bots
 
             UpdateTarget(now);
             UpdateRetreat();
+            UpdateDomination(now);
 
             if (CheckTerrain(now, ApproachMode()))
             {
@@ -322,7 +358,7 @@ namespace WingingIt.Bots
             {
                 if (_retreating)
                     FlyHome(now);
-                else if (!DoBannerDuty(now))
+                else if (!DoBannerDuty(now) && !DoDominationDuty(now))
                 {
                     if (IsEngaged)
                         Fight();
@@ -417,9 +453,8 @@ namespace WingingIt.Bots
             {
                 var hit = s_hits[i];
                 if ((found && hit.distance >= nearest.distance) || hit.distance <= 0f || PlaneDebris.IsDebris(hit.collider) ||
-                    hit.collider.GetComponentInParent<PlaneController>() != null ||
-                    (_duty != BannerDuty.None && hit.collider.GetComponentInParent<BannerStand>() != null))
-                    continue; // a banner run flies past the pole on purpose
+                    hit.collider.GetComponentInParent<PlaneController>() != null)
+                    continue;
                 if (landingAt != null && (hit.normal.y > 0.7f ||
                                           landingAt.GetApproach(hit.point, Vector3.zero).HeightError < -1.5f))
                     continue;
@@ -684,17 +719,19 @@ namespace WingingIt.Bots
         void UpdateRetreat()
         {
             bool wants = WantsRepair();
-            if (!_retreating && wants)
-                StartRetreat();
-            else if (_retreating && !wants && _phase != RetreatPhase.Final && !_forced)
+            if (wants && (!_retreating || (_capturing && _phase != RetreatPhase.Final)))
+                StartRetreat(); // a repair comes before a capture
+            else if (_retreating && !_capturing && !wants && _phase != RetreatPhase.Final && !_forced)
                 _retreating = false;
         }
 
         void StartRetreat(ApproachLane lane = null)
         {
-            _field = lane != null ? lane.Airfield : Airfield.NearestFriendly(_plane.Position, _plane.Team);
-            if (_field == null)
+            var field = lane != null ? lane.Airfield : Airfield.NearestFriendly(_plane.Position, _plane.Team);
+            if (field == null)
                 return;
+            _field = field;
+            _capturing = false;
             _retreating = true;
             _missedZone = false;
             _forcedLane = lane;
@@ -752,12 +789,13 @@ namespace WingingIt.Bots
         /// <summary>Flies the route home, holds while the runway is taken, then the final approach (going around if it's blown).</summary>
         void FlyHome(float now)
         {
-            if (_field == null || !_field.isActiveAndEnabled || !_field.IsFriendlyTo(_plane.Team))
+            if (!FieldUsable())
             {
-                StartRetreat(); // the field's gone (captured, say): pick another
-                if (_field == null)
+                if (!_capturing)
+                    StartRetreat(); // the field's gone (captured, say): pick another
+                if (!FieldUsable())
                 {
-                    _retreating = false;
+                    _retreating = _capturing = false; // nowhere to repair, or the field to capture is taken
                     return;
                 }
             }
@@ -843,6 +881,11 @@ namespace WingingIt.Bots
             _pilot.Boost = !slow && _plane.BoostMeter > 0.3f && EnemyWithin(retreatBoostDistance);
         }
 
+        /// <summary>The trip's field still serves its purpose: friendly for a repair, ours to take for a capture.</summary>
+        bool FieldUsable() =>
+            _field != null && _field.isActiveAndEnabled &&
+            (_capturing ? _field.IsCapturableBy(_plane.Team) : _field.IsFriendlyTo(_plane.Team));
+
         static float FlatDistance(Vector3 a, Vector3 b) => Vector2.Distance(new Vector2(a.x, a.z), new Vector2(b.x, b.z));
 
         bool EnemyWithin(float range)
@@ -874,7 +917,12 @@ namespace WingingIt.Bots
                 return;
             }
 
-            if (_retreating && !_missedZone)
+            if (_capturing && _retreating && !_missedZone)
+            {
+                if (StayOnField(now))
+                    return;
+            }
+            else if (_retreating && !_missedZone)
             {
                 State = BotState.Land;
                 var field = _field != null ? _field : Airfield.RunwayUnder(_plane.Position);
@@ -967,18 +1015,26 @@ namespace WingingIt.Bots
                     return false;
                 case BannerDuty.Escort:
                     // Fight what is near the carrier; otherwise hold formation on it.
-                    if (IsEngaged && Vector3.Distance(Target.Position, ally.Position) < 700f)
-                        return false;
-                    Target = null;
+                    if (Target != null && Vector3.Distance(Target.Position, ally.Position) < 700f)
+                    {
+                        if (IsEngaged)
+                            return false;
+                    }
+                    else
+                        Target = null;
                     State = BotState.Patrol;
                     _patrolOrdered = false;
                     if (_pilot.Maneuver != BotManeuver.FormUp || _pilot.Target != ally)
                         _pilot.FormUp(ally, new Vector3((_plane.name.GetHashCode() & 1) == 0 ? -50f : 50f, 15f, -60f));
                     return true;
                 case BannerDuty.Guard:
-                    if (IsEngaged && Vector3.Distance(Target.Position, own.Stand) < BannerPlan.GuardLeash)
-                        return false;
-                    Target = null;
+                    if (Target != null && Vector3.Distance(Target.Position, own.Stand) < BannerPlan.GuardLeash)
+                    {
+                        if (IsEngaged)
+                            return false;
+                    }
+                    else
+                        Target = null;
                     State = BotState.Patrol;
                     _patrolOrdered = false;
                     if (!_dutyOrdered || _pilot.Maneuver != BotManeuver.Orbit)
@@ -1005,6 +1061,210 @@ namespace WingingIt.Bots
                 _pilot.FlyTo(point);
                 _dutyPoint = point;
                 _dutyOrdered = true;
+            }
+            return true;
+        }
+
+        // ------------------------------------------------------------------ Airfield Domination
+
+        /// <summary>
+        /// Airfield Domination: every <see cref="DominationPlan.ReplanInterval"/> picks this bot's field and duty (a
+        /// bomber goes for the nearest defended enemy tower; the rest spread over the fields by value), then starts a
+        /// capture landing when the duty is Capture, or calls one off that no longer fits (before final).
+        /// </summary>
+        void UpdateDomination(float now)
+        {
+            var world = DominationWorld.Active;
+            int team = _plane.Team;
+            if (world == null || DominationRole == DominationRole.None || team < 0)
+            {
+                _domDuty = DominationDuty.None;
+                _domField = -1;
+                return;
+            }
+            if (now >= _domReplanAt)
+            {
+                _domReplanAt = now + DominationPlan.ReplanInterval;
+                PlanDomination(world, team);
+            }
+            if (_domField < 0)
+                return;
+
+            var field = world.Fields[_domField];
+            bool capturingHere = _retreating && _capturing && _field == field;
+            if (_domDuty == DominationDuty.Capture)
+            {
+                // Not onto a contested field: the cover strafes whoever is parked there first.
+                if (!capturingHere && (!_retreating || (_capturing && _phase != RetreatPhase.Final)) && field.IsCapturableBy(team) &&
+                    !world.Board.Get(_domField).Contested)
+                    StartCapture(field);
+            }
+            else if (_retreating && _capturing && _phase != RetreatPhase.Final)
+            {
+                _retreating = _capturing = false;
+            }
+        }
+
+        void PlanDomination(DominationWorld world, int team)
+        {
+            if (_retreating && _capturing)
+                return; // committed to this landing until the field is taken or lost
+            var board = world.Board;
+            s_fields.Clear();
+            s_fieldValues.Clear();
+            s_fieldPositions.Clear();
+            for (int i = 0; i < board.FieldCount; i++)
+            {
+                s_fields.Add(board.Get(i));
+                s_fieldValues.Add(DominationPlan.FieldValue(team, board.Get(i)));
+                s_fieldPositions.Add(world.Fields[i].transform.position);
+            }
+
+            bool canBomb = _bombs != null && _bombs.IsEquipped && _bombs.Ammo > 0;
+            int bomb = canBomb ? DominationPlan.BombTarget(team, s_fields, s_fieldPositions, _plane.Position) : -1;
+            if (bomb >= 0)
+            {
+                if (_domDuty != DominationDuty.BombTower || _domField != bomb)
+                    _bombExtending = false;
+                _domField = bomb;
+                _domDuty = DominationDuty.BombTower;
+                return;
+            }
+            _domField = DominationPlan.PickField(s_fieldValues, RosterSlot);
+            _domDuty = _domField < 0 ? DominationDuty.None : DominationPlan.Decide(DominationRole, team, board.Get(_domField).Owner);
+        }
+
+        /// <summary>Flies the retreat trip (an approach lane, final, roll-out) into <paramref name="field"/> to capture it.</summary>
+        void StartCapture(Airfield field)
+        {
+            _field = field;
+            _retreating = _capturing = true;
+            _forced = false;
+            _missedZone = false;
+            _forcedLane = null;
+            PlanRoute();
+        }
+
+        /// <summary>
+        /// Domination duties that take the controls in the air: the bomb run, and cover over the field (also for a
+        /// capturer whose field can't be landed on right now). False leaves it to the usual fight / patrol.
+        /// </summary>
+        bool DoDominationDuty(float now)
+        {
+            var world = DominationWorld.Active;
+            if (world == null || _domField < 0 || _domField >= world.Fields.Count)
+                return false;
+            var field = world.Fields[_domField];
+            return _domDuty switch
+            {
+                DominationDuty.BombTower => BombRun(field),
+                DominationDuty.Cover or DominationDuty.Capture => CoverField(field, now),
+                _ => false,
+            };
+        }
+
+        /// <summary>
+        /// Circles over <paramref name="field"/>, fighting enemies within <see cref="DominationPlan.CoverLeash"/> of it;
+        /// an enemy on the wheels on its runway (capturing it, or contesting ours) is always the target.
+        /// </summary>
+        bool CoverField(Airfield field, float now)
+        {
+            Vector3 center = field.transform.position;
+            var parked = EnemyOnRunway(field);
+            if (parked != null && Target != parked)
+            {
+                Target = parked;
+                _engageAt = now;
+                _lastSeen = _lastShotChance = now;
+            }
+            if (Target != null && FlatDistance(Target.Position, center) < DominationPlan.CoverLeash)
+            {
+                if (IsEngaged)
+                    return false;
+            }
+            else
+                Target = null;
+
+            State = BotState.Patrol;
+            _patrolOrdered = false;
+            Vector3 orbit = center + Vector3.up * DominationPlan.CoverHeight;
+            if (_pilot.Maneuver != BotManeuver.Orbit || (_pilot.Destination - orbit).sqrMagnitude > 1f)
+                _pilot.Orbit(orbit, DominationPlan.CoverRadius);
+            return true;
+        }
+
+        PlaneController EnemyOnRunway(Airfield field)
+        {
+            foreach (var other in PlaneController.All)
+                if (IsEnemy(other) && other.IsGrounded && field.IsOverRunway(other.Position))
+                    return other;
+            return null;
+        }
+
+        /// <summary>
+        /// Flies level over <paramref name="field"/>'s control tower at <see cref="DominationPlan.BombHeight"/> and drops
+        /// when the predicted impact is on it; past it, flies on and comes round again. Ignores enemies on the way, like
+        /// a banner runner. False (re-plan) once the tower is down or the bombs are gone.
+        /// </summary>
+        bool BombRun(Airfield field)
+        {
+            var tower = field.TryGetComponent<FieldDefenses>(out var defenses) ? defenses.Tower : null;
+            if (tower == null || tower.IsDestroyed || _bombs == null || _bombs.Ammo == 0 || field.IsFriendlyTo(_plane.Team))
+            {
+                _domReplanAt = -1f;
+                return false;
+            }
+
+            Target = null;
+            State = BotState.Bomb;
+            _patrolOrdered = false;
+            Vector3 towerPos = tower.transform.position;
+            Vector3 point = DominationPlan.BombRunPoint(towerPos, field.transform.position.y, _plane.Position, _plane.Velocity,
+                ref _bombExtending);
+            if (_pilot.Maneuver != BotManeuver.FlyTo || (point - _dutyPoint).sqrMagnitude > 25f)
+            {
+                _pilot.FlyTo(point);
+                _dutyPoint = point;
+            }
+            if (!_bombExtending && _bombs.TryPredictImpact(out var impact))
+            {
+                bool onTower = impact.Collider != null && impact.Collider.GetComponentInParent<GroundTarget>() == tower;
+                _pilot.DropBomb = DominationPlan.ShouldDrop(impact.Point, onTower, towerPos);
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// On the wheels on a field it came to capture: roll into the zone and sit there until the field is ours, can't
+        /// be taken, or an enemy lands too (then take off, unless it now wants a repair on its new field). Stopped
+        /// outside the zone for <see cref="missedZoneWait"/> is a miss: around again. True while it stays.
+        /// </summary>
+        bool StayOnField(float now)
+        {
+            var world = DominationWorld.Active;
+            int index = world != null ? world.IndexOf(_field) : -1;
+            bool contested = index >= 0 && world.Board.Get(index).Contested;
+            if (DominationPlan.ShouldLeaveField(index >= 0 && _field.IsCapturableBy(_plane.Team), contested))
+            {
+                _capturing = false;
+                if (_field.IsFriendlyTo(_plane.Team) && WantsRepair())
+                    return true; // taken, and hurt: stay for the repair (the retreat's ground handling takes over)
+                _retreating = false;
+                return false;
+            }
+
+            if (_pilot.Maneuver != BotManeuver.Land)
+                _pilot.Land(_field);
+            bool inZone = _field.RepairZone != null && _field.RepairZone.Contains(_plane.Position);
+            State = inZone && _plane.Speed <= 0.5f ? BotState.Capture : BotState.Land;
+            if (_plane.Speed > 0.5f || inZone)
+                _stoppedSince = -1f;
+            else if (_stoppedSince < 0f)
+                _stoppedSince = now;
+            else if (now - _stoppedSince > missedZoneWait)
+            {
+                _missedZone = true;
+                return false;
             }
             return true;
         }

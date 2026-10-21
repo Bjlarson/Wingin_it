@@ -54,12 +54,14 @@ namespace WingingIt.UI
         float _nextRepeat;
 
         public bool Up, Down, Left, Right, Confirm, Back, PrevTab, NextTab, MenuButton;
+        /// <summary>Back came from the gamepad's B (not Esc): in flight B is Boost, so it mustn't open the pause menu.</summary>
+        public bool PadBack;
         public bool MouseMoved;
         public MenuDevice Device { get; private set; } = Application.isMobilePlatform ? MenuDevice.Touch : MenuDevice.Keyboard;
 
         public void Read()
         {
-            Up = Down = Left = Right = Confirm = Back = PrevTab = NextTab = MenuButton = false;
+            Up = Down = Left = Right = Confirm = Back = PrevTab = NextTab = MenuButton = PadBack = false;
             var kb = Keyboard.current;
             var pad = Gamepad.current;
             var mouse = Mouse.current;
@@ -88,6 +90,7 @@ namespace WingingIt.UI
                 if (pad.dpad.right.isPressed || stick.x > StickThreshold) dir.x += 1;
                 Confirm |= pad.buttonSouth.wasPressedThisFrame;
                 Back |= pad.buttonEast.wasPressedThisFrame;
+                PadBack = pad.buttonEast.wasPressedThisFrame;
                 PrevTab |= pad.leftShoulder.wasPressedThisFrame;
                 NextTab |= pad.rightShoulder.wasPressedThisFrame;
                 MenuButton |= pad.startButton.wasPressedThisFrame;
@@ -131,7 +134,7 @@ namespace WingingIt.UI
             pad.leftShoulder.wasPressedThisFrame || pad.rightShoulder.wasPressedThisFrame;
 
         /// <summary>Clears this frame's presses (a screen used them, so the next one drawn mustn't act on them too).</summary>
-        public void Consume() => Up = Down = Left = Right = Confirm = Back = PrevTab = NextTab = MenuButton = false;
+        public void Consume() => Up = Down = Left = Right = Confirm = Back = PrevTab = NextTab = MenuButton = PadBack = false;
 
         /// <summary>The glyph for an action on the last device: <paramref name="key"/> on keyboard, <paramref name="button"/> on gamepad, none on touch.</summary>
         public string Glyph(string key, string button) => Device switch

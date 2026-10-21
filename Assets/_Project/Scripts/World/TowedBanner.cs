@@ -53,7 +53,9 @@ namespace WingingIt.World
                 Destroy(cube.GetComponent<Collider>());
                 cube.name = "Banner";
                 cube.transform.SetParent(stand.transform, false);
-                cube.transform.localPosition = (stand.FlagMount != null ? stand.FlagMount.localPosition : Vector3.up * 40f) + new Vector3(0f, -6f, 5f);
+                // Hangs below the mount, its face across the gate.
+                cube.transform.localPosition = (stand.FlagMount != null ? stand.FlagMount.localPosition : Vector3.up * 30f) + new Vector3(0f, -5f, 0f);
+                cube.transform.localRotation = Quaternion.Euler(0f, 90f, 0f);
                 cube.transform.localScale = new Vector3(0.3f, 10f, 10f);
                 _cloth = cube.transform;
                 _madeCloth = true;

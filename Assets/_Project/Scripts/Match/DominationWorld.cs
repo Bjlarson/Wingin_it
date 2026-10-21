@@ -32,6 +32,8 @@ namespace WingingIt.Match
         public static DominationWorld Active { get; private set; }
 
         public FieldBoard Board => _mode.Board;
+        /// <summary>The match's rules (the hold-every-field clock for the HUD).</summary>
+        public DominationMode Mode => _mode;
         /// <summary>The capture fields, in board order (by name).</summary>
         public IReadOnlyList<Airfield> Fields => _fields;
         /// <summary>Raised for every field that changes hands (the HUD's callouts, the score).</summary>
@@ -63,8 +65,8 @@ namespace WingingIt.Match
             return Active = new DominationWorld(mode, fields, defenses.ToArray());
         }
 
-        /// <summary>One frame of play: parked planes into the board, captured fields to their new owners.</summary>
-        public void Tick(float dt)
+        /// <summary>One frame of play: parked planes into the board, captured fields to their new owners and the score.</summary>
+        public void Tick(MatchScore score, float dt)
         {
             for (int i = 0; i < _fields.Length; i++)
                 Board.Get(i).TowerUp = _defenses[i].TowerUp;
@@ -86,6 +88,8 @@ namespace WingingIt.Match
                 _fields[c.Field].SetTeam(c.Team);
                 Captured?.Invoke(c);
             }
+            if (_captures.Count > 0 && score != null)
+                _mode.Apply(score, _captures);
         }
 
         /// <summary>The capture field whose zone <paramref name="plane"/> is landed and stopped in, or -1.</summary>

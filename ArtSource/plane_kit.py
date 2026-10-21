@@ -88,6 +88,10 @@ COLORS = [
     ("orange", "FF8A2A"),  # windsock, mechanics' overalls
     # Landmarks (ArtSource/Landmarks): the Pyramid's pale stone, so it stands off the sand and the orange mesas.
     ("limestone", "EBDDB9"),
+    # Sea (living-world.md, section 2): the Water shader's colours, kept here so they stay in the shared palette.
+    ("water_deep", "1E6E9C"),  # open sea
+    ("water_shallow", "3FC1C9"),  # teal shallows by the beaches
+    ("foam", "F4FBFF"),  # wave crests and the shore band
 ]
 FLAT = {"glint", "ember", "ink", "flame"}
 TEAM_KEYS = {"team"}

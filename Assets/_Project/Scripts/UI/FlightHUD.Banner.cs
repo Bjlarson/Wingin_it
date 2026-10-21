@@ -59,6 +59,12 @@ namespace WingingIt.UI
             var pilot = e.Pilot as PlaneController;
             string text = HudText.BannerCallout(e.Kind, e.BannerTeam, e.PilotTeam, plane.Team,
                 pilot != null ? PilotName(pilot) : null, e.PilotTeam >= 0 ? TeamName(e.PilotTeam) : null, out var tone);
+            AddCallout(text, tone);
+        }
+
+        /// <summary>Stacks a mode callout under the center warning (the oldest goes past <see cref="CalloutMax"/>). Null is ignored.</summary>
+        void AddCallout(string text, HudText.Tone tone)
+        {
             if (text == null)
                 return;
             _callouts.Add(new Callout { Text = text, Tone = tone, Time = Time.time });
@@ -75,7 +81,6 @@ namespace WingingIt.UI
                 return;
             DrawBannerBar(world, width);
             DrawBannerMarkers(world, scale, width);
-            DrawCallouts(width);
         }
 
         string CarrierName(BannerBoard.Banner b) => b.Carrier is PlaneController c ? PilotName(c) : "?";
@@ -186,7 +191,7 @@ namespace WingingIt.UI
             }
         }
 
-        /// <summary>Banner callouts stacked under the center warning, fading in the last second.</summary>
+        /// <summary>Mode callouts (banners, fields) stacked under the center warning, fading in the last second.</summary>
         void DrawCallouts(float width)
         {
             for (int i = _callouts.Count - 1; i >= 0; i--)

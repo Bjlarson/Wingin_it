@@ -165,5 +165,107 @@ namespace WingingIt.Tests
             Assert.IsFalse(FieldBoard.IsParked(true, true, 5f, 1f, false), "still rolling");
             Assert.IsFalse(FieldBoard.IsParked(true, true, 0.5f, 1f, true), "backing up");
         }
+
+        // ---- Scoring (DominationMode) ----
+
+        /// <summary>A Domination mode with its board, a two-team score and the pilots registered.</summary>
+        (DominationMode mode, MatchScore score) Scored()
+        {
+            var mode = new DominationMode();
+            mode.SetFields(3);
+            var score = mode.CreateScore(2);
+            score.Register(_west, "w1", West);
+            score.Register(_west2, "w2", West);
+            score.Register(_east, "e1", East);
+            return (mode, score);
+        }
+
+        /// <summary>Runs the board and the mode together, as <see cref="DominationWorld"/> and the match do, in 0.1 s frames.</summary>
+        static void Play(DominationMode mode, MatchScore score, float seconds, params FieldSample[] planes)
+        {
+            var captures = new List<FieldCapture>();
+            for (int i = 0; i < UnityEngine.Mathf.RoundToInt(seconds * 10f); i++)
+            {
+                mode.Tick(score, 0.1f);
+                captures.Clear();
+                mode.Board.Update(0.1f, planes, captures);
+                mode.Apply(score, captures);
+            }
+        }
+
+        [Test]
+        public void ACapture_Scores100ToTheTeam_And50ToEachCapturingPilot()
+        {
+            var (mode, score) = Scored();
+            mode.HoldPoints = 0;
+            Play(mode, score, 6.8f, On(_west, West, 0), On(_west2, West, 0));
+            Assert.AreEqual(West, mode.Board.Get(0).Owner);
+            Assert.AreEqual(100 + 50 + 50, score.TeamScore(West));
+            Assert.AreEqual(50, score.Get(_west).Points);
+            Assert.AreEqual(1, score.Get(_west).Captures);
+            Assert.AreEqual(1, score.Get(_west2).Captures);
+            Assert.AreEqual(0, score.TeamScore(East));
+        }
+
+        [Test]
+        public void HeldFields_Pay5EachEveryTwoSeconds()
+        {
+            var (mode, score) = Scored();
+            mode.Board.Get(0).Owner = West;
+            mode.Board.Get(1).Owner = West;
+            mode.Board.Get(2).Owner = East;
+            Play(mode, score, 1.9f);
+            Assert.AreEqual(0, score.TeamScore(West), "nothing before the first 2 s");
+            Play(mode, score, 0.2f);
+            Assert.AreEqual(10, score.TeamScore(West));
+            Assert.AreEqual(5, score.TeamScore(East));
+            Play(mode, score, 4f);
+            Assert.AreEqual(30, score.TeamScore(West));
+            Assert.AreEqual(15, score.TeamScore(East));
+            Assert.AreEqual(0, score.Get(_west).Points, "holding is the team's, not a pilot's");
+        }
+
+        [Test]
+        public void HoldingEveryField30Seconds_WinsAtOnce_ABreakResetsTheClock()
+        {
+            var (mode, score) = Scored();
+            for (int i = 0; i < 3; i++)
+                mode.Board.Get(i).Owner = West;
+            Play(mode, score, 20f);
+            Assert.AreEqual(West, mode.HoldingAll);
+            Assert.IsNull(mode.EarlyWinner(score));
+
+            mode.Board.Get(2).Owner = East;
+            Play(mode, score, 1f);
+            Assert.AreEqual(FieldBoard.Neutral, mode.HoldingAll);
+            mode.Board.Get(2).Owner = West;
+            Play(mode, score, 29f);
+            Assert.IsNull(mode.EarlyWinner(score), "the 30 s start again after a break");
+            Play(mode, score, 1.2f);
+            Assert.AreEqual(West, mode.EarlyWinner(score));
+        }
+
+        [Test]
+        public void NeutralFields_CountForNobody_TheHigherScoreWinsAtTime()
+        {
+            var (mode, score) = Scored();
+            Play(mode, score, 40f);
+            Assert.AreEqual(FieldBoard.Neutral, mode.HoldingAll, "three neutral fields aren't a hold");
+            Assert.IsNull(mode.EarlyWinner(score));
+            Assert.AreEqual(MatchScore.Draw, mode.Winner(score));
+            mode.Board.Get(1).Owner = East;
+            Play(mode, score, 2.5f);
+            Assert.AreEqual(East, mode.Winner(score));
+        }
+
+        [Test]
+        public void Domination_KADCapScoreColumns_FieldsInTheHeadline()
+        {
+            var (mode, score) = Scored();
+            CollectionAssert.AreEqual(new[] { "K", "A", "D", "CAP", "SCORE" }, mode.Columns.Select(c => c.Header));
+            mode.Board.Get(0).Owner = West;
+            mode.Board.Get(1).Owner = West;
+            StringAssert.EndsWith("FIELDS 2 – 0", mode.ResultLine(score, t => t == West ? "WEST" : "EAST"));
+        }
     }
 }

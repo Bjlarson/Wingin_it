@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using WingingIt.Effects;
+using WingingIt.World;
 
 namespace WingingIt.Editor
 {
@@ -69,6 +70,10 @@ namespace WingingIt.Editor
             /// <summary>Length for a velocity-aligned spark (its size is the width).</summary>
             public Vector2 length;
             public Vector3 velocity;
+            /// <summary>How much of the emitter's own velocity a puff starts with (it keeps up with a plane, then drags behind).</summary>
+            public float inherit;
+            /// <summary>Drag the same on every puff, instead of Unity's default (harder on big and fast ones).</summary>
+            public bool plainDrag;
             public int max = 64;
         }
 
@@ -111,6 +116,16 @@ namespace WingingIt.Editor
             {
                 name = "Chips", meshes = chunks, burst = count, life = new(0.8f, 1.6f), size = size, speed = speed,
                 gravity = 1f, drag = 0.4f, color = color, tumble = true, spin = false, sizeCurve = Curve((0f, 1f), (0.8f, 1f), (1f, 0f)),
+            };
+            // Rising, quickly blooming puffs thrown along with the plane, then dragging behind it and drifting down the
+            // wind: they keep up long enough to show from the chase camera (which can't see under the plane itself),
+            // instead of falling behind it at once.
+            Spec Kickup(string name, float rate, int max, float size = 1f) => new()
+            {
+                name = name, meshes = puffs, rate = rate, life = new(0.9f, 1.5f), size = new(4.5f * size, 7.5f * size),
+                speed = new(1.5f, 3.5f), shape = Shape.Up, coneAngle = 35f, radius = 2f * size, drag = 1.6f, gravity = -0.03f,
+                velocity = Wind.Velocity, inherit = 0.45f, plainDrag = true, color = Dust, sizeCurve = Curve((0f, 0.7f), (0.2f, 1f), (0.7f, 0.9f), (1f, 0f)),
+                max = max,
             };
             Spec FacingRing(float size, float life, Color color) => new()
             {
@@ -261,6 +276,15 @@ namespace WingingIt.Editor
                         radius = 3.5f, velocity = new Vector3(0f, 3f, 0f), align = ParticleSystemRenderSpace.View, spin = false, roll = 20f, max = 8 },
                     new Spec { name = "Sparkles", meshes = sparkle, rate = 9f, life = new(0.4f, 0.7f), size = new(0.6f, 1.1f),
                         radius = 4f, align = ParticleSystemRenderSpace.View, spin = false, roll = 180f, max = 16 },
+                },
+                // 40 puffs at most (living-world.md, section 1). GroundKickup moves the systems under the wings and
+                // nose, and sets their rate, size and colour from the height, speed and surface; these are full strength.
+                [VfxKind.GroundKickup] = new[]
+                {
+                    Kickup("Left", 11f, 14), Kickup("Right", 11f, 14), Kickup("Nose", 6f, 7, size: 0.8f),
+                    new Spec { name = "Droplets", meshes = chunks, rate = 5f, life = new(0.7f, 1f), size = new(0.4f, 0.8f),
+                        speed = new(8f, 13f), shape = Shape.Up, coneAngle = 25f, radius = 2f, gravity = 1.3f, color = Spray,
+                        tumble = true, spin = false, sizeCurve = Curve((0f, 1f), (0.8f, 1f), (1f, 0f)), inherit = 0.7f, max = 5 },
                 },
             };
 
@@ -433,6 +457,11 @@ namespace WingingIt.Editor
                 limit.limit = 10000f; // drag only
                 limit.dampen = 0f;
                 limit.drag = s.drag;
+                if (s.plainDrag)
+                {
+                    limit.multiplyDragByParticleSize = false;
+                    limit.multiplyDragByParticleVelocity = false;
+                }
             }
 
             if (s.velocity != Vector3.zero)
@@ -443,6 +472,14 @@ namespace WingingIt.Editor
                 vel.x = s.velocity.x;
                 vel.y = s.velocity.y;
                 vel.z = s.velocity.z;
+            }
+
+            if (s.inherit > 0f)
+            {
+                var inherit = ps.inheritVelocity;
+                inherit.enabled = true;
+                inherit.mode = ParticleSystemInheritVelocityMode.Initial;
+                inherit.curve = s.inherit;
             }
 
             var renderer = go.GetComponent<ParticleSystemRenderer>();
@@ -536,7 +573,7 @@ namespace WingingIt.Editor
                     float extent = kinds[i] switch
                     {
                         VfxKind.ExplosionPlane or VfxKind.ExplosionGround or VfxKind.WaterSplash => 34f,
-                        VfxKind.ExplosionAir or VfxKind.RespawnShimmer or VfxKind.RepairSparkles => 18f,
+                        VfxKind.ExplosionAir or VfxKind.RespawnShimmer or VfxKind.RepairSparkles or VfxKind.GroundKickup => 18f,
                         VfxKind.FlakBurst or VfxKind.PartDetach => 12f,
                         _ => 6f,
                     };

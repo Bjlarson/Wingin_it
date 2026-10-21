@@ -7,6 +7,7 @@ using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using WingingIt.Bots;
 using WingingIt.Dev;
+using WingingIt.Effects;
 using WingingIt.Flight;
 using WingingIt.Match;
 using WingingIt.World;
@@ -62,7 +63,16 @@ namespace WingingIt.Tests
                 Assert.Greater(local.z, home.RunwaySize.y * 0.5f, "the stand isn't past the far end of the runway");
                 Assert.Less(Mathf.Abs(local.x), 1f, "the stand isn't in line with the runway");
                 Assert.IsNotNull(stand.FlagMount);
-                Assert.Greater(stand.FlagMount.position.y - stand.Position.y, stand.ZoneHeight, "the pole is shorter than the grab zone");
+                Assert.Less(stand.FlagMount.position.y - stand.Position.y, stand.ZoneHeight, "the banner hangs above the grab zone");
+                Assert.AreEqual(0, stand.GetComponentsInChildren<Collider>().Length, "a plane would hit the banner gate");
+                var poles = stand.GetComponentsInChildren<Renderer>().Where(r => r.name.StartsWith("Pole")).ToArray();
+                Assert.AreEqual(2, poles.Length, "the gate doesn't have two poles");
+                foreach (var pole in poles)
+                {
+                    Assert.Greater(pole.bounds.max.y - stand.Position.y, stand.ZoneHeight, "a pole is shorter than the grab zone");
+                    Vector3 off = stand.transform.InverseTransformPoint(pole.bounds.center);
+                    Assert.AreEqual(stand.ZoneRadius, Mathf.Abs(off.x), 0.5f, "a pole isn't at the edge of the grab zone");
+                }
             }
             Assert.IsNotNull(BannerStand.PositionsByTeam(2));
         }
@@ -445,6 +455,112 @@ namespace WingingIt.Tests
                 for (int i = 1; i < lane.Points.Count; i++)
                     Assert.AreEqual(0f, CloudCover.ChordLength(lane.Points[i - 1], lane.Points[i]), 1e-3f,
                         $"{lane.DisplayName} leg {i} flies through cloud");
+        }
+
+        // ------------------------------------------------------------------ sea (living-world.md, section 2)
+
+        /// <summary>
+        /// The waves are only for show: the sea you hit is still one flat static box at y = 0 on the Water layer, and the
+        /// surface you see has no collider, follows the camera and draws with the wave shader and its baked shore map.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Sea_IsFlatToHit_AndWavesFollowTheCamera()
+        {
+            var ocean = GameObject.Find("Ocean");
+            Assert.IsNotNull(ocean, "no Ocean");
+            Assert.IsTrue(ocean.isStatic);
+            Assert.IsTrue(PlaneController.IsWater(ocean.GetComponent<BoxCollider>()));
+            var box = ocean.GetComponent<BoxCollider>().bounds;
+            Assert.AreEqual(0f, box.max.y, 1e-3f, "the collider's top is the sea level");
+            Assert.GreaterOrEqual(box.extents.x, 15000f);
+
+            var surface = Object.FindAnyObjectByType<OceanSurface>();
+            Assert.IsNotNull(surface, "no Ocean Surface");
+            Assert.IsEmpty(surface.GetComponentsInChildren<Collider>(), "the waves mustn't be solid");
+            var mat = surface.GetComponent<MeshRenderer>().sharedMaterial;
+            Assert.AreEqual("Winging It/Water", mat.shader.name);
+            Assert.IsNotNull(mat.GetTexture("_ShoreTex"), "no shore map");
+
+            yield return null;
+            yield return null;
+            // Within a step of the camera (it may move again after the snap, in the same frame), on the sea level.
+            var cam = Camera.main.transform.position;
+            var at = surface.transform.position;
+            Assert.AreEqual(0f, at.y);
+            Assert.LessOrEqual(Vector2.Distance(new Vector2(cam.x, cam.z), new Vector2(at.x, at.z)), OceanSurface.DefaultStep * 1.5f);
+            float steps = at.x / OceanSurface.DefaultStep;
+            Assert.AreEqual(Mathf.Round(steps), steps, 1e-3f, "in whole steps");
+        }
+
+        // ------------------------------------------------------------------ ground kick-up (living-world.md, section 1)
+
+        /// <summary>The surface lookup agrees with the terrain's own splat map, and finds the sea and the runways.</summary>
+        [Test]
+        public void EffectsSurface_MatchesTheSplatMap_TheSeaAndTheRunways()
+        {
+            var terrain = Terrain.activeTerrain;
+            Assert.IsNotNull(terrain, "no terrain");
+            var data = terrain.terrainData;
+            var seen = new HashSet<GroundSurface>();
+            int checkedPoints = 0;
+            for (float nz = 0.05f; nz < 1f; nz += 0.05f)
+                for (float nx = 0.05f; nx < 1f; nx += 0.05f)
+                {
+                    Vector3 top = terrain.GetPosition() + new Vector3(nx * data.size.x, 1500f, nz * data.size.z);
+                    if (!Physics.Raycast(top, Vector3.down, out var hit, 3000f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+                        continue;
+                    var surface = EffectsSurface.Classify(hit.collider, hit.point);
+                    seen.Add(surface);
+                    if (hit.collider is not TerrainCollider)
+                        continue;
+                    int res = data.alphamapResolution;
+                    int ix = Mathf.Clamp((int)(nx * res), 0, res - 1), iz = Mathf.Clamp((int)(nz * res), 0, res - 1);
+                    var w = data.GetAlphamaps(ix, iz, 1, 1);
+                    int best = 0;
+                    for (int l = 1; l < data.alphamapLayers; l++)
+                        if (w[0, 0, l] > w[0, 0, best])
+                            best = l;
+                    Assert.AreEqual(EffectsSurface.FromLayerName(data.terrainLayers[best].name), surface, $"at {hit.point}");
+                    checkedPoints++;
+                }
+            Assert.Greater(checkedPoints, 50, "too few terrain hits");
+            foreach (var expected in new[] { GroundSurface.Water, GroundSurface.Grass, GroundSurface.Sand })
+                Assert.Contains(expected, seen.ToList(), $"never found {expected}");
+
+            foreach (var field in Airfield.All)
+            {
+                Vector3 middle = field.transform.position + Vector3.up * 50f;
+                Assert.IsTrue(Physics.Raycast(middle, Vector3.down, out var hit, 100f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore));
+                Assert.AreEqual(GroundSurface.Paved, EffectsSurface.Classify(hit.collider, hit.point), $"{field.name}'s runway");
+            }
+        }
+
+        /// <summary>Skimming the sea throws up spray; climbing away stops it; skimming a runway kicks up (paved) dust.</summary>
+        [UnityTest]
+        public IEnumerator FlyingLow_KicksUpTheSurface_AndClimbingStopsIt()
+        {
+            var kickup = _player.GetComponent<GroundKickup>();
+            Assert.IsNotNull(kickup, "the plane has no GroundKickup");
+            _player.Respawn(new Vector3(-700f, 8f, -2100f), Quaternion.identity); // open sea, clear of Lighthouse Rock
+            for (int i = 0; i < 10; i++)
+                yield return null;
+            Assert.AreEqual(GroundSurface.Water, kickup.Surface);
+            Assert.IsTrue(kickup.IsEmitting, $"no spray at {_player.transform.position.y:F1} m, {_player.Speed:F0} m/s");
+            Assert.Greater(kickup.Strength, 0.3f);
+            Assert.GreaterOrEqual(Vfx.PlayingCount(VfxKind.GroundKickup), 1);
+
+            _player.Respawn(new Vector3(-700f, 300f, -2100f), Quaternion.identity);
+            yield return null;
+            yield return null;
+            Assert.IsFalse(kickup.IsEmitting, "still kicking up at 300 m");
+            Assert.AreEqual(0f, kickup.Strength);
+
+            var field = Airfield.All.First(f => f.IsHome && f.Team == 0);
+            _player.Respawn(field.transform.position + Vector3.up * 10f, Quaternion.LookRotation(field.RunwayDirection));
+            for (int i = 0; i < 10; i++)
+                yield return null;
+            Assert.AreEqual(GroundSurface.Paved, kickup.Surface);
+            Assert.IsTrue(kickup.IsEmitting, "no dust off the runway");
         }
 
         // ------------------------------------------------------------------ boundary (island-map.md)

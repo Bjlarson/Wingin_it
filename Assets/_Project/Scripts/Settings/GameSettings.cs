@@ -43,17 +43,25 @@ namespace WingingIt.Settings
     {
         // Controls
         public bool mouseAim = true;
+        /// <summary>Fly toward the mouse cursor or a held finger instead (mouse aim and direct mode are off while this is on).</summary>
+        public bool followPointer;
         public float mouseAimSensitivity = 1f;
         public float freeLookSensitivity = 1f;
         /// <summary>Flips up/down on the keys, stick, touch stick and mouse (mouse aim included).</summary>
         public bool invertPitch;
+        /// <summary>The chase camera is fixed to the plane's orientation, so it rolls and loops with the plane.</summary>
+        public bool cameraLockedToPlane;
         /// <summary>What the stick means in Direct mode, on a pad and on touch: turn rate (auto-level or hold) or bank angle.</summary>
         public ControlStyle controlStyle = ControlStyle.AutoLevel;
         public TouchControlsMode touchControls = TouchControlsMode.Auto;
         public bool autoThrottle = true;
+        /// <summary>Follow mode on touch with no on-screen buttons: hold fires guns, tap fires missile/bomb, double tap is the ability.</summary>
+        public bool touchGesturesOnly;
         public float touchButtonSize = 1f;
         /// <summary>How hard the on-screen stick steers: scales the stick past its small dead zone.</summary>
         public float touchSensitivity = 1f;
+        /// <summary>The player's rebound keys and buttons, as the Input System's binding-overrides JSON ("" = the shipped bindings).</summary>
+        public string bindingOverrides = "";
 
         // Graphics
         /// <summary>Index into the quality levels; -1 = the platform's default level.</summary>
@@ -65,6 +73,8 @@ namespace WingingIt.Settings
         /// <summary>Frames per second; 0 = unlimited.</summary>
         public int frameRateCap = 144;
         public float renderScale = 1f;
+        /// <summary>How much shadow detail: distance, map size and edge filtering. Lower on phones.</summary>
+        public ShadowDetail shadows = ShadowDetail.High;
         public float fieldOfView = 60f;
         public bool speedFov = true;
         /// <summary>High dynamic range rendering. Off by default on phones, where it costs bandwidth for little gain.</summary>
@@ -192,14 +202,18 @@ namespace WingingIt.Settings
                 {
                     case SettingsTab.Controls:
                         s.mouseAim = d.mouseAim;
+                        s.followPointer = d.followPointer;
                         s.mouseAimSensitivity = d.mouseAimSensitivity;
                         s.freeLookSensitivity = d.freeLookSensitivity;
                         s.invertPitch = d.invertPitch;
+                        s.cameraLockedToPlane = d.cameraLockedToPlane;
                         s.controlStyle = d.controlStyle;
                         s.touchControls = d.touchControls;
                         s.autoThrottle = d.autoThrottle;
+                        s.touchGesturesOnly = d.touchGesturesOnly;
                         s.touchButtonSize = d.touchButtonSize;
                         s.touchSensitivity = d.touchSensitivity;
+                        s.bindingOverrides = d.bindingOverrides;
                         break;
                     case SettingsTab.Graphics:
                         s.quality = d.quality;
@@ -208,6 +222,7 @@ namespace WingingIt.Settings
                         s.windowMode = d.windowMode;
                         s.frameRateCap = d.frameRateCap;
                         s.renderScale = d.renderScale;
+                        s.shadows = d.shadows;
                         s.fieldOfView = d.fieldOfView;
                         s.speedFov = d.speedFov;
                         s.hdr = d.hdr;
@@ -243,6 +258,7 @@ namespace WingingIt.Settings
                 d.frameRateCap = 60;
                 d.renderScale = 0.8f;
                 d.hdr = false;
+                d.shadows = ShadowDetail.Medium;
             }
             return d;
         }
@@ -266,6 +282,8 @@ namespace WingingIt.Settings
                 s.windowMode = WindowMode.Fullscreen;
             s.frameRateCap = NearestFrameRate(s.frameRateCap, mobile ? MobileFrameRates : DesktopFrameRates);
             s.renderScale = Mathf.Clamp(s.renderScale, MinRenderScale, MaxRenderScale);
+            if (!Enum.IsDefined(typeof(ShadowDetail), s.shadows))
+                s.shadows = ShadowDetail.High;
             s.fieldOfView = Mathf.Clamp(s.fieldOfView, MinFov, MaxFov);
 
             s.masterVolume = Mathf.Clamp01(s.masterVolume);

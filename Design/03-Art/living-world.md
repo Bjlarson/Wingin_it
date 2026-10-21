@@ -1,7 +1,7 @@
 # Living World
 
-Status: Proposed (nothing here is built yet)
-Last updated: 2026-10-20
+Status: In progress. Sections 5 (shadows), 2 (waves) and 1 (ground dust and spray) are built; sections 3 and 4 are proposed.
+Last updated: 2026-10-21
 
 ## Summary
 
@@ -27,6 +27,8 @@ All of it follows [art-direction.md](art-direction.md) and [asset-style-as-built
 ---
 
 ## 1. Ground-effect dust, mist and spray
+
+**Built (2026-10-21).** See "As built" at the end of this section. The rest of the section is the original proposal.
 
 Low flying is the most exciting thing a plane does. It should kick the world up.
 
@@ -69,11 +71,33 @@ Notes:
 - New `VfxKind.GroundKickup` (looping) in `VfxBuilder.cs`, new `GroundKickup.cs` component on the plane prefabs (or added by `PlaneVisuals`), `EffectsSurface.cs` for the lookup.
 - Particle budget: **40 live puffs per plane**, only the 4 nearest planes to the camera emit. LOD: beyond 300 m skip.
 
+### As built
+
+- **Wind** (`World/Wind.cs`): the match wind, a constant for now: heading 60° (the sea's waves now take theirs from it, `OceanWaves.WindHeading = Wind.Heading`), 4 m/s. It drifts the kick-up puffs.
+- **Surface lookup** (`Effects/EffectsSurface.cs`): `Classify(collider, point)` gives a `GroundSurface`: Water (the Water layer), Paved (a runway: a collider under an `Airfield`, inside its runway rectangle), the terrain's strongest splat layer (each terrain's alpha maps are read once, on first use, into a per-texel lookup; layers are matched by name: Grass, Sand, Rock, Snow, Paved), else None (roofs, bridges, quays). `Color` is the table above; `Amount` is how much it kicks up (paved 0.4, rock 0.8, none 0, the rest 1). `Below(point)` raycasts for callers without a hit.
+- **Effect** (`VfxKind.GroundKickup`, `VfxBuilder`): four looping systems, 40 puffs in all: **Left** and **Right** wing trails (14 each, 11 a second at full strength), **Nose** (7, 0.8 size) and water **Droplets** (5 chunks thrown up, falling back). Puffs are 4.5 to 7.5 m, live 0.9 to 1.5 s, bloom fast then shrink away by scale. They start with **45% of the plane's velocity** (inherit velocity; 85% hung round the plane, so it was lowered on 2026-10-21 to leave them streaming 20 to 60 m behind) and a plain drag of 1.6 (not Unity's default, which multiplies drag by size and speed and stopped the big puffs dead), so they stay in view of the chase camera for a moment before dragging behind; the wind carries them sideways.
+- **Component** (`Flight/GroundKickup.cs`, on the plane prefab, so bots get it too): every frame it raycasts down (skipping rigidbodies), looks the surface up 10 times a second, and eases the colour and amount toward it (about 0.5 s). Strength is `StrengthAt(height, speed)`: 0 at 40 m or below 60% of the stall speed, then `(1 - h/40)` times 35% to 100% from the slowest speed to top speed. Each wing trail uses **its own wingtip's height**, so a bank kicks up the low side more. The trails sit **6 m out** (times the class's visual scale) and spray **35° outward**, out past the wingtips: the chase camera sits above and behind, so the ground right under the plane is hidden by the plane itself. Over the sea the emitters sit on `OceanWaves.Height`.
+- **Readability:** puff size also shrinks below 8 m of height (`SizeAt`, down to 30% on the deck), so the dust stays under the plane's silhouette. Without this, a takeoff roll buried the chase camera in 7 m puffs; now the runway gives a low grey prop wash.
+- **Budget:** only the 4 nearest planes to the camera that want to emit, within 300 m (`IsAmongNearest`); the rest stop their emitter and let the puffs finish.
+- **Prop wash** on takeoff comes for free: the trigger is speed, not "airborne", so a takeoff roll past 60% of stall kicks up the runway (paved, so a little).
+- **Blasts and hits** use the same table: `Explosions.PlayGround` tints a ground blast's Dust and Dirt (bombs, rockets, crashes via `EffectsSurface.Below`), and bullet hits tint their dust. Over roofs and buildings they keep the old colours. `VfxEffect` gained `IndexOf`, `Tune` (rate and size against the played scale) and `SetColor`, and resets rate and colour each time it's played from the pool.
+- **Tests:** `GroundKickupTests` (EditMode: the height and speed limits, thicker lower and faster, size by strength and by height, the nearest four, the splat lookup, layer names, the colour table, the wind) and in `IslandSceneTests` (PlayMode): `EffectsSurface_MatchesTheSplatMap_TheSeaAndTheRunways` (the lookup agrees with the terrain's own alpha maps across a 19×19 grid, finds sea, grass and sand, and every runway is paved) and `FlyingLow_KicksUpTheSurface_AndClimbingStopsIt` (spray at 8 m over the sea, none at 300 m, dust off a runway).
+
+Checked in play (Editor stills): spray over the sea and sand dust read from the chase camera as chunky puffs under the plane; from the side, the plume reads well at range (how you see bots); grass gives the brown soil cloud; the runway roll gives low grey puffs.
+
+Not done yet:
+- Wing-tip vapour in hard turns (optional in the proposal).
+- Rock chips (rock gives grey dust only).
+- The puffs are opaque and solid, so the brown grass dirt can read as clods more than a cloud; see the open question on brown dirt.
+- A Mobile-tier frame-time check with four planes kicking up at once.
+
 ---
 
 ## 2. Water with little waves
 
-The sea is currently a flat 30 km `Plane` with the `Greybox_Water` material. Replace it with a stylised, faceted wave surface.
+**Built (2026-10-21).** See "As built" at the end of this section. The rest of the section is the original proposal.
+
+The sea was a flat 30 km `Plane` with the `Greybox_Water` material. Replace it with a stylised, faceted wave surface.
 
 ### Look
 
@@ -84,7 +108,7 @@ The sea is currently a flat 30 km `Plane` with the `Greybox_Water` material. Rep
 
 ### Hard constraint: the collider stays flat
 
-Hitting the sea is a crash and touching down is a ditching. Wave **height is cosmetic only**: keep the amplitude at about **0.5 m** at most so the visual surface never disagrees noticeably with the flat `y = 0` collider.
+Hitting the sea is a crash and touching down is a ditching. Wave **height is cosmetic only**: keep the amplitude at about **0.5 m** at most so the visual surface never disagrees noticeably with the flat `y = 0` collider. (Relaxed to **1.45 m** on 2026-10-21 for visible swells, at the user's choice: the collider still stays flat, so a plane skimming the sea can dip a little into a crest before it crashes.)
 
 ### How
 
@@ -100,6 +124,34 @@ Hitting the sea is a crash and touching down is a ditching. Wave **height is cos
 - `ArtSource`: no Blender work. A shader asset, a material replacing `Greybox_Water`, a ring-grid mesh generator in the editor builder, and `BuildOcean` in `IslandSceneBuilder.cs` swapped to use them.
 - Keep the Water layer, the 10 m thick `BoxCollider` and `isStatic` exactly as they are.
 - Palette: add `water_deep`, `water_shallow`, `foam` to `plane_kit.COLORS` so the colours stay in the shared palette.
+
+### As built
+
+Two objects under World:
+- **Ocean**: what you hit. Unchanged in effect: a static `BoxCollider` (30 km, 10 m thick, top at y = 0) on the Water layer. It no longer draws.
+- **Ocean Surface**: what you see. No collider, no shadow casting. `OceanSurface` keeps it under `Camera.main` in whole 4 m steps (play mode only; in the Editor it sits at the origin).
+
+The pieces:
+- **Waves** (`OceanWaves`, runtime C#): five summed sines, the single source of truth. `OceanWaves.Apply` pushes them to the shader as global arrays; `OceanWaves.Height(x, z, t)` gives the same open-sea surface in C#, for boats to ride later (section 4; it leaves out the shader's calming in shallow water). The wind heading is 60°, a constant until the match has a wind.
+  - **Swells** (added 2026-10-21, so the waves are visible from the air): 70 m and 45 m long, 0.65 and 0.45 m tall, rolling down the wind at 8 and 6 m/s.
+  - **Chop** on top: 12, 18 and 28 m long, 0.15, 0.12 and 0.08 m tall. Two run down the wind and one crosses back against it.
+  - **Perlin noise** (added 2026-10-21, so the sea isn't a regular lattice of sines). A slow, low "roughness" (180 m features, drifting 1.5 m/s down the wind) scales every wave between 0.55 and 1, so some patches are calm and some rough. On top is a bumpy height noise of its own: two octaves, 40 m features, ±0.25 m, drifting 3 m/s. `OceanWaves.Perlin` uses its own integer hash, and the shader's `Perlin` matches it line for line, so C# and the shader agree (Unity's `Mathf.PerlinNoise` has no shader twin).
+  - Together they reach `MaxHeight` = 1.7 m: 1.45 m of waves plus 0.25 m of noise. The waves were first built at 2 m, then made a little less bumpy.
+- **Mesh** (`OceanSurface.BuildMesh`, saved as `Terrain/OceanSurface.asset`): a full grid, 4 m apart out to 200 m from the middle, then each gap 8% wider than the last out to 15 km. It is a full grid in both directions, so it has no T-junctions and no cracks. It stays under 65,535 vertices, so it keeps 16-bit indices. Each vertex's `uv.x` is the grid spacing there.
+- **Shader** `Winging It/Water` (hand-written HLSL like the blob shadow, not Shader Graph; opaque, vertex displacement only, no depth texture):
+  - Each wave fades out where the grid is too coarse to carry it (under 3 cells per wavelength), so nothing aliases or crawls as the surface moves. All waves fade to flat between 400 and 1500 m from the camera, so the horizon is clean. The swells calm by 85% in shallow water (the shore map's R), so the canal only ripples and the waves die out at the beaches.
+  - **Solid blue with white caps** (changed 2026-10-21 at the user's request: the first version's three-tone facets, teal shallows and sun glints looked pixelated). The water is one blue (`water_deep`). The swells give it shape without facets: a smooth per-pixel normal from the waves' slope, steepened 2.5x for the sun shading, and crests tinted 30% lighter, troughs 30% darker. **White caps are textured froth** (2026-10-21). Above 35% of the maximum height, the foam texture starts to show. The higher the crest, the more of it shows: all of it at 70%. So caps grow from the peaks as froth, not flat blobs, anti-aliased over one pixel. The foam texture is `Art/Textures/WaterFoam.asset`, made once by `IslandSceneBuilder.FoamTexture`: tileable Worley cell borders, 256², big cells plus a finer layer. It tiles every 14 m and drifts with the noise. Its low values (the cell borders) foam first, so a cap starts as a web of lines and fills in. There is also a band of foam along every shore and quay; its edge rises and falls with the waves.
+  - Receives sun shadows, takes fog, and has DepthOnly and DepthNormals passes (the PC renderer's SSAO needs the second).
+- **Shore map** (`IslandSceneBuilder.BakeShore`, `Terrain/OceanShore.asset`): baked from the heightmap over the 5.6 km terrain square at 1024² (RG8). G is shore foam (1 on land, fading to 0 at 16 m out). R is shallowness (0 at 20 m deep, 1 at the waterline), which calms the swells. This replaces the depth-texture idea, so it costs the Mobile tier nothing extra. The canal is the same sea, so it gets the calm water and the quay foam for free.
+- **Palette**: `water_deep` `1E6E9C`, `water_shallow` `3FC1C9` and `foam` `F4FBFF` were added to `plane_kit.COLORS` (and `PlanePalette.png`). `water_shallow` is unused for now. The Water material (`Art/Materials/Water.mat`) is created with them and then kept between builds for hand tuning.
+- **Blob shadow** over the sea sits `OceanWaves.MaxHeight` (1.7 m) higher, so wave crests never cut holes in it.
+- **Tests**: `OceanTests` (EditMode: the height bound, swells long and carrying most of the height, Perlin range / smoothness / determinism, roughness and noise breaking up the sea, waves move, every wave spans 3 cells, grid lines, mesh fits 16-bit indices and carries the spacing, snapping) and `IslandSceneTests.Sea_IsFlatToHit_AndWavesFollowTheCamera` (PlayMode).
+
+Not done yet:
+- The canal's own along-channel scroll.
+- Foam rings for ditchings and boats.
+- The boundary buoys don't ride the swells: they're static at y = 0, so a big swell can look like it floods or lifts them.
+- A Mobile-tier frame-time check (the fragment stage now sums five waves and three Perlin lookups per pixel).
 
 ---
 
@@ -164,9 +216,9 @@ Cars and boats are static today: `PlaceVehicle` in `CityModels.cs` drops `CarSun
 
 ## 5. Smoother shadows
 
-Shadows currently look blocky. Here is what the project has now and what to try.
+**Built (2026-10-20).** See "As built" at the end of this section. The rest of the section is the original analysis.
 
-### What's set today
+### What was set before
 
 | Setting | PC asset | Mobile asset | Light |
 |---|---|---|---|
@@ -198,15 +250,41 @@ Shadows currently look blocky. Here is what the project has now and what to try.
 
 Take Editor captures before and after at the same fixed spots: a plane low over the airfield, a city street at dusk angle, a tree line, a high pass over grass. Blocky edges, shimmer and missing plane shadows are the three things to look for. Capture with the PC and Mobile quality levels both.
 
+### As built
+
+What the audit found:
+- The Editor and Standalone use the **PC** asset (quality level 1), so mobile settings weren't leaking into PC play. The PC map was simply too short (50 m), so most of what the chase camera sees had no shadows at all, then popped in close.
+- **Ink hulls are not the problem.** Every pack remaps its outline to the one `Plane_Ink` material, which uses URP Unlit, and that shader has no ShadowCaster pass, so the hulls never cast.
+- **Full-strength shadows on dim ambient go near black.** The sky ambient is only about (0.14, 0.22, 0.38), so grass in full shadow turned into black blotches near the camera. The sun's shadow strength is now **0.65** (`SetUpAtmosphere`), which gives the soft, coloured, toy-like shadow on every surface.
+
+**Shadows setting** (Settings > Graphics > SHADOWS, `ShadowProfile`, applied by `SettingsApplier` at start, on change and on every scene load). Edge softness comes from the soft-shadow filter, which is a fixed number of shadow-map texels wide, so the near cascades are deliberately generous: edges stay a little soft rather than razor sharp.
+
+| Level | Map | Distance | Cascades (splits) | Soft filter |
+|---|---|---|---|---|
+| Off | none | none | n/a | n/a |
+| Low | 1024 | 60 m | 1 | low |
+| Medium (phone default) | 2048 | 100 m | 2 (0.25) | medium |
+| High (PC default) | 2048 | 150 m | 4 (0.12 / 0.30 / 0.55) | high |
+
+The PC and Mobile URP assets ship with the High and Medium values, so the Editor's Scene view matches the defaults. In play mode in the Editor the applier writes to the URP asset and puts the shipped values back when play mode ends. Sun shadow strength is 0.65 on every level. `RenderSettings.sun` is set by `SetUpAtmosphere` so the applier and the planes can find the sun.
+
+Planes:
+- Planes cast their **real silhouette** into the shadow map, as before.
+- `PlaneShadow` (on the plane prefab) fills in where that shadow can't reach: past the shadow distance from the camera (it fades in over the last 20%), or everywhere with Shadows set to Off. It raycasts straight down each frame, skipping anything with a rigidbody (planes, debris), and lays a soft ellipse on whatever it hits: terrain, roofs, runways, the sea. It lies flat on the slope, turns with the heading and narrows with bank and pitch (never below 15%). It is 10 x 8.5 m times the class's visual scale, shrinks to 55% and fades out by **300 m** above the ground (`1 - t²`).
+- Shader `Winging It/Blob Shadow` (material `FX_BlobShadow`): a multiply toward a cool blue-grey (`52,5C,85`), depth offset so it never z-fights, fading into the fog.
+- Tests: `PlaneShadowTests` (height curve, hand-over, footprint) and `GameSettingsTests` (defaults, clamp, reset, levels increasing), both EditMode.
+
+Not done yet: a Mobile-tier capture pass, and a frame-time check of High on a low-end PC.
+
 ---
 
 ## Order of work and rough size
 
 | Order | Item | Why this order | Size |
 |---|---|---|---|
-| 1 | Shadows (check, tune, blob shadows) | Mostly settings; fixes the thing that is bothering you most right now | Small to medium |
-| 2 | Waves | Huge visual win; the sea is most of the screen | Medium |
-| 3 | Ground dust and spray | The most reactive of the lot; needs the surface lookup | Medium |
+| 1 | Shadows (check, tune, blob shadows) **Done** | Mostly settings; fixes the thing that is bothering you most right now | Small to medium |
+| 2 | Waves **Done** | Huge visual win; the sea is most of the screen | Medium |
+| 3 | Ground dust and spray **Done** | The most reactive of the lot; needs the surface lookup | Medium |
 | 4 | Moving cars and boats | Pure data and a small component | Small to medium |
 | 5 | Moving clouds | Biggest risk (touches cover rules, tests, multiplayer), so last and carefully | Medium to large |
 
@@ -224,7 +302,7 @@ Target the existing frame budget with no visible change in the Mobile tier.
 
 - [ ] Wind: one fixed direction for the whole match, or a slow shift over the match? (A shift is livelier but changes where cover is over time.)
 - [ ] Should cloud cover also clump deliberately toward the contested middle, or stay uniform?
-- [ ] Brown dirt for grass: is the soil-cloud right for the stylised look, or should grass kick up green blades too?
+- [ ] Brown dirt for grass: is the soil-cloud right for the stylised look, or should grass kick up green blades too? (Built as brown soil, 2026-10-21; the solid puffs can read as clods. Needs a look in play.)
 - [ ] Traffic: loop end to end (cheap) or flow through intersections with lights (livelier)?
 - [ ] Do car and boat hits matter (bullets, bombs destroy them)? Proposed: yes later, as a scoring-free "wreck" effect.
 - [ ] Day length: still fixed sunny, or does a slow sun move make shadows and clouds change through the match?

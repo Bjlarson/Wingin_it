@@ -54,7 +54,7 @@ namespace WingingIt.UI
             string mode = player == null ? "AI"
                 : player.TouchControlsActive ? "Touch"
                 : player.UsingGamepad ? "Gamepad"
-                : player.Mode == ControlMode.MouseAim ? "Mouse aim" : "Direct";
+                : player.Mode == ControlMode.MouseAim ? "Mouse aim" : player.Mode == ControlMode.Follow ? "Follow" : "Direct";
             string weapons = player == null ? "" :
                 $"{(player.FireGunsHeld ? " [GUNS]" : "")}{(player.FireMissileHeld ? " [MSL]" : "")}" +
                 $"{(player.FireSecondaryHeld ? " [SEC]" : "")}{(player.DropBombHeld ? " [BOMB]" : "")}" +

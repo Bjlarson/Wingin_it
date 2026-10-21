@@ -335,6 +335,8 @@ namespace WingingIt.UI
                 DrawPopups(width);
             DrawMinimap();
             DrawBanners(scale, width);
+            DrawFields(scale, width);
+            DrawCallouts(width);
             if ((widgets & MatchWidgets.KillFeed) != 0)
                 DrawKillFeed(width);
             DrawCluster(width);
@@ -916,6 +918,7 @@ namespace WingingIt.UI
             }
 
             DrawBannerMapMarks(map, turn);
+            DrawFieldMapMarks(map, turn);
             foreach (var other in PlaneController.All)
             {
                 if (other == plane || !other.IsAlive)

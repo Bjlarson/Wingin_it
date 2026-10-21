@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using WingingIt.Bots;
+using WingingIt.CameraSystem;
 using WingingIt.Flight;
 using WingingIt.Settings;
 using WingingIt.World;
@@ -49,12 +50,16 @@ namespace WingingIt.Match
         [SerializeField] GameObject[] controlObjects;
         [Tooltip("Dev tools that break the match rules (free class switching). Only on after Dismiss.")]
         [SerializeField] Behaviour[] sandboxOnlyBehaviours;
+        [Tooltip("The player's chase camera: follows the survivors once the player is out of lives. Found in the scene if empty.")]
+        [SerializeField] FlightCameraRig cameraRig;
 
         [Header("Rules")]
         [Tooltip("Real seconds of 3-2-1 before play. The rest of the rules come from the game mode (MatchMode).")]
         [SerializeField, Min(0f)] float countdownLength = 3f;
         [SerializeField] string[] teamNames = { "West", "East" };
         [SerializeField] Color[] teamColors = { new(0.35f, 0.6f, 1f), new(1f, 0.38f, 0.32f) };
+        [Tooltip("Seconds a pilot who's out watches its own (or the watched plane's) explosion before the camera moves to a survivor.")]
+        [SerializeField, Min(0f)] float spectateHold = 2.5f;
 
         // Kept across Play Again (a scene reload), so a rematch starts with the same picks.
         static readonly Dictionary<string, BotDifficulty> s_difficulty = new(); // per mode id, read from PlayerPrefs once
@@ -76,6 +81,9 @@ namespace WingingIt.Match
         PlaneRepair _repair;
         bool _playOnlyOn = true, _controlsOn = true; // as the scene is saved
         bool _parked;
+        (int count, int size)? _levelTeams; // the roster's teams while a free-for-all mode has replaced them
+        PlaneController _spectated;
+        float _spectateHold;
 
         public event Action<MatchPhase> PhaseChanged;
 
@@ -97,7 +105,8 @@ namespace WingingIt.Match
         public BannerWorld Banners => _banners;
         /// <summary>Airfield Domination's capture fields in the level; null in other modes and before the first frame of a Domination match.</summary>
         public DominationWorld Fields => _fields;
-        public int TeamCount => roster != null ? roster.TeamCount : 2;
+        /// <summary>Teams in play: the level's (two), or one per pilot in a free-for-all mode.</summary>
+        public int TeamCount => _mode != null && _mode.IsFreeForAll ? _mode.FreeForAllSize : roster != null ? roster.TeamCount : 2;
         public BotRoster Roster => roster;
         public IReadOnlyList<FlightStats> Classes => classes;
         public int SelectedClass => s_classIndex;
@@ -109,6 +118,28 @@ namespace WingingIt.Match
 
         /// <summary>Whether (and why) the in-play class picker is showing. The world keeps running under it.</summary>
         public ClassPicker Picker { get; private set; }
+        /// <summary>
+        /// The player is out of lives (one-life modes) and watching the survivors: no flight HUD, no controls and no respawn
+        /// picker, the camera on <see cref="Spectated"/>. Ends with the match.
+        /// </summary>
+        public bool IsSpectating { get; private set; }
+        /// <summary>The plane the spectating player watches; null while the camera holds on an explosion.</summary>
+        public PlaneController Spectated => _spectated;
+
+        /// <summary>The planes still flying in the match, not counting the player, in team order.</summary>
+        public List<PlaneController> Survivors
+        {
+            get
+            {
+                var survivors = new List<PlaneController>();
+                foreach (var plane in PlaneController.All)
+                    if (plane != player && plane.IsAlive && plane.Team >= 0 && plane.Team < TeamCount)
+                        survivors.Add(plane);
+                survivors.Sort((a, b) => a.Team.CompareTo(b.Team));
+                return survivors;
+            }
+        }
+
         /// <summary>Seconds until the dead player reappears (0 when alive).</summary>
         public float RespawnTimeLeft => _respawner != null ? _respawner.RespawnTimeLeft : 0f;
 
@@ -208,9 +239,28 @@ namespace WingingIt.Match
                 roster.Difficulty = value;
         }
 
-        public string TeamName(int team) => team >= 0 && team < teamNames.Length ? teamNames[team] : $"Team {team + 1}";
-        /// <summary>The team's colour, or its high-contrast one if the player picked that (see <see cref="GameSettings.TeamColor"/>).</summary>
-        public Color TeamColor(int team) => GameSettings.TeamColor(team, team >= 0 && team < teamColors.Length ? teamColors[team] : Color.white);
+        /// <summary>The team's name; in a free-for-all mode, the name of the one pilot on it.</summary>
+        public string TeamName(int team)
+        {
+            if (_mode != null && _mode.IsFreeForAll)
+            {
+                foreach (var plane in PlaneController.All)
+                    if (plane.Team == team)
+                        return PilotName(plane);
+                foreach (var pilot in _score.Pilots)
+                    if (pilot.Team == team)
+                        return pilot.Name;
+                return $"Pilot {team + 1}";
+            }
+            return team >= 0 && team < teamNames.Length ? teamNames[team] : $"Team {team + 1}";
+        }
+
+        /// <summary>
+        /// The team's colour, or its high-contrast one if the player picked that (see <see cref="GameSettings.TeamColor"/>);
+        /// in a free-for-all mode, each pilot's own (<see cref="FreeForAll.PilotColor"/>).
+        /// </summary>
+        public Color TeamColor(int team) => _mode != null && _mode.IsFreeForAll ? FreeForAll.PilotColor(team)
+            : GameSettings.TeamColor(team, team >= 0 && team < teamColors.Length ? teamColors[team] : Color.white);
 
         /// <summary>What the scoreboard calls a pilot: "You" for the player, the plane's name for bots.</summary>
         public string PilotName(PlaneController plane) => plane == player ? "You" : plane.name;
@@ -237,6 +287,8 @@ namespace WingingIt.Match
             if (roster != null)
                 roster.enabled = false; // before its Start: no bots until the match starts (UseMode set its difficulty)
             s_classIndex = Mathf.Clamp(s_classIndex, 0, Mathf.Max(0, classes.Length - 1));
+            if (cameraRig == null)
+                cameraRig = FindAnyObjectByType<FlightCameraRig>();
             if (player != null)
             {
                 _respawner = player.GetComponent<PlaneRespawner>();
@@ -294,6 +346,7 @@ namespace WingingIt.Match
         {
             DropModeWorlds();
             _mode = mode;
+            UseTeams();
             _score = mode.CreateScore(TeamCount);
             if (mode.Info != null)
                 _clock.MatchLength = mode.Info.Length;
@@ -349,6 +402,8 @@ namespace WingingIt.Match
                 _respawner.Spawning -= OnPlayerSpawning;
             DropArena();
             DropModeWorlds();
+            StopSpectating();
+            RestoreTeams();
             Time.timeScale = 1f; // never leave the game frozen (scene unload, tests)
         }
 
@@ -369,7 +424,97 @@ namespace WingingIt.Match
                 EndMatch();
                 return;
             }
+            UpdateSpectating(dt);
             UpdatePicker();
+        }
+
+        /// <summary>
+        /// The team setup the mode wants: the level's teams, or (free for all) one team per pilot with bots filling all but
+        /// the player's. The level's are kept to put back.
+        /// </summary>
+        void UseTeams()
+        {
+            if (roster == null)
+                return;
+            if (!_mode.IsFreeForAll)
+            {
+                RestoreTeams();
+                return;
+            }
+            _levelTeams ??= (roster.TeamCount, roster.TeamSize);
+            roster.SetTeams(_mode.FreeForAllSize, 1);
+        }
+
+        void RestoreTeams()
+        {
+            if (_levelTeams is not { } level)
+                return;
+            _levelTeams = null;
+            if (roster != null)
+                roster.SetTeams(level.count, level.size);
+        }
+
+        /// <summary>
+        /// Out of lives: the camera holds on the player's explosion for <see cref="spectateHold"/> seconds, then follows
+        /// the survivor nearest it; when that plane goes down, it holds on that explosion and moves to the next nearest.
+        /// </summary>
+        void UpdateSpectating(float dt)
+        {
+            bool outOfLives = player != null && !player.IsAlive && !_mode.CanRespawn(_score.Get(player));
+            if (!outOfLives)
+            {
+                StopSpectating();
+                return;
+            }
+            if (!IsSpectating)
+            {
+                IsSpectating = true;
+                _spectated = null;
+                _spectateHold = spectateHold;
+                RefreshPlayOnly();
+            }
+            if (_spectated != null && _spectated.IsAlive)
+                return;
+            _spectateHold -= dt;
+            if (_spectateHold > 0f)
+                return;
+            var survivors = Survivors;
+            var positions = new List<Vector3>(survivors.Count);
+            foreach (var plane in survivors)
+                positions.Add(plane.Position);
+            int nearest = FreeForAll.NearestSurvivor(positions, _spectated != null ? _spectated.Position : player.Position);
+            if (nearest >= 0)
+                Watch(survivors[nearest]);
+        }
+
+        void Watch(PlaneController plane)
+        {
+            _spectated = plane;
+            _spectateHold = spectateHold;
+            if (cameraRig != null)
+                cameraRig.Spectate(plane);
+        }
+
+        /// <summary>While spectating: watch the next (or previous) survivor.</summary>
+        public void CycleSpectated(int dir)
+        {
+            if (!IsSpectating)
+                return;
+            var survivors = Survivors;
+            int next = FreeForAll.Cycle(survivors.IndexOf(_spectated), survivors.Count, dir);
+            if (next >= 0)
+                Watch(survivors[next]);
+        }
+
+        void StopSpectating()
+        {
+            if (!IsSpectating)
+                return;
+            IsSpectating = false;
+            _spectated = null;
+            if (cameraRig != null)
+                cameraRig.Spectate(null);
+            RefreshPlayOnly();
         }
 
         /// <summary>Capture the Banner: the stands' banners, towed banners and carrier drag run in the level (made on first use).</summary>
@@ -387,7 +532,7 @@ namespace WingingIt.Match
             if (_mode is not DominationMode domination)
                 return;
             _fields ??= DominationWorld.Create(domination);
-            _fields?.Tick(dt);
+            _fields?.Tick(_score, dt);
         }
 
         /// <summary>The level as built again: no banners out, every capture field neutral and dormant.</summary>
@@ -404,7 +549,9 @@ namespace WingingIt.Match
         void UpdatePicker()
         {
             var want = Picker;
-            if (player != null && !player.IsAlive)
+            if (IsSpectating)
+                want = ClassPicker.None; // out of lives: nothing to pick
+            else if (player != null && !player.IsAlive)
                 want = ClassPicker.Respawn;
             else if (Picker == ClassPicker.Respawn || (Picker == ClassPicker.Airfield && !CanChangeClassAtAirfield))
                 want = ClassPicker.None;
@@ -663,6 +810,8 @@ namespace WingingIt.Match
             MenuOpen = false;
             DropArena(); // free flight is the level as built
             DropModeWorlds();
+            StopSpectating();
+            RestoreTeams();
             RefreshPlayOnly();
             if (_parked && player != null && player.TryGetComponent<PlaneRespawner>(out var respawner))
                 respawner.SpawnNow(); // out of the hangar, as free flight always started
@@ -679,6 +828,8 @@ namespace WingingIt.Match
         {
             bool playing = _clock.Phase == MatchPhase.Playing;
             Time.timeScale = playing ? 1f : 0f;
+            if (!playing)
+                StopSpectating(); // the scoreboard: back to the player's own plane
             Picker = ClassPicker.None;
             if (_clock.Phase is not (MatchPhase.Countdown or MatchPhase.Playing))
                 MenuOpen = false; // time ran out with it open: the scoreboard takes over
@@ -692,11 +843,12 @@ namespace WingingIt.Match
 
         /// <summary>
         /// The flight HUD shows in play with no class picker up (the picker frees the mouse, and the HUD would draw over
-        /// it); the controls and on-screen controls also need the in-match menu closed. Dismissed, all of it is on.
+        /// it) and the player not out spectating; the controls and on-screen controls also need the in-match menu closed.
+        /// Dismissed, all of it is on.
         /// </summary>
         void RefreshPlayOnly()
         {
-            bool hud = _dismissed || (_clock.Phase == MatchPhase.Playing && Picker == ClassPicker.None);
+            bool hud = _dismissed || (_clock.Phase == MatchPhase.Playing && Picker == ClassPicker.None && !IsSpectating);
             bool controls = hud && !MenuOpen;
             if (hud != _playOnlyOn)
             {

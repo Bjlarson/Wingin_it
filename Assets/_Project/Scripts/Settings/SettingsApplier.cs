@@ -1,18 +1,44 @@
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
+using UnityEngine.SceneManagement;
 
 namespace WingingIt.Settings
 {
     /// <summary>
-    /// Applies the game-wide <see cref="GameSettings"/> (quality, resolution, frame rate cap, render scale, HDR, master
-    /// volume, mute in background) at startup and on every change. Created on its own before the first scene loads and
+    /// Applies the game-wide <see cref="GameSettings"/> (quality, resolution, frame rate cap, render scale, HDR, shadows,
+    /// master volume, mute in background) at startup, on every change, and (shadows) on every scene load. Created on its own before the first scene loads and
     /// kept across scenes. Per-object settings (controls, FOV, HUD) are read by the objects themselves.
     /// </summary>
     public sealed class SettingsApplier : MonoBehaviour
     {
         static SettingsApplier s_instance;
         bool _focused = true;
+        UniversalRenderPipelineAsset _shadowAsset;
+        ShadowSnapshot _originalShadows;
+
+        /// <summary>The URP asset's shadow fields as the project ships them, put back when play mode ends in the Editor.</summary>
+        struct ShadowSnapshot
+        {
+            public int resolution, cascades;
+            public float distance, split2;
+            public Vector3 split4;
+
+            public static ShadowSnapshot Of(UniversalRenderPipelineAsset a) => new()
+            {
+                resolution = a.mainLightShadowmapResolution, cascades = a.shadowCascadeCount, distance = a.shadowDistance,
+                split2 = a.cascade2Split, split4 = a.cascade4Split,
+            };
+
+            public void ApplyTo(UniversalRenderPipelineAsset a)
+            {
+                a.mainLightShadowmapResolution = resolution;
+                a.shadowCascadeCount = cascades;
+                a.shadowDistance = distance;
+                a.cascade2Split = split2;
+                a.cascade4Split = split4;
+            }
+        }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         static void Create()
@@ -27,6 +53,7 @@ namespace WingingIt.Settings
         void OnEnable()
         {
             GameSettings.Current.Changed += Apply;
+            SceneManager.sceneLoaded += OnSceneLoaded;
             Apply();
         }
 
@@ -34,7 +61,13 @@ namespace WingingIt.Settings
         {
             if (GameSettings.Current != null)
                 GameSettings.Current.Changed -= Apply;
+            SceneManager.sceneLoaded -= OnSceneLoaded;
+            // The URP asset is a project file: the Editor would keep the player's shadow choice after play mode.
+            if (Application.isEditor && _shadowAsset != null)
+                _originalShadows.ApplyTo(_shadowAsset);
         }
+
+        void OnSceneLoaded(Scene scene, LoadSceneMode mode) => ApplyShadows();
 
         void OnApplicationFocus(bool focus)
         {
@@ -71,7 +104,48 @@ namespace WingingIt.Settings
                 urp.renderScale = s.renderScale;
                 urp.supportsHDR = s.hdr;
             }
+            ApplyShadows();
             ApplyVolume();
+        }
+
+        /// <summary>The Shadows setting: the shadow map on the URP asset, and on/off and edge filtering on the sun.</summary>
+        void ApplyShadows()
+        {
+            var profile = ShadowProfile.For(GameSettings.Current.Data.shadows);
+            if (GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset urp)
+            {
+                if (_shadowAsset != urp)
+                {
+                    if (Application.isEditor && _shadowAsset != null)
+                        _originalShadows.ApplyTo(_shadowAsset);
+                    _shadowAsset = urp;
+                    _originalShadows = ShadowSnapshot.Of(urp);
+                }
+                if (profile.Enabled)
+                {
+                    urp.mainLightShadowmapResolution = profile.Resolution;
+                    urp.shadowDistance = profile.Distance;
+                    urp.shadowCascadeCount = profile.Cascades;
+                    urp.cascade2Split = profile.Splits.x;
+                    urp.cascade4Split = profile.Splits;
+                }
+            }
+
+            var sun = Sun();
+            if (sun == null)
+                return;
+            sun.shadows = profile.Enabled ? LightShadows.Soft : LightShadows.None;
+            sun.GetUniversalAdditionalLightData().softShadowQuality = (SoftShadowQuality)profile.SoftQuality;
+        }
+
+        static Light Sun()
+        {
+            if (RenderSettings.sun != null)
+                return RenderSettings.sun;
+            foreach (var light in FindObjectsByType<Light>(FindObjectsSortMode.None))
+                if (light.type == LightType.Directional)
+                    return light;
+            return null;
         }
 
         void ApplyVolume()

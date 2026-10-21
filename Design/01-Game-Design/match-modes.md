@@ -154,7 +154,33 @@ Pure rules in `FieldBoard` (`Scripts/Match/DominationRules.cs`); nothing in the 
 - **Owned field benefits:** nothing new: a held field is friendly (`Airfield.IsFriendlyTo`), so the existing rules give its owner repair (with the usual invulnerability), RETURN TO BASE, the bots' retreats and respawns there. With the tower down none of that works, the same as for any field.
 - **Respawn choice:** while dead, the picker shows a **SPAWN AT** row under the plane cards once there's more than one field to come back at: HOME first, then held fields by name. Click one or press TAB (Shift+TAB back). Default is the nearest friendly field to where you died; a pick that's lost before the timer runs out falls back to that. Bots respawn at the friendly field nearest where they died. The row is general (`Airfield.SpawnFieldsFor`), so in Teams it never shows.
 - **Match over:** Dismiss, a mode change or leaving the scene puts every capture field back to neutral, not capturable, defenses dormant.
-- The card stays **IN DEVELOPMENT** until capture scoring, the HUD and the bots exist.
+- The card stayed **IN DEVELOPMENT** until capture scoring, the HUD and the bots existed. All three are in (2026-10-21), so it's playable.
+
+### Scoring (built 2026-10-20)
+
+`DominationMode` (`Scripts/Match/MatchMode.cs`); `DominationWorld` passes it each frame's captures.
+
+- **Capture:** 100 to the team ("Field captured", no pilot) plus 50 to the team and the personal score of every capturing pilot parked there when it flipped ("+50 CAPTURE" popup). Each of them gets a capture on the **CAP** scoreboard column (shared with Banner's `PilotScore.Captures`).
+- **Holding:** every 2 s of play each team gets 5 per capture field it owns (team score only, no popup). Neutral fields pay nobody.
+- **Kills / assists:** as in Teams (50 / 20).
+- **Early win:** one team owning every capture field for 30 s straight ends the match (`EarlyWinner`). Losing any field, even to neutral, restarts the 30 s. `HoldingAll` / `HoldingAllTime` expose the clock for the HUD.
+- **At time:** highest team score wins, a tie is a draw. The headline reads `WEST 420 – 380 EAST · FIELDS 2 – 1`.
+
+### HUD (built 2026-10-21)
+
+`FlightHUD.Domination.cs`, reading `DominationWorld` / `FieldBoard`; the text rules are in `HudText` (EditMode-tested).
+
+- **Field bar:** a chip per capture field under the score bar, in board order (A Central, B South East, C South West): the letter in the owner's colour (grey when neutral), the field's name, and its state: the owner, `EAST 45%` with a bar in the capturing team's colour while a capture is under way, CONTESTED (amber, blinking), or TOWER DOWN (red, blinking) on an owned field.
+- **Hold-every-field clock:** while one team owns them all, a line under the chips counts down: `WE HOLD EVERY FIELD · WIN IN 18 S` (green) or `EAST HOLDS EVERY FIELD · THEY WIN IN 18 S` (red, blinking).
+- **Markers:** a ringed letter over each capture field in view, in the owner's colour, with its distance and TOWER DOWN. In view only (no edge arrows: the minimap and the RETURN TO BASE arrow already point the way), and hidden on the ground and on approach.
+- **Minimap:** the letter above each capture field's square in the owner's colour, with a pulsing ring while it's being captured or contested.
+- **Capture ring:** landed in a capture field's zone, a ring of dots round the screen centre fills with the capture in the capturing team's colour, the field's letter inside. Under it: STOP IN THE ZONE TO CAPTURE while still rolling, then CAPTURING 45% / UNDOING EAST 30% / CONTESTED: ENEMY ON THE FIELD / HELD BY YOUR TEAM, plus a note that a standing enemy tower makes it 3× slower.
+- **Callouts** (shared with Banner's stack): YOU CAPTURED CENTRAL / WE CAPTURED CENTRAL / CENTRAL CAPTURED BY EAST; on an owned field's tower falling, CENTRAL TOWER DOWN: NO AA OR REPAIR (owner) or …: FULL-SPEED CAPTURE (everyone else), and TOWER REBUILT when it's back; WE HOLD EVERY FIELD: 30 S TO WIN / EAST HOLDS EVERY FIELD: TAKE ONE BACK.
+- Not yet looked at in a screenshot.
+
+### Bots (built 2026-10-21)
+
+Capturers and cover by roster slot (4 / 3 in 7), split over the fields by value; bots with bombs go for defended enemy towers first; capturers fly an approach lane in and land; cover circles the field and strafes enemies parked on it; a parked capturer leaves when an enemy lands too. Details in [bots](../02-Mechanics/bots.md#airfield-domination-built-2026-10-21-prototype).
 
 ## Ram Royale (prototype)
 
@@ -169,6 +195,14 @@ Pure rules in `FieldBoard` (`Scripts/Match/DominationRules.cs`); nothing in the 
 - **Win:** the last plane flying. If time runs out, the plane with the most body HP left wins, then the most rams. **Scoring** (for XP / coins later): a placement bonus plus points per ram knock-out.
 - **HUD:** planes left (e.g. 7 / 16), a big arrow or marker on the nearest plane, the shrinking-edge warning, and a ram hit flash ("RAMMED X!").
 - **Bots:** a new ram behavior: steer at a **collision intercept point** (not the gun lead point), boost in the last second, and break away from anyone lining up on them. In this mode the existing plane-avoidance reflex only dodges planes that are coming at the bot.
+
+### Free for all, one life, spectating (built 2026-10-21)
+
+- **Framework:** `MatchMode.FreeForAllSize` (0 = the level's teams) and `MatchMode.Lives` (0 = unlimited; `CanRespawn` checks deaths against it), so any later mode (Free For All, Sky Racing) gets both by overriding two numbers.
+- **Teams:** in a free-for-all mode `MatchManager` has the `BotRoster` fill **16 teams of 1** (`BotRoster.SetTeams`); the player stays team 0 and bots take teams 1–15, named `Bot 5 (Fighter)`. A team's name is its pilot's name, and each pilot has its own colour (`FreeForAll.PilotColor`: 16 hues, the first two are the usual West blue and East red). The level's 2 × 8 come back on Dismiss or when the scene goes. A bot with no home airfield appears wherever the match's spawn rules put it (the arena's air ring).
+- **`RamRoyaleMode`** (`MatchMode.cs`, card still IN DEVELOPMENT): 16 pilots, one life, plays in the `RamRoyale` arena even off the card. For now a knock-out scores 100 to whoever gets the credit, with no assists; the score bar shows only the clock; scoreboard columns KO / OUT / SCORE, pilots still flying listed first; headline "7 OF 16 STILL FLYING". Weapons, ram damage and the last-plane win are the next steps.
+- **Spectating:** a player out of lives gets no respawn picker, no flight HUD and no controls (`MatchManager.IsSpectating`). The camera holds on the explosion for **2.5 s**, then follows the survivor nearest it in a plain chase view (`FlightCameraRig.Spectate`); when that plane goes down it holds on that explosion and moves to the next nearest. ← → (or LB / RB, or the on-screen < > buttons) switch planes. The screen shows YOU'RE OUT, the watched pilot at the bottom and a STILL FLYING list on the right with each pilot's colour. The scoreboard ends it and hands the camera back.
+- **Scoreboard (free for all):** one ranking split into two columns of 8, each row with its place and the pilot's colour dot.
 
 ## Sky Racing (prototype)
 

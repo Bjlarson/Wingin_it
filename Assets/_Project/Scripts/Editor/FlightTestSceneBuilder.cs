@@ -235,7 +235,7 @@ namespace WingingIt.Editor
 
         internal class Materials
         {
-            public readonly Material Ground, Runway, Marking, RepairMarking, Concrete, ConcreteDark, Mountain, Ring, Target, PlaneBody, PlaneDark, Glass, Tracer, FlakTracer, Smoke, Ember, Shield;
+            public readonly Material Ground, Runway, Marking, RepairMarking, Concrete, ConcreteDark, Mountain, Ring, Target, PlaneBody, PlaneDark, Glass, Tracer, FlakTracer, Smoke, Ember, Shield, BlobShadow;
 
             public Materials()
             {
@@ -257,6 +257,7 @@ namespace WingingIt.Editor
                 Smoke = UnlitMat("FX_Smoke", new Color(0.32f, 0.32f, 0.34f));
                 Ember = UnlitMat("FX_Ember", new Color(1f, 0.45f, 0.1f));
                 Shield = TransparentUnlitMat("FX_Shield", new Color(0.45f, 0.75f, 1f, 0.3f));
+                BlobShadow = BlobShadowMat("FX_BlobShadow");
             }
 
             WeaponModels _weapons;
@@ -282,6 +283,21 @@ namespace WingingIt.Editor
                 mat.SetOverrideTag("RenderType", "Transparent");
                 mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
                 mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+                mat.enableInstancing = true;
+                AssetDatabase.CreateAsset(mat, path);
+                return mat;
+            }
+
+            /// <summary>The planes' projected altitude shadow (Winging It/Blob Shadow): a multiply, so a cool hue-shifted tint.</summary>
+            static Material BlobShadowMat(string name)
+            {
+                string path = $"{MaterialsFolder}/{name}.mat";
+                var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+                if (mat != null)
+                    return mat;
+
+                mat = new Material(Shader.Find("Winging It/Blob Shadow"));
+                mat.SetColor("_Color", new Color(0.32f, 0.36f, 0.52f));
                 mat.enableInstancing = true;
                 AssetDatabase.CreateAsset(mat, path);
                 return mat;
@@ -466,6 +482,10 @@ namespace WingingIt.Editor
             root.AddComponent<PlaneRespawner>();
             var repair = root.AddComponent<PlaneRepair>();
             SetField(repair, "bubbleMaterial", m.Shield);
+            var shadow = root.AddComponent<PlaneShadow>();
+            SetField(shadow, "plane", controller);
+            SetField(shadow, "material", m.BlobShadow);
+            SetField(root.AddComponent<GroundKickup>(), "plane", controller);
             var landingGear = root.AddComponent<LandingGear>();
             // The plane sits on the lowest wheel: pivot height + leg length + wheel radius below the origin.
             SetFloat(landingGear, "wheelDrop", Mathf.Max(0.55f + 1.2f + 0.35f, 0.55f + 1.25f + 0.28f));
@@ -1071,6 +1091,9 @@ namespace WingingIt.Editor
             sun.transform.rotation = Quaternion.Euler(48f, -35f, 0f);
             sun.intensity = 1.4f;
             sun.shadows = LightShadows.Soft;
+            // Toy-diorama shadows: the dim sky ambient alone leaves full-strength shadows near black on the grass.
+            sun.shadowStrength = 0.65f;
+            RenderSettings.sun = sun; // the Shadows setting and the planes' blob shadows find it here
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
             RenderSettings.fogColor = new Color(0.72f, 0.82f, 0.92f);
@@ -1432,7 +1455,7 @@ namespace WingingIt.Editor
             // Right: action buttons
             TouchButton("Fire", controls.transform, knob, new Vector2(-230f, 230f), 190f, new Color(1f, 0.35f, 0.25f, 0.5f), "<Gamepad>/rightTrigger");
             var missileButton = TouchButton("Missile", controls.transform, knob, new Vector2(-430f, 170f), 130f, new Color(1f, 0.75f, 0.2f, 0.5f), "<Gamepad>/leftTrigger");
-            TouchButton("Boost", controls.transform, knob, new Vector2(-190f, 450f), 130f, new Color(0.3f, 0.75f, 1f, 0.5f), "<Gamepad>/rightShoulder");
+            TouchButton("Boost", controls.transform, knob, new Vector2(-190f, 450f), 130f, new Color(0.3f, 0.75f, 1f, 0.5f), "<Gamepad>/buttonEast");
             var rocketsButton = TouchButton("Rockets", controls.transform, knob, new Vector2(-560f, 300f), 110f, new Color(1f, 0.55f, 0.15f, 0.5f), "<Gamepad>/buttonWest");
             var bombButton = TouchButton("Bomb", controls.transform, knob, new Vector2(-610f, 130f), 110f, new Color(0.75f, 0.75f, 0.8f, 0.5f), "<Gamepad>/buttonNorth");
             TouchButton("Ability", controls.transform, knob, new Vector2(-390f, 370f), 110f, new Color(0.5f, 1f, 0.5f, 0.5f), "<Gamepad>/buttonSouth");

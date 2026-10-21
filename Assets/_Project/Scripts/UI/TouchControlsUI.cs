@@ -69,12 +69,14 @@ namespace WingingIt.UI
                 TouchControlsMode.Off => false,
                 _ => Application.isMobilePlatform || _touchSeen || showOnDesktop,
             };
-            if (controlsRoot != null && controlsRoot.activeSelf != show)
-                controlsRoot.SetActive(show);
             if (player != null)
                 player.TouchControlsActive = show;
+            // Gesture-only play: touch input stays on, but the buttons and stick go away.
+            bool showButtons = show && (player == null || !player.TouchGesturesActive);
+            if (controlsRoot != null && controlsRoot.activeSelf != showButtons)
+                controlsRoot.SetActive(showButtons);
 
-            if (show)
+            if (showButtons)
             {
                 ShowIf(rocketsButton, rockets != null && rockets.IsEquipped);
                 ShowIf(missileButton, missiles != null && missiles.IsEquipped);

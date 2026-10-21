@@ -51,6 +51,8 @@ MonoBehaviour:
     prefab: {fileID: 8694874286211864604, guid: 6ceb4f66c69586549a102d6dd8a11fa9, type: 3}
   - kind: 18
     prefab: {fileID: 1273790632541759908, guid: cdf85b750897ee7499dd7960419094c1, type: 3}
+  - kind: 19
+    prefab: {fileID: 5369688582716169012, guid: 690ac5a2bc13c6345a60cdf7988f744d, type: 3}
   shieldMesh: {fileID: -1980531734713561306, guid: c8afafe184fed3c448eabfef22913b5a, type: 3}
   shieldMaterial: {fileID: 2100000, guid: c32b1b4d137422449837b430ba55bb8c, type: 2}
   afterburnerMesh: {fileID: 778965875210069606, guid: c8afafe184fed3c448eabfef22913b5a, type: 3}

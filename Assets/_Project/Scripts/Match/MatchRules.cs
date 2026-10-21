@@ -101,7 +101,7 @@ namespace WingingIt.Match
         public int Kills;
         public int Assists;
         public int Deaths;
-        /// <summary>Banners this pilot flew home (Capture the Banner).</summary>
+        /// <summary>Banners this pilot flew home (Capture the Banner) or fields it was on the capture of (Airfield Domination).</summary>
         public int Captures;
         /// <summary>Personal score: every point this pilot earned for the team (kills, assists, objectives).</summary>
         public int Points;

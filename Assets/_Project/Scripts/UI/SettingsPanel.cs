@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using WingingIt.Flight;
+using WingingIt.Input;
 using WingingIt.Settings;
 using static WingingIt.UI.GlassGUI;
 
@@ -37,6 +38,12 @@ namespace WingingIt.UI
         SettingsTab _tab;
         int _focus;
         bool _bindings;
+        int _bindGroup;      // 0 = keyboard + mouse, 1 = gamepad
+        int _bindFocus;
+        int _bindScroll;
+        InputActionRebindingExtensions.RebindingOperation _rebind;
+        BindingSlot _rebinding;
+        int _rebindEndFrame = -1; // the frame a rebind ended: its Esc / Start press mustn't also act as Back
         List<Row> _rows = new();
         bool _dragging;
 
@@ -48,6 +55,7 @@ namespace WingingIt.UI
         {
             _g = g;
             _actions = actions;
+            InputBindings.Apply(actions);
         }
 
         static GameSettings S => GameSettings.Current;
@@ -59,6 +67,7 @@ namespace WingingIt.UI
             _tab = SettingsTab.Controls;
             _focus = 0;
             _bindings = false;
+            _rebind?.Cancel();
         }
 
         /// <summary>Keyboard / gamepad. True when the player backs out of Settings.</summary>
@@ -68,8 +77,7 @@ namespace WingingIt.UI
                 RevertDisplay();
             if (_bindings)
             {
-                if (nav.Back || nav.Confirm)
-                    _bindings = false;
+                HandleBindingsInput(nav);
                 return false;
             }
             if (nav.Back)
@@ -116,9 +124,8 @@ namespace WingingIt.UI
 
             if (_bindings)
             {
-                DrawBindings(panel);
-                _g.Foot(panel, "FIXED BINDINGS FOR NOW", Hint(nav, "ESC  BACK", "B  BACK"));
-                if (back)
+                DrawBindings(panel, nav);
+                if (back && _rebind == null)
                     _bindings = false;
                 return false;
             }
@@ -147,22 +154,24 @@ namespace WingingIt.UI
             return GUI.Button(r, GUIContent.none, GUIStyle.none);
         }
 
-        void DrawTabs(Rect r, MenuNav nav)
+        void DrawTabs(Rect r, MenuNav nav) => DrawTabStrip(r, TabNames, (int)_tab, SwitchTab, nav);
+
+        void DrawTabStrip(Rect r, string[] names, int current, Action<int> select, MenuNav nav)
         {
-            float w = r.width / TabNames.Length;
-            for (int i = 0; i < TabNames.Length; i++)
+            float w = r.width / names.Length;
+            for (int i = 0; i < names.Length; i++)
             {
                 var t = new Rect(r.x + i * w, r.y, w, r.height);
-                bool on = (int)_tab == i;
+                bool on = current == i;
                 bool hover = t.Contains(Event.current.mousePosition);
                 if (on)
                 {
                     _g.Fill(new Rect(t.x + 12f, t.yMax - 2f, t.width - 24f, 2f), Color.white);
                     _g.Fill(new Rect(t.x + 12f, t.yMax - 6f, t.width - 24f, 6f), Alpha(Glow, 0.08f));
                 }
-                _g.Tracked(t, TabNames[i], _g.Hint, 2.6f, TextAnchor.MiddleCenter, on ? Color.white : Alpha(White, hover ? 0.9f : 0.55f));
+                _g.Tracked(t, names[i], _g.Hint, 2.6f, TextAnchor.MiddleCenter, on ? Color.white : Alpha(White, hover ? 0.9f : 0.55f));
                 if (GUI.Button(t, GUIContent.none, GUIStyle.none))
-                    SwitchTab(i);
+                    select(i);
             }
             string prev = nav.Glyph("Q", "LB"), next = nav.Glyph("E", "RB");
             if (prev != null)
@@ -253,6 +262,7 @@ namespace WingingIt.UI
             switch (_tab)
             {
                 case SettingsTab.Controls:
+                    rows.Add(Toggle("FOLLOW CURSOR / FINGER", () => D.followPointer, v => S.Set(s => s.followPointer = v)));
                     if (!mobile)
                     {
                         rows.Add(Choice("CONTROL MODE", new[] { "MOUSE AIM", "DIRECT" }, () => D.mouseAim ? 0 : 1, i => S.Set(s => s.mouseAim = i == 0)));
@@ -262,19 +272,22 @@ namespace WingingIt.UI
                     rows.Add(Slider("FREE LOOK SENSITIVITY", () => D.freeLookSensitivity, v => S.Set(s => s.freeLookSensitivity = v),
                         GameSettings.MinSensitivity, GameSettings.MaxSensitivity, 0.05f, v => $"{v:0.00}×"));
                     rows.Add(Toggle("INVERT PITCH", () => D.invertPitch, v => S.Set(s => s.invertPitch = v)));
+                    rows.Add(Choice("CAMERA", new[] { "LEVEL CHASE", "LOCKED TO PLANE" }, () => D.cameraLockedToPlane ? 1 : 0, i => S.Set(s => s.cameraLockedToPlane = i == 1)));
                     rows.Add(Choice("STICK STYLE", new[] { "AUTO-LEVEL", "HOLD", "BANK TURN" }, () => (int)D.controlStyle,
                         i => S.Set(s => s.controlStyle = (ControlStyle)i)));
                     rows.Add(Choice("TOUCH CONTROLS", new[] { "AUTO", "ON", "OFF" }, () => (int)D.touchControls, i => S.Set(s => s.touchControls = (TouchControlsMode)i)));
                     if (touchRows)
                     {
                         rows.Add(Toggle("AUTO THROTTLE (TOUCH)", () => D.autoThrottle, v => S.Set(s => s.autoThrottle = v)));
+                        rows.Add(Toggle("TOUCH GESTURES ONLY (FOLLOW)", () => D.touchGesturesOnly, v => S.Set(s => s.touchGesturesOnly = v)));
                         rows.Add(Slider("TOUCH BUTTON SIZE", () => D.touchButtonSize, v => S.Set(s => s.touchButtonSize = v),
                             GameSettings.MinTouchButtonSize, GameSettings.MaxTouchButtonSize, Notch, v => $"{v * 100f:0}%"));
                         rows.Add(Slider("TOUCH STICK SENSITIVITY", () => D.touchSensitivity, v => S.Set(s => s.touchSensitivity = v),
                             GameSettings.MinSensitivity, GameSettings.MaxSensitivity, 0.05f, v => $"{v:0.00}×"));
                     }
-                    if (_actions != null)
-                        rows.Add(new Row { Label = "BINDINGS", Value = () => "VIEW  ›", Press = () => _bindings = true });
+                    // On a phone the touch buttons stand in for gamepad buttons, so rebinding them would break the touch controls.
+                    if (_actions != null && !mobile)
+                        rows.Add(new Row { Label = "KEY BINDINGS", Value = () => "REBIND  ›", Press = OpenBindings });
                     break;
 
                 case SettingsTab.Graphics:
@@ -293,6 +306,7 @@ namespace WingingIt.UI
                         () => Mathf.Max(0, Array.IndexOf(rates, D.frameRateCap)), i => S.Set(s => s.frameRateCap = rates[i])));
                     rows.Add(Slider("RENDER SCALE", () => D.renderScale, v => S.Set(s => s.renderScale = v),
                         GameSettings.MinRenderScale, GameSettings.MaxRenderScale, Notch, v => $"{v * 100f:0}%"));
+                    rows.Add(Choice("SHADOWS", new[] { "OFF", "LOW", "MEDIUM", "HIGH" }, () => (int)D.shadows, i => S.Set(s => s.shadows = (ShadowDetail)i)));
                     rows.Add(Slider("FIELD OF VIEW", () => D.fieldOfView, v => S.Set(s => s.fieldOfView = v),
                         GameSettings.MinFov, GameSettings.MaxFov, 1f, v => $"{v:0}°"));
                     rows.Add(Toggle("SPEED FOV EFFECT", () => D.speedFov, v => S.Set(s => s.speedFov = v)));
@@ -329,6 +343,8 @@ namespace WingingIt.UI
             if (_tab == SettingsTab.Graphics && !S.IsMobile)
                 ChangeDisplay(_ => { });
             S.ResetTab(_tab);
+            if (_tab == SettingsTab.Controls)
+                InputBindings.Apply(_actions);
         }
 
         static Row Toggle(string label, Func<bool> get, Action<bool> set) => new()
@@ -423,46 +439,143 @@ namespace WingingIt.UI
 
         // ---------- Bindings ----------
 
-        void DrawBindings(Rect panel)
+        const float BindRowH = 44f;
+        static readonly string[] BindGroupNames = { "KEYBOARD + MOUSE", "GAMEPAD" };
+
+        string BindGroup => _bindGroup == 0 ? InputBindings.KeyboardGroup : InputBindings.GamepadGroup;
+
+        InputActionMap FlightMap => _actions != null ? _actions.FindActionMap("Flight") : null;
+
+        List<BindingSlot> BindSlots()
         {
-            var map = _actions.FindActionMap("Flight");
-            if (map == null)
+            var map = FlightMap;
+            return map != null ? InputBindings.Slots(map, BindGroup) : new List<BindingSlot>();
+        }
+
+        void OpenBindings()
+        {
+            _bindings = true;
+            _bindFocus = 0;
+            _bindScroll = 0;
+        }
+
+        void SetBindGroup(int group)
+        {
+            _bindGroup = group;
+            _bindFocus = 0;
+            _bindScroll = 0;
+        }
+
+        /// <summary>Keyboard / gamepad on the bindings page. While a rebind waits, the rebinder owns the input.</summary>
+        void HandleBindingsInput(MenuNav nav)
+        {
+            if (_rebind != null || Time.frameCount == _rebindEndFrame)
                 return;
-            float x = panel.x + 36f, w = panel.width - 72f, y = panel.y + 100f;
-            const float h = 34f;
-            _g.Tracked(new Rect(x + 16f, y, w * 0.36f, h), "ACTION", _g.Hint, 3f, TextAnchor.MiddleLeft, Steel);
-            _g.Tracked(new Rect(x + w * 0.36f, y, w * 0.38f, h), "KEYBOARD + MOUSE", _g.Hint, 3f, TextAnchor.MiddleLeft, Steel);
-            _g.Tracked(new Rect(x + w * 0.74f, y, w * 0.26f, h), "GAMEPAD", _g.Hint, 3f, TextAnchor.MiddleLeft, Steel);
-            _g.Fill(new Rect(x, y + h, w, 1f), Alpha(Color.white, 0.14f));
-            y += h + 4f;
-            foreach (var action in map.actions)
+            if (nav.Back)
             {
-                string kb = action.GetBindingDisplayString(InputBinding.MaskByGroup("Keyboard&Mouse"));
-                string pad = action.GetBindingDisplayString(InputBinding.MaskByGroup("Gamepad"));
-                _g.Tracked(new Rect(x + 16f, y, w * 0.36f - 16f, h), Nice(action.name), _g.Hint, 1.6f, TextAnchor.MiddleLeft, White);
-                GUI.color = _g.Faded(Body);
-                GUI.Label(new Rect(x + w * 0.36f, y + 6f, w * 0.38f - 12f, h), Short(kb), _g.BodyText);
-                GUI.Label(new Rect(x + w * 0.74f, y + 6f, w * 0.26f, h), Short(pad), _g.BodyText);
-                GUI.color = Color.white;
-                y += h;
-                if (y > panel.yMax - 80f)
-                    break;
+                _bindings = false;
+                return;
+            }
+            if (nav.PrevTab || nav.NextTab || nav.Left || nav.Right)
+                SetBindGroup(1 - _bindGroup);
+            var slots = BindSlots();
+            int count = slots.Count + 1; // the last row resets the device's bindings
+            if (nav.Up) _bindFocus = MenuMath.Step(_bindFocus, -1, count);
+            if (nav.Down) _bindFocus = MenuMath.Step(_bindFocus, 1, count);
+            _bindFocus = Mathf.Clamp(_bindFocus, 0, count - 1);
+            if (nav.Confirm)
+                ActivateBinding(slots, _bindFocus);
+            else if (_bindFocus < slots.Count && (Keyboard.current?.deleteKey.wasPressedThisFrame ?? false))
+            {
+                InputBindings.Reset(slots[_bindFocus]);
+                InputBindings.Save(_actions);
             }
         }
 
-        /// <summary>"FireSecondary" → "FIRE SECONDARY".</summary>
-        static string Nice(string name)
+        void ActivateBinding(List<BindingSlot> slots, int index)
         {
-            var sb = new System.Text.StringBuilder();
-            for (int i = 0; i < name.Length; i++)
+            var map = FlightMap;
+            if (map == null || _rebind != null)
+                return;
+            if (index >= slots.Count)
             {
-                if (i > 0 && char.IsUpper(name[i]) && !char.IsUpper(name[i - 1]))
-                    sb.Append(' ');
-                sb.Append(char.ToUpperInvariant(name[i]));
+                InputBindings.ResetGroup(map, BindGroup);
+                InputBindings.Save(_actions);
+                return;
             }
-            return sb.ToString();
+            _rebinding = slots[index];
+            _rebind = InputBindings.Begin(_actions, map, BindGroup, _rebinding, _ =>
+            {
+                _rebind = null;
+                _rebindEndFrame = Time.frameCount;
+            });
         }
 
-        static string Short(string s) => s.Length > 34 ? s.Substring(0, 33) + "…" : s;
+        void DrawBindings(Rect panel, MenuNav nav)
+        {
+            if (FlightMap == null)
+                return;
+            DrawTabStrip(new Rect(panel.x + 36f, panel.y + 96f, panel.width - 72f, 48f), BindGroupNames, _bindGroup,
+                i => { if (_rebind == null) SetBindGroup(i); }, nav);
+
+            var slots = BindSlots();
+            int total = slots.Count + 1;
+            float x = panel.x + 36f, w = panel.width - 72f, top = panel.y + 96f + 64f;
+            int visible = Mathf.Max(1, Mathf.FloorToInt((panel.yMax - 80f - top) / BindRowH));
+            _bindFocus = Mathf.Clamp(_bindFocus, 0, total - 1);
+
+            var e = Event.current;
+            if (e.type == EventType.ScrollWheel && panel.Contains(e.mousePosition))
+            {
+                _bindScroll += e.delta.y > 0f ? 1 : -1;
+                e.Use();
+            }
+            _bindScroll = Mathf.Clamp(_bindScroll, 0, Mathf.Max(0, total - visible));
+            if (_bindFocus < _bindScroll) _bindScroll = _bindFocus;
+            if (_bindFocus >= _bindScroll + visible) _bindScroll = _bindFocus - visible + 1;
+
+            bool waiting = _rebind != null;
+            for (int row = 0; row < visible && _bindScroll + row < total; row++)
+            {
+                int index = _bindScroll + row;
+                var r = new Rect(x, top + row * BindRowH, w - 14f, BindRowH);
+                bool hover = r.Contains(e.mousePosition);
+                if (hover && nav.MouseMoved && e.type == EventType.Repaint && !waiting)
+                    _bindFocus = index;
+                bool focused = index == _bindFocus;
+                bool isReset = index >= slots.Count;
+                bool capturing = waiting && !isReset && slots[index].Action == _rebinding.Action && slots[index].Index == _rebinding.Index;
+                if (row > 0)
+                    _g.Fill(new Rect(r.x, r.y, r.width, 1f), Alpha(Color.white, 0.05f));
+                if (focused)
+                    _g.Lit(r, 1f, true);
+                var tint = focused ? Color.white : Alpha(White, 0.85f);
+                string label = isReset ? "RESET " + BindGroupNames[_bindGroup] : slots[index].Label;
+                string value = isReset ? "DEFAULTS" : capturing ? (_bindGroup == 0 ? "PRESS A KEY…" : "PRESS A BUTTON…") : slots[index].Display;
+                _g.Tracked(new Rect(r.x + 28f, r.y, r.width * 0.5f, r.height), label, _g.Item, 2.2f, TextAnchor.MiddleLeft, tint, 0.8f);
+                _g.Tracked(new Rect(r.x + r.width * 0.5f, r.y, r.width * 0.5f - 20f, r.height), value, _g.Item, 2.0f, TextAnchor.MiddleRight,
+                    capturing ? Glow : Alpha(tint, 0.9f), 0.8f);
+                if (!waiting && GUI.Button(r, GUIContent.none, GUIStyle.none))
+                {
+                    _bindFocus = index;
+                    ActivateBinding(slots, index);
+                }
+            }
+
+            if (total > visible) // scroll thumb
+            {
+                var track = new Rect(x + w - 6f, top, 3f, visible * BindRowH);
+                _g.RoundFill(track, 1.5f, Alpha(Color.white, 0.1f));
+                float f0 = _bindScroll / (float)total, f1 = (_bindScroll + visible) / (float)total;
+                _g.RoundFill(new Rect(track.x, track.y + track.height * f0, track.width, track.height * (f1 - f0)), 1.5f, Alpha(Color.white, 0.5f));
+            }
+
+            if (waiting)
+                _g.Foot(panel, _bindGroup == 0 ? "PRESS THE NEW KEY OR MOUSE BUTTON" : "PRESS THE NEW BUTTON",
+                    Hint(nav, "ESC  CANCEL", "START  CANCEL"));
+            else
+                _g.Foot(panel, _bindGroup == 0 ? "A KEY ALREADY IN USE SWAPS" : "STICKS ARE FIXED  ·  A BUTTON ALREADY IN USE SWAPS",
+                    Hint(nav, "ENTER  REBIND   DEL  RESET   Q / E  DEVICE   ESC  BACK", "A  REBIND   LB / RB  DEVICE   B  BACK"));
+        }
     }
 }

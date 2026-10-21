@@ -114,8 +114,19 @@ namespace WingingIt.Match
         public virtual string ResultLine(MatchScore score, Func<int, string> teamName) =>
             $"{teamName(0)}  {score.TeamScore(0)}  –  {score.TeamScore(1)}  {teamName(1)}";
 
+        /// <summary>
+        /// Free for all: how many pilots, each on a team of its own (no wingmen, a colour each); 0 for the level's teams.
+        /// Bots fill every pilot but the player's.
+        /// </summary>
+        public virtual int FreeForAllSize => 0;
+
+        public bool IsFreeForAll => FreeForAllSize > 0;
+
+        /// <summary>Lives per pilot; 0 for unlimited. A pilot out of lives spectates (see <see cref="MatchManager.IsSpectating"/>).</summary>
+        public virtual int Lives => 0;
+
         /// <summary>Whether a dead pilot comes back (lives). <paramref name="pilot"/> is null if it never scored or died.</summary>
-        public virtual bool CanRespawn(PilotScore pilot) => true;
+        public virtual bool CanRespawn(PilotScore pilot) => Lives <= 0 || pilot == null || pilot.Deaths < Lives;
 
         /// <summary>A spawn pose of the mode's own; false for the usual one (over or on the nearest friendly field).</summary>
         public virtual bool TryGetSpawnPose(PlaneController plane, Vector3 deathPosition, out Pose pose, out bool onRunway)
@@ -238,8 +249,10 @@ namespace WingingIt.Match
     /// <summary>
     /// Airfield Domination: Teams scoring on top of the capture fields. A plane takes a field by landing and stopping in
     /// its zone (the <see cref="Board"/>'s rules); the team that holds it repairs and can respawn there. The world layer
-    /// (<see cref="DominationWorld"/>) feeds the board with the parked planes each frame and hands captured fields over.
-    /// Capture and holding points, the early win and the HUD come next (see the development plan).
+    /// (<see cref="DominationWorld"/>) feeds the board with the parked planes each frame, hands captured fields over and
+    /// passes the captures here to score: <see cref="CapturePoints"/> to the team plus <see cref="PilotCapturePoints"/>
+    /// per capturing pilot, and <see cref="HoldPoints"/> per held field every <see cref="HoldInterval"/> seconds. Holding
+    /// every capture field for <see cref="HoldAllToWin"/> seconds wins at once; otherwise the higher team score wins.
     /// </summary>
     public sealed class DominationMode : MatchMode
     {
@@ -248,20 +261,166 @@ namespace WingingIt.Match
             new("K", p => p.Kills.ToString()),
             new("A", p => p.Assists.ToString(), 0.75f),
             new("D", p => p.Deaths.ToString(), 0.6f),
+            new("CAP", p => p.Captures.ToString(), 1f, 44f, 6f),
             new("SCORE", p => p.Points.ToString(), 1f, 80f, 10f),
         };
 
         readonly TeamsMode _teams = new();
+        float _holdClock;
+
+        public int CapturePoints = 100;
+        public int PilotCapturePoints = 50;
+        public int HoldPoints = 5;
+        public float HoldInterval = 2f;
+        public float HoldAllToWin = 30f;
 
         /// <summary>The capture fields of this match; null until the level's are known (<see cref="SetFields"/>).</summary>
         public FieldBoard Board { get; private set; }
 
-        public void SetFields(int count) => Board = new FieldBoard(count);
+        /// <summary>The team that owns every capture field right now, or -1.</summary>
+        public int HoldingAll { get; private set; } = -1;
+
+        /// <summary>How long <see cref="HoldingAll"/> has held every field without a break (seconds).</summary>
+        public float HoldingAllTime { get; private set; }
+
+        public void SetFields(int count)
+        {
+            Board = new FieldBoard(count);
+            _holdClock = 0f;
+            HoldingAll = -1;
+            HoldingAllTime = 0f;
+        }
+
+        /// <summary>The capture fields <paramref name="team"/> owns.</summary>
+        public int FieldsHeld(int team)
+        {
+            int held = 0;
+            if (Board != null)
+                for (int i = 0; i < Board.FieldCount; i++)
+                    if (Board.Get(i).Owner == team)
+                        held++;
+            return held;
+        }
 
         public override MatchScore CreateScore(int teamCount) => _teams.CreateScore(teamCount);
 
         public override void RecordKill(MatchScore score, in KillRecord kill) => _teams.RecordKill(score, kill);
 
+        /// <summary>Scores the fields the board flipped this frame: 100 to the team and 50 to each capturing pilot.</summary>
+        public void Apply(MatchScore score, IReadOnlyList<FieldCapture> captures)
+        {
+            foreach (var c in captures)
+            {
+                score.AwardPoints(c.Team, null, null, CapturePoints, "Field captured");
+                foreach (var p in c.Pilots)
+                {
+                    var pilot = score.Get(p);
+                    if (pilot != null)
+                        pilot.Captures++;
+                    score.AwardPoints(c.Team, p, pilot?.Name, PilotCapturePoints, "Capture");
+                }
+            }
+        }
+
+        /// <summary>Held fields pay out every <see cref="HoldInterval"/> seconds; the clock on holding every field runs.</summary>
+        public override void Tick(MatchScore score, float dt)
+        {
+            if (Board == null || Board.FieldCount == 0)
+                return;
+
+            _holdClock += dt;
+            while (HoldInterval > 0f && _holdClock >= HoldInterval)
+            {
+                _holdClock -= HoldInterval;
+                for (int team = 0; team < score.TeamCount; team++)
+                    score.AwardPoints(team, null, null, HoldPoints * FieldsHeld(team), "Fields held");
+            }
+
+            int all = Board.Get(0).Owner;
+            for (int i = 1; i < Board.FieldCount && all != FieldBoard.Neutral; i++)
+                if (Board.Get(i).Owner != all)
+                    all = FieldBoard.Neutral;
+            if (all != HoldingAll)
+                HoldingAllTime = 0f;
+            else if (all != FieldBoard.Neutral)
+                HoldingAllTime += dt;
+            HoldingAll = all;
+        }
+
+        public override int? EarlyWinner(MatchScore score) =>
+            HoldingAll != FieldBoard.Neutral && HoldingAllTime >= HoldAllToWin ? HoldingAll : null;
+
+        /// <summary>The team score leads the headline (what wins it); fields held right now follow.</summary>
+        public override string ResultLine(MatchScore score, Func<int, string> teamName)
+        {
+            if (Board == null)
+                return base.ResultLine(score, teamName);
+            return $"{base.ResultLine(score, teamName)}  ·  FIELDS {FieldsHeld(0)} – {FieldsHeld(1)}";
+        }
+
+        public override string WinRule => $"HOLD EVERY FIELD {HoldAllToWin:0} S WINS · THEN HIGHEST TEAM SCORE";
+
         public override IReadOnlyList<ScoreColumn> Columns => s_columns;
+    }
+
+    /// <summary>
+    /// Ram Royale (prototype, being built): free for all, <see cref="Pilots"/> planes, one life each; a pilot who goes
+    /// down watches the survivors. Plays in the level's Ram Royale arena (the small ring over the south sea, air start).
+    /// So far a knock-out scores <see cref="KnockOutPoints"/> to whoever gets the credit and the highest score wins at
+    /// the whistle; the weapons-off loadout, ram damage and last-plane-standing win come next.
+    /// </summary>
+    public sealed class RamRoyaleMode : MatchMode
+    {
+        public const string Id = "RamRoyale";
+
+        static readonly ScoreColumn[] s_columns =
+        {
+            new("KO", p => p.Kills.ToString()),
+            new("", p => p.Deaths > 0 ? "OUT" : "", 0.6f, 60f, 6f),
+            new("SCORE", p => p.Points.ToString(), 1f, 80f, 10f),
+        };
+
+        public int Pilots = 16;
+        public int KnockOutPoints = 100;
+
+        /// <summary>The Ram Royale arena even when the mode isn't played from its card (tests).</summary>
+        public override string ArenaId => Info?.Id ?? Id;
+
+        public override int FreeForAllSize => Pilots;
+
+        public override int Lives => 1;
+
+        /// <summary>No assists: with everyone on their own, the knock-out is the one that counts.</summary>
+        public override MatchScore CreateScore(int teamCount) => new(teamCount, KnockOutPoints, 0);
+
+        public override void RecordKill(MatchScore score, in KillRecord kill)
+        {
+            var v = kill.Victim;
+            score.RecordDeath(v.Pilot, v.Name, v.Team, kill.Killer.Pilot, kill.Killer.Name, kill.KillerTeam);
+        }
+
+        /// <summary>No team scores in the score bar; the kill feed and popups stay.</summary>
+        public override MatchWidgets Widgets => MatchWidgets.KillFeed | MatchWidgets.ScorePopups;
+
+        /// <summary>Who's still flying out of how many.</summary>
+        public override string ResultLine(MatchScore score, Func<int, string> teamName)
+        {
+            int flying = 0;
+            foreach (var p in score.Pilots)
+                if (p.Deaths < Lives)
+                    flying++;
+            return $"{flying} OF {score.Pilots.Count} STILL FLYING";
+        }
+
+        public override string WinRule => "ONE LIFE · HIGHEST SCORE WINS";
+
+        public override IReadOnlyList<ScoreColumn> Columns => s_columns;
+
+        /// <summary>Still flying first, then score, kills.</summary>
+        public override int CompareForScoreboard(PilotScore a, PilotScore b)
+        {
+            bool aIn = a.Deaths < Lives, bIn = b.Deaths < Lives;
+            return aIn != bIn ? (aIn ? -1 : 1) : MatchScore.CompareForScoreboard(a, b);
+        }
     }
 }

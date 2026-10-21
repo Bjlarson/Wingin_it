@@ -102,6 +102,7 @@ namespace WingingIt.Match
                 Length = 300f,
                 HasBotDifficulty = true,
                 Sketch = ModeSketch.Domination,
+                Rules = () => new DominationMode(),
             },
             new GameModeInfo
             {

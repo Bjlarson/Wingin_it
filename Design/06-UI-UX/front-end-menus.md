@@ -113,7 +113,7 @@ One panel, four tabs (Q / E or LB / RB switch tabs). Every change **applies imme
 | Touch controls | Auto | Auto / On / Off | All (Auto = on for touch screens) | `TouchControlsUI` (F2 still toggles) |
 | Auto throttle (touch) | On | On / Off | Touch | `PlayerFlightInput.autoThrottleOnTouch` |
 | Touch button size | 100% | 75–130% | Touch | `TouchControlsUI` |
-| Bindings | — | Read-only list of every action per device | All | `FlightControls.inputactions` |
+| Key bindings | — | Rebind every key, mouse button and gamepad button per device (PC only; sticks and mouse movement stay fixed). A key already in use swaps. Saved in settings | PC | `FlightControls.inputactions`, `InputBindings` |
 
 ### Graphics
 
@@ -186,7 +186,7 @@ Everything above is in, with these differences and leftovers:
 - **Developer:** hides the dev panel, F1 help and damage keys (5–9); the landing assist and center messages are part of the real HUD and stay.
 - **Panel change:** the new screen fades in over 120 ms (`GlassGUI.Opacity`); the old one cuts, since IMGUI can't keep drawing a screen that's gone. The dark backdrop, score bar and ☰ button don't fade.
 - **Heading-up minimap:** the photo is redrawn turned each frame into a second render texture (`FlightHUD.TurnMap`), so it stays inside its rounded frame.
-- **Not built yet:** interactive key rebinding (Bindings is a read-only list).
+- **Phone:** key bindings are hidden: the touch buttons stand in for gamepad buttons.
 
 ## Technical Notes
 
@@ -221,7 +221,7 @@ Everything above is in, with these differences and leftovers:
 ## Open Questions
 
 - [ ] Should offline matches pause on Esc after all? Proposed: no, to match online. Revisit if solo playtesters find it annoying.
-- [ ] Key rebinding: ship with fixed bindings + a read-only list (proposed for the slice) or full rebinding (Input System interactive rebinding) before launch? Accessibility says rebinding should exist by launch.
+- [x] Key rebinding: full interactive rebinding (2026-10-20), with swap on conflict, per-device reset, and saved in settings.
 - [x] Hangar interior: **decided (2026-10-17)** modify the existing airfield hangar (open front, floor, lights) rather than building a separate set.
 - [ ] With only Teams in the list, should the game mode screen be skipped until a second mode exists? (Proposed: keep it, so the flow doesn't change when modes are added.)
 - [ ] Does the team-color high-contrast pair conflict with the cosmetics' team color zone (Phase 9)?

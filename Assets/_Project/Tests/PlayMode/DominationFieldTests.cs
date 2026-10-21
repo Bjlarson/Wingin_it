@@ -95,6 +95,12 @@ namespace WingingIt.Tests
             Assert.IsTrue(Central.IsFriendlyTo(_player.Team));
             Assert.IsFalse(Central.IsCapturableBy(_player.Team), "not capturable by its owner");
             Assert.IsTrue(Central.IsCapturableBy(1 - _player.Team));
+            Assert.GreaterOrEqual(_match.Score.TeamScore(_player.Team), _mode.CapturePoints + _mode.PilotCapturePoints, "the capture scored");
+            Assert.AreEqual(1, _match.Score.Get(_player).Captures);
+            var hud = Object.FindAnyObjectByType<WingingIt.UI.FlightHUD>();
+            Assert.IsNotNull(hud);
+            yield return null;
+            CollectionAssert.Contains(hud.CalloutTexts.ToArray(), "YOU CAPTURED CENTRAL");
 
             var repair = _player.GetComponent<PlaneRepair>();
             yield return WaitUntil(() => repair.IsRepairing, 2f);

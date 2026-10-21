@@ -44,5 +44,10 @@ namespace WingingIt.Effects
         MissileTrail,
         /// <summary>Wrenches and sparkles rising from a plane being repaired.</summary>
         RepairSparkles,
+        /// <summary>
+        /// Dust, dirt or sea mist kicked up under a low, fast plane: trails under each wing and a cluster under the nose,
+        /// tinted and tuned live by <see cref="Flight.GroundKickup"/>. Droplets only over water.
+        /// </summary>
+        GroundKickup,
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.OnScreen;
 using WingingIt.CameraSystem;
@@ -14,6 +15,8 @@ namespace WingingIt.Input
         MouseAim,
         /// <summary>Stick-style: A/D roll, mouse Y or arrows pitch, Q/E yaw.</summary>
         Direct,
+        /// <summary>The plane flies toward the pointer: the mouse cursor, or a finger held on the screen.</summary>
+        Follow,
     }
 
     /// <summary>
@@ -42,6 +45,12 @@ namespace WingingIt.Input
         [Tooltip("How fast the aim point follows the nose while you fly with the keys (deg/s).")]
         [SerializeField] float keyOverrideRecenterSpeed = 150f;
 
+        [Header("Follow pointer")]
+        [Tooltip("Pointer-to-plane steering strength: a smaller angle off the nose gives full deflection when higher.")]
+        [SerializeField] float followSteerSensitivity = 4f;
+        [Tooltip("How far ahead of the camera the pointer's aim point is placed.")]
+        [SerializeField] float followAimDistance = 600f;
+
         [Header("Touch")]
         [SerializeField] bool autoThrottleOnTouch = true;
         [Tooltip("On-screen stick travel (0-1, per axis) that does nothing, so a resting thumb doesn't steer.")]
@@ -59,6 +68,13 @@ namespace WingingIt.Input
         bool _autoThrottle;
         float _touchSensitivity = 1f;
         ControlStyle _style;
+        int _followTouchId; // the finger steering in follow mode (0 = none)
+        readonly TouchGestures _gestures = new TouchGestures();
+        bool _gesturesOnly;
+        float _missilePulse, _bombPulse, _rocketPulse, _abilityPulse; // gesture presses, held long enough for a fixed step to see them
+        PlaneMissiles _missiles;
+        PlaneBombs _bombs;
+        PlaneRockets _rockets;
         bool _manualThrottle; // touch: the throttle buttons took over from auto throttle, until respawn or the setting changes
 
         public event Action NextClassPressed;
@@ -72,6 +88,10 @@ namespace WingingIt.Input
         /// for worn thumbsticks, far too wide for a finger), and shaped by <see cref="ShapeTouchAxis"/> instead.
         /// </summary>
         public OnScreenStick TouchStick { get; set; }
+        /// <summary>Follow-pointer steering is in use: the plane flies toward the cursor or a held finger.</summary>
+        public bool FollowActive => controlMode == ControlMode.Follow && (TouchControlsActive || !_lastDeviceWasGamepad);
+        /// <summary>Touch with the on-screen buttons gone: the steering finger also fires (hold, tap, double tap).</summary>
+        public bool TouchGesturesActive => _gesturesOnly && TouchControlsActive && controlMode == ControlMode.Follow;
         public bool MouseAimActive => controlMode == ControlMode.MouseAim && !_lastDeviceWasGamepad && !TouchControlsActive;
 
         // What's held right now, for the HUD's control readout.
@@ -84,6 +104,9 @@ namespace WingingIt.Input
         void Awake()
         {
             _plane = GetComponent<PlaneController>();
+            _missiles = GetComponentInChildren<PlaneMissiles>();
+            _bombs = GetComponentInChildren<PlaneBombs>();
+            _rockets = GetComponentInChildren<PlaneRockets>();
             if (actions == null)
             {
                 Debug.LogError($"{name}: no InputActionAsset assigned to PlayerFlightInput.", this);
@@ -91,6 +114,7 @@ namespace WingingIt.Input
                 return;
             }
 
+            InputBindings.Apply(actions);
             _map = actions.FindActionMap("Flight", throwIfNotFound: true);
             _pitch = _map.FindAction("Pitch", true);
             _roll = _map.FindAction("Roll", true);
@@ -157,17 +181,39 @@ namespace WingingIt.Input
         void ReadSettings()
         {
             var s = GameSettings.Current.Data;
-            controlMode = s.mouseAim ? ControlMode.MouseAim : ControlMode.Direct;
+            controlMode = s.followPointer ? ControlMode.Follow : s.mouseAim ? ControlMode.MouseAim : ControlMode.Direct;
             invertPitch = s.invertPitch;
             _style = s.controlStyle;
             if (autoThrottleOnTouch != s.autoThrottle)
                 _manualThrottle = false;
             autoThrottleOnTouch = s.autoThrottle;
             _touchSensitivity = s.touchSensitivity;
+            _gesturesOnly = s.touchGesturesOnly;
+        }
+
+        /// <summary>A quick tap: a missile if the class has them and there's a lock, else a bomb, else rockets.</summary>
+        void OnTouchTap()
+        {
+            const float pulse = 0.12f;
+            if (_missiles != null && _missiles.IsEquipped)
+            {
+                if (_missiles.IsLocked)
+                    _missilePulse = pulse;
+            }
+            else if (_bombs != null && _bombs.IsEquipped)
+                _bombPulse = pulse;
+            else if (_rockets != null && _rockets.IsEquipped)
+                _rocketPulse = pulse;
         }
 
         void OnToggleMode(InputAction.CallbackContext _) =>
-            GameSettings.Current.Set(s => s.mouseAim = controlMode != ControlMode.MouseAim);
+            GameSettings.Current.Set(s =>
+            {
+                if (controlMode == ControlMode.Follow)
+                    s.followPointer = false;
+                else
+                    s.mouseAim = controlMode != ControlMode.MouseAim;
+            });
 
         void OnNextClass(InputAction.CallbackContext _) => NextClassPressed?.Invoke();
 
@@ -193,18 +239,43 @@ namespace WingingIt.Input
                 _manualThrottle = true; // the on-screen throttle buttons: stay where they leave it
             Vector2 mouse = cursorLocked ? _mouseLook.ReadValue<Vector2>() : Vector2.zero;
             bool freeLook = _freeLook.IsPressed();
+            bool follow = FollowActive;
+            bool mouseCanFire = cursorLocked || follow; // in follow mode the cursor is free, so a click is just a click
+
+            // Read the steering finger once; the gestures and follow steering share it.
+            bool fingerDown = false;
+            Vector2 fingerPos = default;
+            if (follow)
+                fingerDown = TryGetFollowPointer(out fingerPos);
+            bool gestures = TouchGesturesActive;
+            if (gestures)
+            {
+                _gestures.Update(Time.deltaTime, fingerDown, fingerPos, Screen.height * 0.04f);
+                if (_gestures.Tap)
+                    OnTouchTap();
+                if (_gestures.DoubleTap)
+                    _abilityPulse = 0.12f;
+            }
+            else
+            {
+                _gestures.Reset();
+            }
+            _missilePulse -= Time.deltaTime;
+            _bombPulse -= Time.deltaTime;
+            _rocketPulse -= Time.deltaTime;
+            _abilityPulse -= Time.deltaTime;
 
             var input = new FlightInput
             {
                 Throttle = throttle,
                 Boost = _boost.IsPressed(),
                 // The click that captures the mouse shouldn't also fire.
-                FireGuns = _fireGuns.IsPressed() && (cursorLocked || _fireGuns.activeControl?.device is not Mouse),
-                FireRockets = _fireSecondary.IsPressed() && (cursorLocked || _fireSecondary.activeControl?.device is not Mouse),
-                FireMissile = _fireMissile.IsPressed() && (cursorLocked || _fireMissile.activeControl?.device is not Mouse),
-                DropBomb = _dropBomb.IsPressed(),
-                UseAbility = _ability.IsPressed(),
-                AutoThrottle = TouchControlsActive && autoThrottleOnTouch && !_manualThrottle,
+                FireGuns = (_fireGuns.IsPressed() && (mouseCanFire || _fireGuns.activeControl?.device is not Mouse)) || _gestures.Holding,
+                FireRockets = (_fireSecondary.IsPressed() && (mouseCanFire || _fireSecondary.activeControl?.device is not Mouse)) || _rocketPulse > 0f,
+                FireMissile = (_fireMissile.IsPressed() && (mouseCanFire || _fireMissile.activeControl?.device is not Mouse)) || _missilePulse > 0f,
+                DropBomb = _dropBomb.IsPressed() || _bombPulse > 0f,
+                UseAbility = _ability.IsPressed() || _abilityPulse > 0f,
+                AutoThrottle = TouchControlsActive && (autoThrottleOnTouch || gestures) && (!_manualThrottle || gestures),
                 Style = ControlStyle.AutoLevel,
             };
             _autoThrottle = input.AutoThrottle;
@@ -217,7 +288,25 @@ namespace WingingIt.Input
                 cameraRig.SetStickLook(_stickLook.ReadValue<Vector2>());
             }
 
-            if (mouseAim)
+            if (follow)
+            {
+                // Aim at whatever the pointer is over; nothing held means neutral controls.
+                float followPitch = 0f, followYaw = 0f, followRoll = 0f;
+                if (fingerDown && Camera.main != null)
+                {
+                    Ray ray = Camera.main.ScreenPointToRay(fingerPos);
+                    FlightAutopilot.SteerTowards(transform.position, transform.rotation,
+                        ray.origin + ray.direction * followAimDistance, followSteerSensitivity, aggressiveTurnAngle,
+                        out followPitch, out followYaw, out followRoll);
+                    if (invertPitch)
+                        followPitch = -followPitch;
+                }
+                bool pitchKey = Mathf.Abs(pitch) > 0.1f, rollKey = Mathf.Abs(roll) > 0.1f, yawKey = Mathf.Abs(yaw) > 0.1f;
+                input.Pitch = pitchKey ? pitch : followPitch;
+                input.Roll = rollKey ? roll : followRoll;
+                input.Yaw = yawKey ? yaw : followYaw;
+            }
+            else if (mouseAim)
             {
                 cameraRig.AddMouseDelta(invertPitch ? new Vector2(mouse.x, -mouse.y) : mouse);
                 FlightAutopilot.SteerTowards(transform.position, transform.rotation, cameraRig.AimPoint,
@@ -248,6 +337,39 @@ namespace WingingIt.Input
         }
 
         /// <summary>
+        /// The pointer follow mode steers toward: a finger that touched down off the on-screen buttons and is still down,
+        /// else the mouse cursor while it's inside the window (and touch controls aren't up).
+        /// </summary>
+        bool TryGetFollowPointer(out Vector2 position)
+        {
+            position = default;
+            var screen = Touchscreen.current;
+            if (screen != null)
+            {
+                foreach (var touch in screen.touches)
+                {
+                    int id = touch.touchId.ReadValue();
+                    if (_followTouchId == 0 && touch.press.wasPressedThisFrame && !IsOverUI(id))
+                        _followTouchId = id;
+                    if (id == _followTouchId && touch.isInProgress)
+                    {
+                        position = touch.position.ReadValue();
+                        return true;
+                    }
+                }
+                _followTouchId = 0;
+            }
+
+            var mouse = Mouse.current;
+            if (TouchControlsActive || mouse == null || !Application.isFocused)
+                return false;
+            position = mouse.position.ReadValue();
+            return position.x >= 0f && position.y >= 0f && position.x <= Screen.width && position.y <= Screen.height;
+        }
+
+        static bool IsOverUI(int pointerId) => EventSystem.current != null && EventSystem.current.IsPointerOverGameObject(pointerId);
+
+        /// <summary>
         /// One on-screen stick axis (-1..1) to a control input: nothing inside <paramref name="deadzone"/>, then a blend
         /// of linear and cubic (<paramref name="expo"/>) up to full travel, times <paramref name="sensitivity"/>.
         /// </summary>
@@ -265,7 +387,7 @@ namespace WingingIt.Input
         bool UpdateCursorLock()
         {
             bool wantsMouse = !TouchControlsActive && !_lastDeviceWasGamepad &&
-                              (controlMode == ControlMode.MouseAim || mousePitchInDirectMode);
+                              controlMode != ControlMode.Follow && (controlMode == ControlMode.MouseAim || mousePitchInDirectMode);
             var keyboard = Keyboard.current;
             var mouse = Mouse.current;
 
