@@ -298,12 +298,16 @@ namespace WingingIt.Bots
 
         static float FlatDistance(Vector3 a, Vector3 b) => new Vector2(a.x - b.x, a.z - b.z).magnitude;
 
+        /// <summary>
+        /// How many of each class fly on <paramref name="team"/>. In a free-for-all (teams of one) it counts the whole
+        /// field instead, so the bots mix classes by the weights rather than all taking the first.
+        /// </summary>
         int[] ClassCounts(int team)
         {
             var counts = new int[classes.Length];
             foreach (var plane in PlaneController.All)
             {
-                if (plane.Team != team)
+                if (teamSize > 1 && plane.Team != team)
                     continue;
                 int i = System.Array.IndexOf(classes, plane.Stats);
                 if (i >= 0)

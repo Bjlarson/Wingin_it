@@ -65,6 +65,8 @@ namespace WingingIt.Flight
         public bool IsJammed => _jamTimeLeft > 0f;
         /// <summary>Trigger held and guns actually shooting.</summary>
         public bool IsFiring { get; private set; }
+        /// <summary>False while the match has weapons off (<see cref="PlaneController.WeaponsOff"/>).</summary>
+        public bool IsEquipped => !_plane.WeaponsOff;
         public int GunCount => muzzles != null ? muzzles.Length : 0;
 
         /// <summary>Guns on wings that haven't been shot off.</summary>
@@ -151,7 +153,7 @@ namespace WingingIt.Flight
         void UpdateTrigger(GunStats s, float dt)
         {
             int guns = ActiveGunCount;
-            bool wantsFire = _plane.IsAlive && _plane.CurrentInput.FireGuns;
+            bool wantsFire = _plane.IsAlive && IsEquipped && _plane.CurrentInput.FireGuns;
             if (_jamTimeLeft > 0f)
                 _jamTimeLeft -= dt;
             IsFiring = wantsFire && !IsOverheated && !IsJammed && guns > 0;

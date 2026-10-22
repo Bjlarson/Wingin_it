@@ -30,6 +30,8 @@ namespace WingingIt.UI
         [SerializeField] InputActionAsset actions;
 
         const float ReferenceHeight = 1080f;
+        float _height = ReferenceHeight; // the virtual screen height this frame (1080 at 100% UI scale)
+        float _uiScale = 1f;             // the UI scale setting, held while its slider is dragged
         static readonly string[] DifficultyNames = { "Easy", "Normal", "Hard" };
 
         /// <summary>Which screen of the menu phase is up.</summary>
@@ -131,11 +133,20 @@ namespace WingingIt.UI
             int pos = Mathf.Max(0, _cards.IndexOf(_mode));
             var mode = GameModeInfo.All[_cards[pos]];
             if (_nav.Up || _nav.Down)
-                _modeRow = mode.HasBotDifficulty ? 1 - _modeRow : 0;
+            {
+                // rows: 0 the card, 1 TIME (if the mode has options), 2 BOTS (if it has difficulty)
+                var rows = new List<int> { 0 };
+                if (mode.HasLengthOptions) rows.Add(1);
+                if (mode.HasBotDifficulty) rows.Add(2);
+                int at = Mathf.Max(0, rows.IndexOf(_modeRow));
+                _modeRow = rows[((at + (_nav.Down ? 1 : -1)) % rows.Count + rows.Count) % rows.Count];
+            }
             int dir = _nav.Left ? -1 : _nav.Right ? 1 : 0;
             if (dir != 0)
             {
-                if (_modeRow == 1 || _cards.Count == 1)
+                if (_modeRow == 1)
+                    StepLength(mode, dir);
+                else if (_modeRow == 2 || (_cards.Count == 1 && mode.HasBotDifficulty))
                     StepDifficulty(mode, dir);
                 else
                     _mode = _cards[Mathf.Clamp(pos + dir, 0, _cards.Count - 1)];
@@ -181,6 +192,12 @@ namespace WingingIt.UI
             _highlight = match.SelectedClass;
             match.SelectMode(_mode);
             match.OpenClassSelect();
+        }
+
+        void StepLength(GameModeInfo mode, int dir)
+        {
+            int at = Mathf.Max(0, System.Array.IndexOf(mode.LengthOptions, mode.CurrentLength));
+            match.SetLength(mode, mode.LengthOptions[Mathf.Clamp(at + dir, 0, mode.LengthOptions.Length - 1)]);
         }
 
         void StepDifficulty(GameModeInfo mode, int dir) =>
@@ -379,8 +396,12 @@ namespace WingingIt.UI
                 return;
             _g.EnsureStyles();
             TrackScreen();
-            float scale = Screen.height / ReferenceHeight;
+            // UI scale (shared with the HUD): a bigger scale is a smaller virtual screen, so edge-anchored items stay put.
+            if (!_settings.Dragging)
+                _uiScale = GameSettings.Current.Data.hudScale;
+            float scale = Screen.height / ReferenceHeight * _uiScale;
             GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
+            _height = Screen.height / scale;
             float width = Screen.width / scale;
             // A new screen fades in (the backdrop, score bar and menu button stay put; IMGUI can't keep the old one up).
             _g.Opacity = MenuMath.PanelFade(Time.unscaledTime - _shownAt);
@@ -432,7 +453,7 @@ namespace WingingIt.UI
         {
             float fade = _g.Opacity;
             _g.Opacity = 1f;
-            _g.Fill(new Rect(0f, 0f, width, ReferenceHeight), Dim);
+            _g.Fill(new Rect(0f, 0f, width, _height), Dim);
             _g.Opacity = fade;
         }
 
@@ -456,14 +477,14 @@ namespace WingingIt.UI
             string text = _nav.Glyph(keys, pad);
             if (string.IsNullOrEmpty(text))
                 return;
-            _g.Shadowed(new Rect(0f, ReferenceHeight - 52f, width, 28f), text, _g.Hint, 3f, TextAnchor.MiddleCenter, Alpha(White, 0.75f));
+            _g.Shadowed(new Rect(0f, _height - 52f, width, 28f), text, _g.Hint, 3f, TextAnchor.MiddleCenter, Alpha(White, 0.75f));
         }
 
         void DrawSettings(float width, bool dim)
         {
             if (dim)
                 Backdrop(width);
-            if (_settings.Draw(width, ReferenceHeight, _nav, OpenGlow()))
+            if (_settings.Draw(width, _height, _nav, OpenGlow()))
                 CloseSettings();
         }
 
@@ -484,7 +505,7 @@ namespace WingingIt.UI
                 ActivateMain(MainPlay);
 
             // Corner: the gear (Settings) and, on PC, QUIT. The build version bottom left.
-            var gear = new Rect(width - 92f, ReferenceHeight - 92f, 56f, 56f);
+            var gear = new Rect(width - 92f, _height - 92f, 56f, 56f);
             HoverFocus(gear, MainSettings, ref _focus);
             if (IconButton(gear, _focus == MainSettings, DrawGear))
                 ActivateMain(MainSettings);
@@ -499,7 +520,7 @@ namespace WingingIt.UI
                 if (GUI.Button(quit, GUIContent.none, GUIStyle.none))
                     ActivateMain(MainQuit);
             }
-            _g.Shadowed(new Rect(28f, ReferenceHeight - 52f, 400f, 28f), $"V{Application.version}", _g.Hint, 2f, TextAnchor.MiddleLeft, Alpha(White, 0.5f));
+            _g.Shadowed(new Rect(28f, _height - 52f, 400f, 28f), $"V{Application.version}", _g.Hint, 2f, TextAnchor.MiddleLeft, Alpha(White, 0.5f));
             HintStrip(width, "ARROWS  MOVE    ENTER  SELECT", "D-PAD  MOVE    A  SELECT");
         }
 
@@ -532,7 +553,7 @@ namespace WingingIt.UI
 
         void DrawGameModes(float width)
         {
-            _g.Fill(new Rect(0f, 0f, width, ReferenceHeight), Alpha(Dim, 0.25f));
+            _g.Fill(new Rect(0f, 0f, width, _height), Alpha(Dim, 0.25f));
             _g.Shadowed(new Rect(0f, 110f, width, 60f), "GAME MODE", _g.Title, 8f, TextAnchor.MiddleCenter, Color.white);
 
             int n = _cards.Count;
@@ -569,14 +590,43 @@ namespace WingingIt.UI
 
                 float y = head.yMax + 262f;
                 Fact(card, y, "PLAYERS", mode.Players);
-                Fact(card, y + 34f, "LENGTH", $"{Mathf.FloorToInt(mode.Length / 60f)}:{Mathf.RoundToInt(mode.Length % 60f):00}");
+                if (mode.HasLengthOptions)
+                {
+                    // TIME: the round lengths as chips, label on the left
+                    _g.Tracked(new Rect(card.x + 28f, y + 34f, 90f, 30f), "TIME", _g.Hint, 2.4f, TextAnchor.MiddleLeft, Steel);
+                    var trow = new Rect(card.x, y + 30f, card.width, 38f);
+                    if (selected && _modeRow == 1)
+                        _g.Lit(trow, 1f, true);
+                    float cur = mode.CurrentLength;
+                    float tw = (card.width - 56f - 90f) / mode.LengthOptions.Length;
+                    for (int t = 0; t < mode.LengthOptions.Length; t++)
+                    {
+                        var chip = new Rect(card.x + 28f + 90f + t * tw, trow.y + 4f, tw - 6f, trow.height - 8f);
+                        bool on = Mathf.Approximately(mode.LengthOptions[t], cur);
+                        if (on)
+                            _g.RoundFill(chip, 6f, Alpha(Color.white, 0.14f));
+                        _g.RoundStroke(chip, 6f, 1f, Alpha(Color.white, on ? 0.6f : 0.12f));
+                        _g.Tracked(chip, $"{Mathf.RoundToInt(mode.LengthOptions[t] / 60f)} MIN", _g.Hint, 1.4f, TextAnchor.MiddleCenter, on ? Color.white : Alpha(White, 0.6f));
+                        if (GUI.Button(chip, GUIContent.none, GUIStyle.none))
+                        {
+                            _mode = i;
+                            _modeRow = 1;
+                            match.SetLength(mode, mode.LengthOptions[t]);
+                        }
+                    }
+                }
+                else
+                {
+                    float len = mode.CurrentLength;
+                    Fact(card, y + 34f, "LENGTH", $"{Mathf.FloorToInt(len / 60f)}:{Mathf.RoundToInt(len % 60f):00}");
+                }
 
                 if (mode.HasBotDifficulty)
                 {
                     // BOTS, then the three levels as chips across the card; each mode keeps its own
                     _g.Tracked(new Rect(card.x + 28f, y + 70f, card.width - 56f, 26f), "BOTS", _g.Hint, 2.4f, TextAnchor.MiddleLeft, Steel);
                     var row = new Rect(card.x, y + 96f, card.width, 48f);
-                    if (selected && _modeRow == 1)
+                    if (selected && _modeRow == 2)
                         _g.Lit(row, 1f, true);
                     var level = MatchManager.DifficultyFor(mode);
                     float bw = (card.width - 56f) / DifficultyNames.Length;
@@ -591,7 +641,7 @@ namespace WingingIt.UI
                         if (GUI.Button(chip, GUIContent.none, GUIStyle.none))
                         {
                             _mode = i;
-                            _modeRow = 1;
+                            _modeRow = 2;
                             match.SetDifficulty(mode, (BotDifficulty)d);
                         }
                     }
@@ -618,7 +668,7 @@ namespace WingingIt.UI
             if (n == 1)
                 HintStrip(width, "ARROWS  BOTS    ENTER  PLAY    ESC  BACK", "D-PAD  BOTS    A  PLAY    B  BACK");
             else
-                HintStrip(width, "LEFT / RIGHT  MODE    UP / DOWN  BOTS    ENTER  PLAY    ESC  BACK", "D-PAD  MODE / BOTS    A  PLAY    B  BACK");
+                HintStrip(width, "LEFT / RIGHT  MODE    UP / DOWN  TIME / BOTS    ENTER  PLAY    ESC  BACK", "D-PAD  MODE / TIME / BOTS    A  PLAY    B  BACK");
         }
 
         void Fact(Rect card, float y, string label, string value)
@@ -738,8 +788,8 @@ namespace WingingIt.UI
             GUI.matrix = old * Matrix4x4.TRS(new Vector3(left, 0f, 0f), Quaternion.identity, new Vector3(s, s, 1f));
 
             _g.Shadowed(new Rect(0f, 40f / s, cardsW, 60f), "CHOOSE YOUR PLANE", _g.Title, 8f, TextAnchor.MiddleCenter, Color.white);
-            float top = (ReferenceHeight - 140f) / s - SelectCardH; // the bottom edge stays put as the cards shrink
-            int picked = ClassCards(0f, top, SelectCardH, "FLY", _highlight, true);
+            float top = (_height - 140f) / s - SelectCardH; // the bottom edge stays put as the cards shrink
+            int picked = ClassCards(0f, top, SelectCardH, "FLY", ref _highlight, true);
             if (picked >= 0)
                 match.SelectClass(picked);
             if (BackButton(new Rect(cardsW / 2f - 130f, top + SelectCardH + 18f, 260f, 56f)))
@@ -765,7 +815,9 @@ namespace WingingIt.UI
             _g.Tracked(new Rect(0f, 176f, width, 24f), hint, _g.Hint, 3.4f, TextAnchor.MiddleCenter, Steel);
             int n = match.Classes.Count;
             float cardsW = n * CardW + (n - 1) * CardGap;
-            int picked = ClassCards((width - cardsW) / 2f, 250f, CardH, respawn ? "PICK" : "SWAP", _pickHighlight, false);
+            int picked = ClassCards((width - cardsW) / 2f, 250f, CardH, respawn ? "PICK" : "SWAP", ref _pickHighlight, false);
+            if (picked >= 0)
+                _pickHighlight = picked;
             if (picked >= 0 && !match.MenuOpen)
                 PickInPlay(picked);
             if (!respawn && !match.MenuOpen && _g.Button(new Rect(width / 2f - 130f, 250f + CardH + 36f, 260f, 56f), "KEEP", "ESC", false, false, false, TextAnchor.MiddleCenter))
@@ -785,7 +837,7 @@ namespace WingingIt.UI
 
             var survivors = match.Survivors;
             var watched = match.Spectated;
-            var bar = new Rect(width / 2f - 300f, ReferenceHeight - 150f, 600f, 64f);
+            var bar = new Rect(width / 2f - 300f, _height - 150f, 600f, 64f);
             _g.Panel(bar, GlowRest, false);
             string name = watched != null ? match.PilotName(watched).ToUpperInvariant() : survivors.Count > 0 ? "—" : "NOBODY LEFT";
             if (watched != null)
@@ -849,23 +901,26 @@ namespace WingingIt.UI
         /// <summary>Parked and repaired at home: a small clickable (and touchable) "change plane" prompt above the HUD's bottom edge.</summary>
         void DrawSwapPrompt(float width)
         {
-            var r = new Rect(width / 2f - 170f, ReferenceHeight - 270f, 340f, 56f);
+            var r = new Rect(width / 2f - 170f, _height - 270f, 340f, 56f);
             _g.Panel(r, GlowRest, false);
             if (_g.Button(r, "CHANGE PLANE", _nav.Glyph("TAB", "Y"), false, false, false, TextAnchor.MiddleCenter))
                 match.OpenAirfieldPicker();
         }
 
         /// <summary>
-        /// One card per class (stats, loadout, ability, how many teammates fly it) with a <paramref name="button"/> row.
-        /// Returns the index whose button was pressed this frame, or -1. With <paramref name="hover"/>, the mouse moves
-        /// the highlight.
+        /// One card per class (stats, loadout, ability, how many teammates fly it); the whole card is the button, and
+        /// the highlighted one is lit edge to edge with its <paramref name="action"/> along the bottom. Returns the
+        /// index pressed this frame, or -1. With <paramref name="confirmTwice"/> (class select), pressing another card
+        /// only highlights it, so a touch shows the plane in the hangar before the second tap flies it; the mouse
+        /// highlights on hover, so a click still flies straight away.
         /// </summary>
-        int ClassCards(float x0, float top, float height, string button, int selectedIndex, bool hover)
+        int ClassCards(float x0, float top, float height, string action, ref int highlight, bool confirmTwice)
         {
             var classes = match.Classes;
             int n = classes.Count;
             int[] team = match.TeamComposition();
             float glow = OpenGlow();
+            bool touch = _nav.Device == MenuDevice.Touch;
             int pressed = -1;
             for (int i = 0; i < n; i++)
             {
@@ -873,10 +928,17 @@ namespace WingingIt.UI
                 if (stats == null)
                     continue;
                 var card = new Rect(x0 + i * (CardW + CardGap), top, CardW, height);
-                if (hover)
-                    HoverFocus(card, i, ref _highlight);
-                bool selected = i == selectedIndex;
+                if (confirmTwice)
+                    HoverFocus(card, i, ref highlight);
+                bool selected = i == highlight;
                 _g.Panel(card, selected ? Mathf.Max(glow, GlowSettle) : glow * 0.5f);
+                if (selected)
+                {
+                    _g.Lit(card, 1f, false);
+                    _g.RoundStroke(card, Radius, 2f, Alpha(Color.white, 0.85f));
+                }
+                else if (!touch && card.Contains(Event.current.mousePosition))
+                    _g.RoundStroke(card, Radius, 1f, Alpha(Color.white, 0.3f));
 
                 var head = new Rect(card.x, card.y + 22f, card.width, 44f);
                 if (selected)
@@ -896,8 +958,24 @@ namespace WingingIt.UI
                 _g.Tracked(new Rect(card.x + 28f, card.yMax - 124f, card.width - 56f, 30f), mates.ToString(), _g.Numeral, 0f, TextAnchor.MiddleRight,
                     mates == 0 ? Alpha(White, 0.5f) : White, 0.75f);
 
-                if (_g.Button(new Rect(card.x, card.yMax - 78f, card.width, 56f), button, null, selected, false, true))
-                    pressed = i;
+                if (selected)
+                {
+                    var foot = new Rect(card.x, card.yMax - 78f, card.width, 56f);
+                    _g.Fill(new Rect(foot.x + 28f, foot.y, foot.width - 56f, 1f), Alpha(Color.white, 0.14f));
+                    string label = confirmTwice && touch ? $"TAP AGAIN TO {action}" : action;
+                    _g.Tracked(foot, label, _g.Item, 3.0f, TextAnchor.MiddleCenter, Color.white);
+                    string key = _nav.Glyph("ENTER", "A");
+                    if (key != null)
+                        _g.Kbd(new Rect(foot.xMax - 20f, foot.y, 0f, foot.height), key);
+                }
+
+                if (GUI.Button(card, GUIContent.none, GUIStyle.none))
+                {
+                    if (confirmTwice && !selected)
+                        highlight = i;
+                    else
+                        pressed = i;
+                }
             }
             return pressed;
         }
@@ -927,7 +1005,7 @@ namespace WingingIt.UI
         void DrawCountdown(float width)
         {
             int n = Mathf.CeilToInt(match.TimeLeft);
-            var big = new Rect(0f, ReferenceHeight * 0.33f, width, 190f);
+            var big = new Rect(0f, _height * 0.33f, width, 190f);
             string text = n > 0 ? n.ToString() : "GO";
             // faint halo: the guide keeps glows low and edge-only, so just a ring of offset copies
             foreach (var o in new[] { new Vector2(-3, 0), new Vector2(3, 0), new Vector2(0, -3), new Vector2(0, 3) })
@@ -944,6 +1022,14 @@ namespace WingingIt.UI
             {
                 DrawTeamScore(new Rect(bar.x + 22f, bar.y, 150f, bar.height), 0, TextAnchor.MiddleLeft);
                 DrawTeamScore(new Rect(bar.xMax - 172f, bar.y, 150f, bar.height), 1, TextAnchor.MiddleRight);
+            }
+            if ((match.Mode.Widgets & MatchWidgets.PlanesLeft) != 0)
+            {
+                var left = new Rect(bar.x + 22f, bar.y, 150f, bar.height);
+                int flying = match.Survivors.Count + (match.Player != null && match.Player.IsAlive && !match.IsSpectating ? 1 : 0);
+                _g.Tracked(new Rect(left.x, left.y - 12f, left.width, left.height), "PLANES LEFT", _g.Hint, 3f, TextAnchor.MiddleLeft, Steel);
+                _g.Tracked(new Rect(left.x, left.y + 10f, left.width, left.height), HudText.PlanesLeft(flying, match.TeamCount), _g.Numeral, 1f,
+                    TextAnchor.MiddleLeft, Color.white);
             }
             float t = match.Phase == MatchPhase.Countdown ? match.MatchLength : match.TimeLeft;
             bool pulse = match.Phase == MatchPhase.Playing && t <= 30f && GameSettings.Blink(Time.unscaledTime, 1f, 0.5f);
@@ -988,7 +1074,7 @@ namespace WingingIt.UI
         /// </summary>
         void DrawInMatchMenu(float width)
         {
-            _g.Fill(new Rect(0f, 0f, width, ReferenceHeight), Alpha(Dim, 0.3f));
+            _g.Fill(new Rect(0f, 0f, width, _height), Alpha(Dim, 0.3f));
             // Below the minimap and score bar, above the instrument cluster.
             const float panelW = 460f, tableW = 1100f, gap = 28f;
             float total = panelW + gap + tableW;

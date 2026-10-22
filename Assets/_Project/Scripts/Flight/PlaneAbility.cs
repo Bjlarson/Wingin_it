@@ -38,8 +38,15 @@ namespace WingingIt.Flight
 
         public PlaneController Plane => _plane;
         public PlaneHealth Health { get; private set; }
-        /// <summary>This class's ability, or null if it has none.</summary>
-        public AbilityStats Stats => _plane.Stats != null ? _plane.Stats.ability : null;
+        /// <summary>
+        /// The match's stand-in for the class's ability (Ram Royale gives Support a Ram Boost), or null for the class's
+        /// own. Set by the match when the plane spawns; cleared on respawn or a class change.
+        /// </summary>
+        public AbilityStats Override { get; set; }
+        /// <summary>This plane's ability (the <see cref="Override"/>, else the class's), or null if it has none.</summary>
+        public AbilityStats Stats => Override != null ? Override : _plane.Stats != null ? _plane.Stats.ability : null;
+        /// <summary>The ability whose effect is running, or null.</summary>
+        public AbilityStats ActiveStats => _active;
         public bool IsEquipped => Stats != null;
         public bool IsActive => _active != null;
         public float ActiveTimeLeft { get; private set; }
@@ -109,6 +116,7 @@ namespace WingingIt.Flight
         void OnPlaneReset(PlaneController _)
         {
             EndEffect();
+            Override = null;
             CooldownLeft = 0f;
         }
 

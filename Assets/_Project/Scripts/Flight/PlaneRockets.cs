@@ -60,7 +60,7 @@ namespace WingingIt.Flight
         public RocketStats Stats => _plane.Stats != null && _plane.Stats.rockets != null ? _plane.Stats.rockets : FallbackStats();
         public int Ammo { get; private set; }
         /// <summary>Whether this plane's class carries rockets (its <see cref="FlightStats.rockets"/> is set). Without them ammo is 0.</summary>
-        public bool IsEquipped => _plane.Stats == null || _plane.Stats.rockets != null;
+        public bool IsEquipped => !_plane.WeaponsOff && (_plane.Stats == null || _plane.Stats.rockets != null);
         public int MaxAmmo => IsEquipped ? Stats.ammo : 0;
         /// <summary>Rockets in flight.</summary>
         public int InFlight => _rockets.Count;
@@ -152,7 +152,7 @@ namespace WingingIt.Flight
         {
             if (_salvoCooldown > 0f)
                 _salvoCooldown -= dt;
-            if (!_plane.IsAlive)
+            if (!_plane.IsAlive || !IsEquipped)
             {
                 _salvoLeft = 0;
                 return;

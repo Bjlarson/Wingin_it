@@ -40,6 +40,7 @@ namespace WingingIt.Tests
             Ordered("missile notice chance", Easy.missileNoticeChance, Normal.missileNoticeChance, Hard.missileNoticeChance, true);
             Ordered("evade start distance", Easy.evadeStartDistance, Normal.evadeStartDistance, Hard.evadeStartDistance, true);
             Ordered("evade reaction", Easy.evadeReactionTime, Normal.evadeReactionTime, Hard.evadeReactionTime, false);
+            Ordered("ram dodge chance", Easy.ramDodgeChance, Normal.ramDodgeChance, Hard.ramDodgeChance, true);
             Ordered("retreat health", Easy.retreatHealth, Normal.retreatHealth, Hard.retreatHealth, true);
             Ordered("stick gain", Easy.steerSensitivity, Normal.steerSensitivity, Hard.steerSensitivity, true);
             Ordered("stick slew", Easy.stickSlewRate, Normal.stickSlewRate, Hard.stickSlewRate, true);

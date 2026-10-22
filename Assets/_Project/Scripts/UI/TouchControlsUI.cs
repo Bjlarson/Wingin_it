@@ -21,6 +21,8 @@ namespace WingingIt.UI
         [SerializeField] bool showOnDesktop;
 
         [Header("Loadout buttons")]
+        [SerializeField] PlaneGuns guns;
+        [SerializeField] GameObject fireButton;
         [SerializeField] PlaneRockets rockets;
         [SerializeField] GameObject rocketsButton;
         [SerializeField] PlaneMissiles missiles;
@@ -67,7 +69,7 @@ namespace WingingIt.UI
             {
                 TouchControlsMode.On => true,
                 TouchControlsMode.Off => false,
-                _ => Application.isMobilePlatform || _touchSeen || showOnDesktop,
+                _ => !HasRealGamepad() && (Application.isMobilePlatform || _touchSeen || showOnDesktop),
             };
             if (player != null)
                 player.TouchControlsActive = show;
@@ -78,10 +80,20 @@ namespace WingingIt.UI
 
             if (showButtons)
             {
+                ShowIf(fireButton, guns == null || guns.IsEquipped);
                 ShowIf(rocketsButton, rockets != null && rockets.IsEquipped);
                 ShowIf(missileButton, missiles != null && missiles.IsEquipped);
                 ShowIf(bombButton, bombs != null && bombs.IsEquipped);
             }
+        }
+
+        // The on-screen controls drive a virtual Gamepad, so only count pads the platform reported (native).
+        static bool HasRealGamepad()
+        {
+            foreach (var pad in Gamepad.all)
+                if (pad.native)
+                    return true;
+            return false;
         }
 
         static void ShowIf(GameObject button, bool show)

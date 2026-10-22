@@ -81,6 +81,34 @@ namespace WingingIt.Tests
         }
 
         [Test]
+        public void SetFollowPointer_OnPhone_HidesTouchControlsAndAutoThrottles_OffBringsControlsBack()
+        {
+            var phone = new GameSettings(true, new MemoryStore());
+            phone.Set(s => s.autoThrottle = false);
+            phone.Set(s => s.SetFollowPointer(true, true));
+            Assert.IsTrue(phone.Data.followPointer);
+            Assert.IsTrue(phone.Data.touchGesturesOnly);
+            Assert.IsTrue(phone.Data.autoThrottle);
+
+            phone.Set(s => s.autoThrottle = false);
+            phone.Set(s => s.SetFollowPointer(false, true));
+            Assert.IsFalse(phone.Data.followPointer);
+            Assert.IsFalse(phone.Data.touchGesturesOnly);
+            Assert.IsFalse(phone.Data.autoThrottle, "leaving follow keeps the throttle setting");
+        }
+
+        [Test]
+        public void SetFollowPointer_OnDesktop_LeavesTouchSettingsAlone()
+        {
+            var desktop = new GameSettings(false, new MemoryStore());
+            desktop.Set(s => s.autoThrottle = false);
+            desktop.Set(s => s.SetFollowPointer(true, false));
+            Assert.IsTrue(desktop.Data.followPointer);
+            Assert.IsFalse(desktop.Data.touchGesturesOnly);
+            Assert.IsFalse(desktop.Data.autoThrottle);
+        }
+
+        [Test]
         public void Set_ClampsSavesAndRaisesChanged()
         {
             var store = new MemoryStore();

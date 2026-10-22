@@ -239,6 +239,16 @@ namespace WingingIt.Match
                 roster.Difficulty = value;
         }
 
+        /// <summary>Sets <paramref name="mode"/>'s round length (saved); the clock follows if it's the mode being played.</summary>
+        public void SetLength(GameModeInfo mode, float seconds)
+        {
+            if (!mode.HasLengthOptions)
+                return;
+            PlayerPrefs.SetFloat(mode.LengthPref, seconds);
+            if (_mode?.Info == mode && _clock.Phase == MatchPhase.Menu)
+                _clock.MatchLength = mode.CurrentLength;
+        }
+
         /// <summary>The team's name; in a free-for-all mode, the name of the one pilot on it.</summary>
         public string TeamName(int team)
         {
@@ -346,10 +356,12 @@ namespace WingingIt.Match
         {
             DropModeWorlds();
             _mode = mode;
+            if (mode is RamRoyaleMode ram)
+                ram.BodyHealth = BodyHealthOf;
             UseTeams();
             _score = mode.CreateScore(TeamCount);
             if (mode.Info != null)
-                _clock.MatchLength = mode.Info.Length;
+                _clock.MatchLength = mode.Info.CurrentLength;
             if (roster != null)
                 roster.Difficulty = Difficulty;
         }
@@ -385,6 +397,7 @@ namespace WingingIt.Match
             PlaneRespawner.Rules = this;
             PlaneVisuals.TeamColors = TeamColor;
             PlaneHealth.AnyKilled += OnAnyKilled;
+            PlaneController.AnyRammed += OnAnyRammed;
             InputSystem.onDeviceChange += OnDeviceChange;
             if (_respawner != null)
                 _respawner.Spawning += OnPlayerSpawning;
@@ -397,6 +410,7 @@ namespace WingingIt.Match
             if (PlaneVisuals.TeamColors?.Target == (object)this)
                 PlaneVisuals.TeamColors = null;
             PlaneHealth.AnyKilled -= OnAnyKilled;
+            PlaneController.AnyRammed -= OnAnyRammed;
             InputSystem.onDeviceChange -= OnDeviceChange;
             if (_respawner != null)
                 _respawner.Spawning -= OnPlayerSpawning;
@@ -892,6 +906,22 @@ namespace WingingIt.Match
                 if (helper != null)
                     helpers.Add(Ref(helper));
             _mode.RecordKill(_score, new KillRecord(Ref(victim), kill.Killer != null ? Ref(kill.Killer) : default, killerTeam, helpers));
+        }
+
+        void OnAnyRammed(RamInfo ram)
+        {
+            if (_dismissed || _clock.Phase != MatchPhase.Playing || ram.Hitter == null || ram.Victim == null)
+                return;
+            _mode.RecordRam(_score, Ref(ram.Hitter), Ref(ram.Victim), ram.HitterDamage, ram.VictimDamage);
+        }
+
+        /// <summary>A plane's body HP for the mode's time-out tiebreak (0 if it's down or not a plane).</summary>
+        static float BodyHealthOf(object pilot)
+        {
+            if (pilot is not PlaneController plane || plane == null || !plane.IsAlive || !plane.TryGetComponent(out PlaneHealth health))
+                return 0f;
+            var body = health.GetPart(PlanePartType.Body);
+            return body != null ? body.Health : 0f;
         }
     }
 }

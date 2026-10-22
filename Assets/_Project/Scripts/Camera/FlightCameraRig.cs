@@ -171,8 +171,11 @@ namespace WingingIt.CameraSystem
 
         void SnapBehindTarget()
         {
-            GetYawPitch(target.transform.forward, out _aimYaw, out _aimPitch);
-            _chaseRotation = Quaternion.LookRotation(target.transform.forward, Vector3.up);
+            // The simulated pose, not the transform: while the plane is frozen (the countdown) an interpolated transform
+            // can still hold where it was before the spawn, and mouse aim would then steer back to that heading at GO.
+            Vector3 forward = target.Rotation * Vector3.forward;
+            GetYawPitch(forward, out _aimYaw, out _aimPitch);
+            _chaseRotation = Quaternion.LookRotation(forward, Vector3.up);
             _lookYaw = _lookPitch = 0f;
             _deathBlend = 0f;
         }
@@ -209,7 +212,7 @@ namespace WingingIt.CameraSystem
             _chaseRotation = Quaternion.Slerp(_chaseRotation, chaseTarget, 1f - Mathf.Exp(-chaseRotationSmoothing * dt));
 
             if ((!MouseAimMode && !FreeLookHeld) || Spectating)
-                GetYawPitch(plane.forward, out _aimYaw, out _aimPitch); // keep in sync for switching modes
+                GetYawPitch(target.Rotation * Vector3.forward, out _aimYaw, out _aimPitch); // keep in sync for switching modes (the simulated pose: see SnapBehindTarget)
 
             // Locked to the plane: the view is the plane's own orientation, so the camera spins with it.
             Quaternion baseView = Spectating ? _chaseRotation

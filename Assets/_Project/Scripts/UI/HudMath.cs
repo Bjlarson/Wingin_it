@@ -59,6 +59,30 @@ namespace WingingIt.UI
             return true;
         }
 
+        /// <summary>
+        /// Where two planes come closest if both hold their course: <paramref name="relativePosition"/> and
+        /// <paramref name="relativeVelocity"/> are the other plane's minus ours. False when they're already opening (the
+        /// closest is now: <paramref name="time"/> 0, <paramref name="miss"/> the distance).
+        /// </summary>
+        public static bool ClosestApproach(Vector3 relativePosition, Vector3 relativeVelocity, out float time, out float miss)
+        {
+            float vv = relativeVelocity.sqrMagnitude;
+            float t = vv > 1e-6f ? -Vector3.Dot(relativePosition, relativeVelocity) / vv : 0f;
+            if (t <= 0f)
+            {
+                time = 0f;
+                miss = relativePosition.magnitude;
+                return false;
+            }
+            time = t;
+            miss = (relativePosition + relativeVelocity * t).magnitude;
+            return true;
+        }
+
+        /// <summary>How fast two planes close on each other (m/s, negative while they pull apart).</summary>
+        public static float ClosingSpeed(Vector3 relativePosition, Vector3 relativeVelocity) =>
+            relativePosition.sqrMagnitude > 1e-6f ? -Vector3.Dot(relativePosition.normalized, relativeVelocity) : 0f;
+
         /// <summary><see cref="MapPoint(Vector3, Vector2, float, Rect)"/> on a map turned clockwise by <paramref name="rotationDeg"/>
         /// about its center (heading up: minus the plane's heading).</summary>
         public static Vector2 MapPoint(Vector3 world, Vector2 mapCenter, float mapRadius, Rect map, float rotationDeg)
@@ -174,15 +198,22 @@ namespace WingingIt.UI
         /// <summary>"+50  KILL", "+20  ASSIST", "+100  CONVOY DESTROYED".</summary>
         public static string Award(ScoreAward award) => $"+{award.Points}  {award.Label.ToUpperInvariant()}";
 
-        /// <summary>Our shot took a part off an enemy: "WING SHOT OFF!". Null for the body (that's the kill).</summary>
-        public static string PartLost(PlanePartType type) => type switch
+        /// <summary>
+        /// We took a part off an enemy: "WING SHOT OFF!", or "WING KNOCKED OFF!" when it was a ram. Null for the body
+        /// (that's the kill).
+        /// </summary>
+        public static string PartLost(PlanePartType type, bool rammed = false)
         {
-            PlanePartType.WingLeft or PlanePartType.WingRight => "WING SHOT OFF!",
-            PlanePartType.HorizontalStabilizer => "TAIL SHOT OFF!",
-            PlanePartType.VerticalStabilizer => "FIN SHOT OFF!",
-            PlanePartType.Engine => "ENGINE KNOCKED OUT!",
-            _ => null,
-        };
+            string how = rammed ? "KNOCKED OFF!" : "SHOT OFF!";
+            return type switch
+            {
+                PlanePartType.WingLeft or PlanePartType.WingRight => $"WING {how}",
+                PlanePartType.HorizontalStabilizer => $"TAIL {how}",
+                PlanePartType.VerticalStabilizer => $"FIN {how}",
+                PlanePartType.Engine => "ENGINE KNOCKED OUT!",
+                _ => null,
+            };
+        }
 
         /// <summary>Tone of a banner callout: good news for the viewer's team, bad news, or neither.</summary>
         public enum Tone { Neutral, Good, Bad }
@@ -329,6 +360,39 @@ namespace WingingIt.UI
                 death += shotDown ? $" BY {killer}" : $"  ({killer} GETS THE KILL)";
             return death;
         }
+
+        /// <summary>Planes still flying out of everyone in the match: "7 / 16".</summary>
+        public static string PlanesLeft(int flying, int total) => $"{Mathf.Max(0, flying)} / {Mathf.Max(0, total)}";
+
+        /// <summary>
+        /// The ram flash for a contact we were in: "RAMMED BOT 5!" when we flew into them (<paramref name="weHit"/>: the
+        /// plane that flies in takes the smaller share, though a part with little HP left can take less than that) or did
+        /// at least as much as we took, "RAMMED BY BOT 5" when they flew into us and we came off worse. Null for a
+        /// harmless bump (nobody took anything).
+        /// </summary>
+        public static string RamFlash(string other, float dealt, float took, bool weHit, out Tone tone)
+        {
+            tone = Tone.Neutral;
+            if (dealt <= 0f && took <= 0f)
+                return null;
+            other ??= "?";
+            if (weHit || dealt >= took)
+            {
+                tone = Tone.Good;
+                return $"RAMMED {other}!";
+            }
+            tone = Tone.Bad;
+            return $"RAMMED BY {other}";
+        }
+
+        /// <summary>Under the ram flash: "120 DEALT  ·  36 TAKEN".</summary>
+        public static string RamDamage(float dealt, float took) => $"{Mathf.RoundToInt(dealt)} DEALT  ·  {Mathf.RoundToInt(took)} TAKEN";
+
+        /// <summary>Near a hard edge: "ARENA EDGE  120 M  ·  TURN BACK".</summary>
+        public static string ArenaEdge(float metresToEdge) => $"ARENA EDGE  {Distance(Mathf.Max(0f, metresToEdge))}  ·  TURN BACK";
+
+        /// <summary>The death line after a ram: "RAMMED BY BOT 5", or "RAMMED" with nobody to credit.</summary>
+        public static string Rammed(string killer) => killer != null ? $"RAMMED BY {killer}" : "RAMMED";
 
         /// <summary>What to do on the glide path: "ON GLIDE PATH", "HIGH 12 M", "LOW 8 M  FLY LEFT".</summary>
         public static string ApproachHint(ApproachGuide guide)

@@ -1453,7 +1453,7 @@ namespace WingingIt.Editor
             onScreenStick.dynamicOriginRange = 150f;
 
             // Right: action buttons
-            TouchButton("Fire", controls.transform, knob, new Vector2(-230f, 230f), 190f, new Color(1f, 0.35f, 0.25f, 0.5f), "<Gamepad>/rightTrigger");
+            var fireButton = TouchButton("Fire", controls.transform, knob, new Vector2(-230f, 230f), 190f, new Color(1f, 0.35f, 0.25f, 0.5f), "<Gamepad>/rightTrigger");
             var missileButton = TouchButton("Missile", controls.transform, knob, new Vector2(-430f, 170f), 130f, new Color(1f, 0.75f, 0.2f, 0.5f), "<Gamepad>/leftTrigger");
             TouchButton("Boost", controls.transform, knob, new Vector2(-190f, 450f), 130f, new Color(0.3f, 0.75f, 1f, 0.5f), "<Gamepad>/buttonEast");
             var rocketsButton = TouchButton("Rockets", controls.transform, knob, new Vector2(-560f, 300f), 110f, new Color(1f, 0.55f, 0.15f, 0.5f), "<Gamepad>/buttonWest");
@@ -1474,7 +1474,9 @@ namespace WingingIt.Editor
             var touchUi = canvasGo.AddComponent<TouchControlsUI>();
             SetField(touchUi, "controlsRoot", controls);
             SetField(touchUi, "player", input);
-            // Weapon buttons only show for the weapons the current class carries.
+            // Weapon buttons only show for the weapons the current class carries (and not with weapons off).
+            SetField(touchUi, "guns", planeGo.GetComponent<PlaneGuns>());
+            SetField(touchUi, "fireButton", fireButton);
             SetField(touchUi, "rockets", planeGo.GetComponent<PlaneRockets>());
             SetField(touchUi, "rocketsButton", rocketsButton);
             SetField(touchUi, "missiles", planeGo.GetComponent<PlaneMissiles>());

@@ -71,7 +71,7 @@ namespace WingingIt.Flight
         public BombStats Stats => _plane.Stats != null && _plane.Stats.bombs != null ? _plane.Stats.bombs : FallbackStats();
         public int Ammo { get; private set; }
         /// <summary>Whether this plane's class carries bombs (its <see cref="FlightStats.bombs"/> is set). Without them ammo is 0.</summary>
-        public bool IsEquipped => _plane.Stats == null || _plane.Stats.bombs != null;
+        public bool IsEquipped => !_plane.WeaponsOff && (_plane.Stats == null || _plane.Stats.bombs != null);
         public int MaxAmmo => IsEquipped ? Stats.ammo : 0;
         /// <summary>Bombs still falling.</summary>
         public int InFlight => _bombs.Count;
@@ -188,7 +188,7 @@ namespace WingingIt.Flight
         {
             if (_cooldown > 0f)
                 _cooldown -= dt;
-            if (!_plane.IsAlive || !_plane.CurrentInput.DropBomb || _cooldown > 0f || Ammo <= 0)
+            if (!_plane.IsAlive || !IsEquipped || !_plane.CurrentInput.DropBomb || _cooldown > 0f || Ammo <= 0)
                 return;
             _cooldown = s.dropInterval;
             DropOne(s);

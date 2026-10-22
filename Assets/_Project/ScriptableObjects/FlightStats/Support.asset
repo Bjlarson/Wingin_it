@@ -45,3 +45,4 @@ MonoBehaviour:
   boostDuration: 3
   boostRechargeTime: 6
   boostRechargeDelay: 1
+  ramMass: 1.2

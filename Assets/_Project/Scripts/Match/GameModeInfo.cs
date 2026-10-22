@@ -28,6 +28,8 @@ namespace WingingIt.Match
         public string Players;
         /// <summary>Seconds of play.</summary>
         public float Length;
+        /// <summary>Round lengths (seconds) the player can pick between on the card; null or empty = fixed at <see cref="Length"/>.</summary>
+        public float[] LengthOptions;
         /// <summary>Shows the BOTS: EASY / NORMAL / HARD row on its card.</summary>
         public bool HasBotDifficulty;
         /// <summary>The bot difficulty until the player picks one for this mode.</summary>
@@ -41,6 +43,26 @@ namespace WingingIt.Match
 
         /// <summary>Where this mode's bot difficulty is remembered (<see cref="PlayerPrefs"/>).</summary>
         public string DifficultyPref => $"WingingIt.{Id}.BotDifficulty";
+
+        public bool HasLengthOptions => LengthOptions != null && LengthOptions.Length > 1;
+
+        /// <summary>Where this mode's chosen round length is remembered (<see cref="PlayerPrefs"/>).</summary>
+        public string LengthPref => $"WingingIt.{Id}.Length";
+
+        /// <summary>The round length to play: the saved pick if it is one of the options, else <see cref="Length"/>.</summary>
+        public float CurrentLength
+        {
+            get
+            {
+                if (!HasLengthOptions)
+                    return Length;
+                float saved = PlayerPrefs.GetFloat(LengthPref, Length);
+                foreach (var o in LengthOptions)
+                    if (Mathf.Approximately(o, saved))
+                        return o;
+                return Length;
+            }
+        }
 
         /// <summary>
         /// Whether the card shows on the game mode screen. A mode still being built shows only in the Editor and
@@ -78,6 +100,7 @@ namespace WingingIt.Match
                 Pitch = "Two teams of eight. Bring down planes, help your wingmen, outscore the other side.",
                 Players = "8 v 8",
                 Length = 300f,
+                LengthOptions = new[] { 300f, 600f, 900f },
                 HasBotDifficulty = true,
                 Sketch = ModeSketch.Teams,
                 Rules = () => new TeamsMode(),
@@ -113,6 +136,7 @@ namespace WingingIt.Match
                 Length = 180f,
                 HasBotDifficulty = true,
                 Sketch = ModeSketch.RamRoyale,
+                Rules = () => new RamRoyaleMode(),
             },
         };
     }

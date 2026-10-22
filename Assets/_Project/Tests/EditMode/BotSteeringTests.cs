@@ -155,6 +155,34 @@ namespace WingingIt.Tests
         }
 
         [Test]
+        public void CollisionPoint_MeetsACrossingTarget_WhereBothArriveTogether()
+        {
+            // Target 600 m ahead and 400 m right, crossing leftward at 60 m/s; we fly 150 m/s.
+            var target = new Vector3(400f, 0f, 600f);
+            var velocity = new Vector3(-60f, 0f, 0f);
+            Vector3 point = BotSteering.CollisionPoint(Vector3.zero, 150f, target, velocity);
+            float t = Vector3.Distance(target, point) / 60f;
+            Assert.AreEqual(150f * t, point.magnitude, 0.5f, "we reach the point when the target does");
+            Assert.AreEqual(600f, point.z, 1e-3f, "on the target's path");
+        }
+
+        [Test]
+        public void CollisionPoint_StillTarget_IsTheTarget_AndTheLeadIsCapped()
+        {
+            var target = new Vector3(0f, 50f, 800f);
+            Assert.AreEqual(target, BotSteering.CollisionPoint(Vector3.zero, 100f, target, Vector3.zero));
+
+            // A slow plane far behind a fast one heading away: aim at the capped lead point, not over the horizon.
+            Vector3 runaway = BotSteering.CollisionPoint(Vector3.zero, 50f, new Vector3(0f, 0f, 500f), new Vector3(0f, 0f, 90f),
+                maxTime: 3f);
+            Assert.AreEqual(500f + 90f * 3f, runaway.z, 1e-3f, "can't catch it: the capped intercept point");
+
+            // Head-on: we meet it sooner than the plain intercept point (which uses only our speed).
+            Vector3 headOn = BotSteering.CollisionPoint(Vector3.zero, 100f, new Vector3(0f, 0f, 1000f), new Vector3(0f, 0f, 100f * -1f));
+            Assert.AreEqual(500f, headOn.z, 0.5f, "closing at 200 m/s, we meet halfway");
+        }
+
+        [Test]
         public void SplitAim_TurnsLikeOnePoint_AndDescendsLikeTheOther()
         {
             Vector3 aim = BotSteering.SplitAim(Vector3.zero, new Vector3(100f, 0f, 100f), new Vector3(0f, -30f, 600f));

@@ -99,6 +99,34 @@ namespace WingingIt.Settings
         /// <summary>Dev builds only: the F1 help, debug overlay and dev keys.</summary>
         public bool devTools = true;
 
+        /// <summary>
+        /// Turns follow mode on or off. On a phone, follow flies on gestures alone with auto throttle; leaving follow
+        /// brings the on-screen controls back and leaves the throttle setting as it is.
+        /// </summary>
+        public void SetFollowPointer(bool on, bool mobile)
+        {
+            followPointer = on;
+            if (on)
+                invertPitch = false;
+            if (on && mobile)
+            {
+                touchGesturesOnly = true;
+                autoThrottle = true;
+            }
+            else if (!on)
+            {
+                touchGesturesOnly = false;
+            }
+        }
+
+        /// <summary>Picks mouse aim (true) or direct (false). Mouse aim turns invert pitch off.</summary>
+        public void SetMouseAim(bool on)
+        {
+            mouseAim = on;
+            if (on)
+                invertPitch = false;
+        }
+
         public SettingsData Clone() => (SettingsData)MemberwiseClone();
     }
 

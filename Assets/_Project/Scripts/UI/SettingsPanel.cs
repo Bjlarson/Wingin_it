@@ -47,6 +47,9 @@ namespace WingingIt.UI
         List<Row> _rows = new();
         bool _dragging;
 
+        /// <summary>A slider is being dragged (the menus hold their UI scale until it lets go, so the panel doesn't move under the cursor).</summary>
+        public bool Dragging => _dragging;
+
         // Resolution / window mode waiting for KEEP.
         float _keepUntil = -1f;
         (int w, int h, WindowMode mode) _previousDisplay;
@@ -114,6 +117,19 @@ namespace WingingIt.UI
         {
             _rows = BuildRows();
             _focus = Mathf.Clamp(_focus, 0, Mathf.Max(0, _rows.Count - 1));
+            // A long tab at a big UI scale shrinks to fit the screen.
+            float fit = Mathf.Min(1f, (referenceHeight - 80f) / (96f + 64f + Mathf.Max(8, _rows.Count) * RowH + 70f));
+            if (fit >= 1f)
+                return DrawPanel(width, referenceHeight, nav, glow);
+            var old = GUI.matrix;
+            GUI.matrix = old * Matrix4x4.Scale(new Vector3(fit, fit, 1f));
+            bool back = DrawPanel(width / fit, referenceHeight / fit, nav, glow);
+            GUI.matrix = old;
+            return back;
+        }
+
+        bool DrawPanel(float width, float referenceHeight, MenuNav nav, float glow)
+        {
             float rowsH = Mathf.Max(8, _rows.Count) * RowH;
             var panel = Centered(width, PanelW, 96f + 64f + rowsH + 70f, Mathf.Max(40f, (referenceHeight - (96f + 64f + rowsH + 70f)) / 2f));
             _g.Panel(panel, glow);
@@ -262,10 +278,10 @@ namespace WingingIt.UI
             switch (_tab)
             {
                 case SettingsTab.Controls:
-                    rows.Add(Toggle("FOLLOW CURSOR / FINGER", () => D.followPointer, v => S.Set(s => s.followPointer = v)));
+                    rows.Add(Toggle("FOLLOW CURSOR / FINGER", () => D.followPointer, v => S.Set(s => s.SetFollowPointer(v, mobile))));
                     if (!mobile)
                     {
-                        rows.Add(Choice("CONTROL MODE", new[] { "MOUSE AIM", "DIRECT" }, () => D.mouseAim ? 0 : 1, i => S.Set(s => s.mouseAim = i == 0)));
+                        rows.Add(Choice("CONTROL MODE", new[] { "MOUSE AIM", "DIRECT" }, () => D.mouseAim ? 0 : 1, i => S.Set(s => s.SetMouseAim(i == 0))));
                         rows.Add(Slider("MOUSE AIM SENSITIVITY", () => D.mouseAimSensitivity, v => S.Set(s => s.mouseAimSensitivity = v),
                             GameSettings.MinSensitivity, GameSettings.MaxSensitivity, 0.05f, v => $"{v:0.00}×"));
                     }
@@ -324,7 +340,7 @@ namespace WingingIt.UI
                     break;
 
                 case SettingsTab.Hud:
-                    rows.Add(Slider("HUD SCALE", () => D.hudScale, v => S.Set(s => s.hudScale = v),
+                    rows.Add(Slider("UI SCALE", () => D.hudScale, v => S.Set(s => s.hudScale = v),
                         GameSettings.MinHudScale, GameSettings.MaxHudScale, Notch, v => $"{v * 100f:0}%"));
                     rows.Add(Percent("DAMAGE SCREEN EFFECTS", () => D.damageEffects, v => S.Set(s => s.damageEffects = v)));
                     rows.Add(Toggle("REDUCE FLASHING", () => D.reduceFlashing, v => S.Set(s => s.reduceFlashing = v)));

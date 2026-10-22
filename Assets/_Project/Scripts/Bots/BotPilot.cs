@@ -21,6 +21,8 @@ namespace WingingIt.Bots
         Land,
         /// <summary>Full power down the runway, rotate at flying speed and climb away straight ahead.</summary>
         TakeOff,
+        /// <summary>Fly into a plane (Ram Royale): at full speed, at the point where our path meets its path.</summary>
+        Ram,
     }
 
     /// <summary>
@@ -62,6 +64,10 @@ namespace WingingIt.Bots
         [SerializeField] float overtakePerMeter = 0.08f;
         [Tooltip("Pursue: the most speed over the target's (m/s) while closing in range.")]
         [SerializeField] float overtakeSpeed = 25f;
+        [Tooltip("Ram: lead the target by at most this many seconds of its flight.")]
+        [SerializeField] float ramLeadTime = 6f;
+        [Tooltip("Ram: inside this distance (m), track the collision point finely (like the gun lead point).")]
+        [SerializeField] float ramTrackDistance = 500f;
         [Tooltip("Land: aim this far (m) ahead along the glide path, far out. Shorter tracks it tighter but twitchier.")]
         [SerializeField] float glideLead = 250f;
         [Tooltip("Land: ...shrinking to this (m) near the runway.")]
@@ -183,6 +189,16 @@ namespace WingingIt.Bots
         public void Pursue(PlaneController target)
         {
             NewOrder(BotManeuver.Pursue, null);
+            Target = target;
+        }
+
+        /// <summary>
+        /// Ram <paramref name="target"/>: full speed at the collision point (where a straight line at our speed meets its
+        /// path, see <see cref="BotSteering.CollisionPoint"/>), not the gun lead point. Falls back to Cruise if it dies.
+        /// </summary>
+        public void Ram(PlaneController target)
+        {
+            NewOrder(BotManeuver.Ram, null);
             Target = target;
         }
 
@@ -309,7 +325,7 @@ namespace WingingIt.Bots
             float sensitivity = steerSensitivity;
             HasGunSolution = false;
 
-            if ((Maneuver == BotManeuver.Pursue || Maneuver == BotManeuver.FormUp) &&
+            if ((Maneuver == BotManeuver.Pursue || Maneuver == BotManeuver.FormUp || Maneuver == BotManeuver.Ram) &&
                 (Target == null || !Target.isActiveAndEnabled || !Target.IsAlive))
                 Cruise();
             if (Maneuver == BotManeuver.Land && (_field == null || !_field.isActiveAndEnabled))
@@ -361,6 +377,24 @@ namespace WingingIt.Bots
                     speed = distance > closeInDistance
                         ? _plane.Modifiers.Get(FlightStat.MaxSpeed)
                         : Target.Speed + BotSteering.Overtake(distance, pursuitGap, overtakePerMeter, overtakeSpeed);
+                    break;
+                }
+                case BotManeuver.Ram:
+                {
+                    steer = BotSteering.CollisionPoint(pos, Mathf.Max(_plane.Speed, 1f), Target.Position, Target.Velocity,
+                        ramLeadTime);
+                    // The aim wanders like it does on the gun lead point, so a worse pilot misses some rams.
+                    if (aimError > 0f)
+                    {
+                        Vector2 wander = BotSteering.AimWander(_aimSeed, Time.fixedTime) * aimError;
+                        steer = BotSteering.OffsetAim(pos, steer, _plane.Rotation * Vector3.up, wander.x, wander.y);
+                    }
+                    if (Vector3.Distance(pos, Target.Position) <= ramTrackDistance)
+                    {
+                        sensitivity *= 1.5f; // fine tracking on the way in
+                        tracking = true;
+                    }
+                    speed = _plane.Modifiers.Get(FlightStat.MaxSpeed);
                     break;
                 }
                 case BotManeuver.FormUp:

@@ -96,6 +96,8 @@ namespace WingingIt.Match
     /// <summary>One pilot's line on the scoreboard.</summary>
     public sealed class PilotScore
     {
+        /// <summary>The pilot this line is for (the plane), as registered; null for a line made by hand.</summary>
+        public object Pilot;
         public string Name;
         public int Team;
         public int Kills;
@@ -103,6 +105,10 @@ namespace WingingIt.Match
         public int Deaths;
         /// <summary>Banners this pilot flew home (Capture the Banner) or fields it was on the capture of (Airfield Domination).</summary>
         public int Captures;
+        /// <summary>Rams that did this pilot's target damage (Ram Royale's tiebreak).</summary>
+        public int Rams;
+        /// <summary>Finishing place in a last-plane-standing mode, given when the pilot goes out; 0 while still flying.</summary>
+        public int Place;
         /// <summary>Personal score: every point this pilot earned for the team (kills, assists, objectives).</summary>
         public int Points;
     }
@@ -173,7 +179,7 @@ namespace WingingIt.Match
         {
             if (!_pilots.TryGetValue(pilot, out var score))
             {
-                score = new PilotScore();
+                score = new PilotScore { Pilot = pilot };
                 _pilots.Add(pilot, score);
                 _order.Add(score);
             }

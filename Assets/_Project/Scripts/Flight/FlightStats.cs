@@ -117,6 +117,10 @@ namespace WingingIt.Flight
         [Tooltip("Seconds after boosting before the meter starts refilling.")]
         public float boostRechargeDelay = 1f;
 
+        [Header("Ram")]
+        [Tooltip("How heavy the plane is in a ram (Ram Royale, see RamRules): heavier deals more damage and takes less. 1 = Fighter.")]
+        [Min(0.1f)] public float ramMass = 1f;
+
         public float GetBase(FlightStat stat) => stat switch
         {
             FlightStat.MinSpeed => minSpeed,

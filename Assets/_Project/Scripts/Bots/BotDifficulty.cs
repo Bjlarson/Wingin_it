@@ -48,6 +48,9 @@ namespace WingingIt.Bots
         public float evadeStartDistance;
         [Tooltip("Seconds between a missile coming into range and the bot reacting.")]
         public float evadeReactionTime;
+        [Tooltip("Ram Royale: chance (0..1) to break away from a plane lining up to ram us (when the hit would hurt us " +
+                 "more than it). One roll per plane coming at us; the reaction delay is the missile one.")]
+        [Range(0f, 1f)] public float ramDodgeChance;
         [Tooltip("Uses its class ability (Barrel Roll, Afterburner, Armor Shield, Repair Aura).")]
         public bool useAbilities;
         [Tooltip("Go home to repair when the body drops below this fraction (0..1). Losing any part always sends it home.")]
@@ -73,6 +76,7 @@ namespace WingingIt.Bots
                 missileNoticeChance = 0.45f,
                 evadeStartDistance = 400f,
                 evadeReactionTime = 0.6f,
+                ramDodgeChance = 0.4f,
                 useAbilities = false,
                 retreatHealth = 0.25f,
                 steerSensitivity = 2.2f,
@@ -92,6 +96,7 @@ namespace WingingIt.Bots
                 missileNoticeChance = 0.85f,
                 evadeStartDistance = 700f,
                 evadeReactionTime = 0.1f,
+                ramDodgeChance = 0.9f,
                 useAbilities = true,
                 retreatHealth = 0.5f,
                 steerSensitivity = 3.6f,
@@ -111,6 +116,7 @@ namespace WingingIt.Bots
                 missileNoticeChance = 0.65f,
                 evadeStartDistance = 550f,
                 evadeReactionTime = 0.2f,
+                ramDodgeChance = 0.7f,
                 useAbilities = true,
                 retreatHealth = 0.4f,
                 steerSensitivity = 3f,

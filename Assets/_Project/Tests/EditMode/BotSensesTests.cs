@@ -238,6 +238,38 @@ namespace WingingIt.Tests
         }
 
         [Test]
+        public void IsComingAt_OnlyAPlaneFlyingAtUs()
+        {
+            var ahead = new Vector3(0f, 0f, 500f);
+            Assert.IsTrue(BotSenses.IsComingAt(ahead, new Vector3(0f, 0f, -100f)), "nose on us");
+            Assert.IsFalse(BotSenses.IsComingAt(ahead, new Vector3(0f, 0f, 100f)), "flying away (we're catching it up)");
+            Assert.IsFalse(BotSenses.IsComingAt(ahead, new Vector3(100f, 0f, -10f)), "crossing ahead");
+            Assert.IsTrue(BotSenses.IsComingAt(new Vector3(0f, 0f, -300f), new Vector3(0f, 0f, 120f)), "on our tail");
+        }
+
+        [Test]
+        public void TimeToClosest_ClosingAndOpening()
+        {
+            Assert.AreEqual(2.5f, BotSenses.TimeToClosest(new Vector3(0f, 0f, 500f), new Vector3(0f, 0f, -200f)), 1e-4f);
+            Assert.AreEqual(0f, BotSenses.TimeToClosest(new Vector3(0f, 0f, 500f), new Vector3(0f, 0f, 200f)), "opening");
+        }
+
+        [Test]
+        public void RamWorthTaking_OnlyWhenWeSurvive_AndComeOffNoWorse()
+        {
+            Assert.IsFalse(BotSenses.RamWorthTaking(240f, 240f, 200f), "a head-on that kills both");
+            Assert.IsTrue(BotSenses.RamWorthTaking(40f, 60f, 200f), "a light knock we win");
+            Assert.IsFalse(BotSenses.RamWorthTaking(80f, 30f, 200f), "we'd take more than we deal");
+
+            // Real rules: a T-bone into our side hurts us fully and the rammer little; their nose-on hit is not one to take.
+            var rules = new WingingIt.Flight.RamRules();
+            var us = new WingingIt.Flight.Rammer(Vector3.zero, Vector3.forward, Vector3.forward * 100f);
+            var them = new WingingIt.Flight.Rammer(Vector3.right * 5f, Vector3.left, Vector3.left * 100f);
+            var outcome = rules.Resolve(us, them);
+            Assert.IsFalse(BotSenses.RamWorthTaking(outcome.DamageToA, outcome.DamageToB, 200f), "rammed in the side");
+        }
+
+        [Test]
         public void OrbitInside_KeepsTheCircleClearOfTheEdge()
         {
             var center = new Vector3(100f, 0f, 0f);

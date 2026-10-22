@@ -29,7 +29,7 @@ namespace WingingIt.Bots
         TakeOff,
         /// <summary>A missile is closing: breaking hard (and barrel rolling if the class can).</summary>
         Evade,
-        /// <summary>About to fly into another plane: sidestepping it.</summary>
+        /// <summary>About to fly into another plane: sidestepping it. In Ram Royale: breaking from a plane lining up to ram us.</summary>
         AvoidCollision,
         /// <summary>Heading out of a hard-edged arena (no turn-back there): turning back toward the middle.</summary>
         AvoidEdge,
@@ -41,7 +41,8 @@ namespace WingingIt.Bots
     /// A bot's decisions. Each physics step it picks a <see cref="BotState"/> and turns it into orders and buttons for
     /// its <see cref="BotPilot"/>: patrol a route, chase and attack the best visible enemy, break from incoming
     /// missiles, pull up from terrain, and when it's hurt fly an approach lane home, land, repair and take off again.
-    /// In a Capture the Banner or Airfield Domination match its role adds the mode's duties on top.
+    /// In a Capture the Banner or Airfield Domination match its role adds the mode's duties on top; with ram damage on
+    /// (Ram Royale) it rams its target instead of shooting it and breaks from planes lining up to ram it.
     /// Like the pilot it never touches the plane directly, and it only knows what a
     /// player could: it sees enemies within its detection range unless cloud hides them (or an allied Support's
     /// radar reveals them), and the missile warning tells it what's chasing it.
@@ -123,6 +124,26 @@ namespace WingingIt.Bots
         [Tooltip("...within this many seconds.")]
         [SerializeField] float collisionHorizon = 2f;
 
+        [Header("Ram Royale")]
+        [Tooltip("Boost when our ram will land within this many seconds (a late boost the target can't plan for).")]
+        [SerializeField] float lateBoostTime = 1f;
+        [Tooltip("Fire a charge ability (Ram Boost, Afterburner) when our ram will land within this many seconds.")]
+        [SerializeField] float ramChargeTime = 1.5f;
+        [Tooltip("Our path passing within this distance (m) of the target's counts as a ram about to land.")]
+        [SerializeField] float ramHitDistance = 15f;
+        [Tooltip("Inside this distance (m) of its target a ramming bot counts as attacking (else chasing).")]
+        [SerializeField] float ramAttackRange = 600f;
+        [Tooltip("Watch for planes that will pass within this distance (m) of us...")]
+        [SerializeField] float ramThreatMiss = 30f;
+        [Tooltip("...within this many seconds...")]
+        [SerializeField] float ramThreatHorizon = 2.5f;
+        [Tooltip("...flying at us with at least this much (m/s) of their own speed: lining up on us, not being caught up with.")]
+        [SerializeField] float ramThreatSpeed = 20f;
+        [Tooltip("Barrel Roll out of a ram coming within this many seconds.")]
+        [SerializeField] float ramRollTime = 1f;
+        [Tooltip("Armor Shield up for any ram (ours or theirs) landing within this many seconds.")]
+        [SerializeField] float ramShieldTime = 0.6f;
+
         static readonly RaycastHit[] s_hits = new RaycastHit[16];
         static readonly List<float> s_laneCosts = new();
 
@@ -146,6 +167,11 @@ namespace WingingIt.Bots
         BotSkill _skill;
         float _engageAt, _lockedSince = -1f, _lastHitAt = -1f, _lastShotChance;
         bool _threatNoticed;
+
+        // Ram Royale: the plane lining up on us (and whether we noticed it), and seconds to the next contact each way.
+        PlaneController _ramThreat;
+        float _ramThreatSince, _ramThreatTime = float.PositiveInfinity, _ramContactTime = float.PositiveInfinity;
+        bool _ramThreatNoticed, _ramDodging;
 
         // Retreat: the field, the route into it (an approach lane's points, ending on the final approach fix) and progress.
         // A capture landing (Domination) flies the same trip into a field to take, not to repair at.
@@ -310,6 +336,8 @@ namespace WingingIt.Bots
             _threatSince = _avoidUntil = _lockedSince = _lastHitAt = -1f;
             _retreating = _forced = _capturing = _bombExtending = false;
             _domReplanAt = -1f;
+            _ramThreat = null;
+            _ramDodging = false;
             State = BotState.Patrol;
         }
 
@@ -340,6 +368,8 @@ namespace WingingIt.Bots
             }
             _stoppedSince = -1f;
 
+            _ramContactTime = _ramThreatTime = float.PositiveInfinity;
+            _ramDodging = false;
             UpdateTarget(now);
             UpdateRetreat();
             UpdateDomination(now);
@@ -354,13 +384,15 @@ namespace WingingIt.Bots
             {
                 State = BotState.AvoidEdge;
             }
-            else if (!CheckTraffic() && !CheckMissiles(now) && !ClimbingOut())
+            else if (!(_plane.RamDamage ? CheckRamThreats(now) : CheckTraffic()) && !CheckMissiles(now) && !ClimbingOut())
             {
                 if (_retreating)
                     FlyHome(now);
                 else if (!DoBannerDuty(now) && !DoDominationDuty(now))
                 {
-                    if (IsEngaged)
+                    if (IsEngaged && _plane.RamDamage)
+                        Ram(now);
+                    else if (IsEngaged)
                         Fight();
                     else
                         Patrol();
@@ -497,6 +529,110 @@ namespace WingingIt.Bots
             return true;
         }
 
+        // ------------------------------------------------------------------ Ram Royale
+
+        /// <summary>
+        /// Ram Royale's traffic check, in place of <see cref="CheckTraffic"/> (which would sidestep the plane we're
+        /// ramming): only a plane flying at us and about to hit counts. If the hit would hurt us more than it (or kill us,
+        /// see <see cref="BotSenses.RamWorthTaking"/>) and we noticed it (<see cref="BotSkill.ramDodgeChance"/>, after the
+        /// reaction delay), break away: a hard turn from one behind us, a sidestep from one ahead. True while breaking.
+        /// </summary>
+        bool CheckRamThreats(float now)
+        {
+            Vector3 pos = _plane.Position;
+            Vector3 velocity = _plane.Velocity;
+            PlaneController threat = null;
+            Vector3 avoid = default;
+            foreach (var other in PlaneController.All)
+            {
+                if (other == _plane || !other.IsAlive || !other.isActiveAndEnabled || other.IsGrounded)
+                    continue;
+                Vector3 rel = other.Position - pos;
+                Vector3 relVelocity = other.Velocity - velocity;
+                if (!BotSenses.IsComingAt(rel, other.Velocity, ramThreatSpeed) ||
+                    !BotSenses.OnCollisionCourse(rel, relVelocity, ramThreatHorizon, ramThreatMiss, out Vector3 miss))
+                    continue;
+                float t = BotSenses.TimeToClosest(rel, relVelocity);
+                if (t < _ramThreatTime)
+                {
+                    _ramThreatTime = t;
+                    threat = other;
+                    avoid = miss;
+                }
+            }
+            if (threat == null)
+            {
+                _ramThreat = null;
+                return false;
+            }
+            if (threat != _ramThreat)
+            {
+                _ramThreat = threat;
+                _ramThreatSince = now;
+                _ramThreatNoticed = Random.value < _skill.ramDodgeChance;
+            }
+            if (!_ramThreatNoticed || now - _ramThreatSince < _skill.evadeReactionTime || RamWorthTaking(threat, _ramThreatTime))
+                return false;
+
+            State = BotState.AvoidCollision;
+            _ramDodging = true;
+            Vector3 forward = _plane.Rotation * Vector3.forward;
+            Vector3 toThreat = threat.Position - pos;
+            if (Vector3.Dot(toThreat, forward) < 0f)
+            {
+                // From behind: break hard away from its side, and boost so it closes slower.
+                float side = Vector3.Dot(toThreat, _plane.Rotation * Vector3.right) > 0f ? -1f : 1f;
+                _pilot.Override(BotSenses.BreakTurnPoint(pos, forward, side), _plane.Modifiers.Get(FlightStat.MaxSpeed), 2f);
+                _pilot.Boost = _plane.BoostMeter > 0f;
+            }
+            else
+            {
+                _pilot.Override(BotSenses.SidestepPoint(pos, forward, avoid), null, 2f);
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Would we come off no worse from <paramref name="other"/> hitting us in <paramref name="time"/> seconds, both
+        /// flying straight? Judged with the plane's own <see cref="RamRules"/> on where both will be just before the
+        /// contact (at the closest point itself the offset between them is only the miss, pointing anywhere).
+        /// </summary>
+        bool RamWorthTaking(PlaneController other, float time)
+        {
+            if (_health == null)
+                return false;
+            float at = Mathf.Max(0f, time - 0.1f);
+            var outcome = _plane.RamRules.Resolve(_plane.AsRammer(_plane.Position + _plane.Velocity * at),
+                other.AsRammer(other.Position + other.Velocity * at));
+            return BotSenses.RamWorthTaking(outcome.DamageToA, outcome.DamageToB, _health.GetPart(PlanePartType.Body).Health);
+        }
+
+        /// <summary>
+        /// Ram Royale's attack: fly into <see cref="Target"/> at full speed (<see cref="BotPilot.Ram"/>), boosting in
+        /// the last second so it can't time a dodge, and on a long chase.
+        /// </summary>
+        void Ram(float now)
+        {
+            _patrolOrdered = false;
+            _gunsFiring = false;
+            if (_pilot.Maneuver != BotManeuver.Ram || _pilot.Target != Target)
+                _pilot.Ram(Target);
+
+            Vector3 pos = _plane.Position;
+            Vector3 rel = Target.Position - pos;
+            Vector3 relVelocity = Target.Velocity - _plane.Velocity;
+            float distance = rel.magnitude;
+            if (BotSenses.OnCollisionCourse(rel, relVelocity, ramChargeTime, ramHitDistance, out _))
+                _ramContactTime = BotSenses.TimeToClosest(rel, relVelocity);
+            // The nose near the collision point is a ram coming: not a stalemate.
+            if (BotSenses.IsAimedAt(pos, _plane.Rotation * Vector3.forward, _pilot.SteerPoint, shotChanceAngle))
+                _lastShotChance = now;
+
+            State = distance <= ramAttackRange ? BotState.Attack : BotState.Chase;
+            _pilot.Boost = _plane.BoostMeter > 0f &&
+                           (_ramContactTime <= lateBoostTime || (distance > boostChaseDistance && _plane.BoostMeter > 0.3f));
+        }
+
         // ------------------------------------------------------------------ missiles
 
         /// <summary>True (and breaking) while a missile chasing us is close.</summary>
@@ -531,7 +667,9 @@ namespace WingingIt.Bots
         /// <summary>
         /// Fires the class ability when it pays off: Barrel Roll and Afterburner against a missile about to hit (and
         /// Afterburner to close a long chase, or to get away on the way home), Armor Shield when taking hits with an
-        /// enemy in sight or a missile about to hit, Repair Aura when it or an ally in reach is hurt.
+        /// enemy in sight or a missile about to hit, Repair Aura when it or an ally in reach is hurt. In Ram Royale:
+        /// Ram Boost and Afterburner as a charge just before our ram lands, Barrel Roll out of one coming at us, and
+        /// Armor Shield just before any contact.
         /// </summary>
         void UseAbility(float now)
         {
@@ -539,14 +677,17 @@ namespace WingingIt.Bots
                 return;
             var threat = PlaneMissiles.GetThreat(_plane);
             bool missileClose = State == BotState.Evade && threat.Incoming > 0 && threat.NearestDistance <= barrelRollDistance;
+            bool ramCharge = _ramContactTime <= ramChargeTime;
+            bool ramImpact = Mathf.Min(_ramContactTime, _ramThreatTime) <= ramShieldTime;
             bool use = _ability.Stats switch
             {
-                BarrelRollAbility => missileClose,
-                AfterburnerAbility => missileClose ||
+                BarrelRollAbility => missileClose || (_ramDodging && _ramThreatTime <= ramRollTime),
+                RamBoostAbility => ramCharge,
+                AfterburnerAbility => missileClose || ramCharge ||
                                       (State == BotState.Chase && Target != null &&
                                        Vector3.Distance(_plane.Position, Target.Position) > boostChaseDistance) ||
                                       (State == BotState.Retreat && EnemyWithin(retreatBoostDistance)),
-                ArmorShieldAbility => missileClose ||
+                ArmorShieldAbility => missileClose || ramImpact ||
                                       (_lastHitAt >= 0f && now - _lastHitAt <= shieldHitWindow && EnemyWithin(_skill.detectionRange)),
                 RepairAuraAbility aura => AuraNeeded(aura.radius),
                 _ => false,
@@ -681,7 +822,7 @@ namespace WingingIt.Bots
         /// </summary>
         bool AimGuns()
         {
-            if (Target == null || _guns == null || _guns.ActiveGunCount == 0 ||
+            if (Target == null || _guns == null || !_guns.IsEquipped || _guns.ActiveGunCount == 0 ||
                 !_guns.TryGetLeadPoint(Target, out Vector3 lead, out _))
             {
                 _gunsFiring = false;

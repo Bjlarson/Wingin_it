@@ -41,6 +41,41 @@ namespace WingingIt.Bots
         }
 
         /// <summary>
+        /// Where to fly to <em>hit</em> a target flying at <paramref name="targetVelocity"/> (a ram, not a gun shot):
+        /// the point where a straight line flown at <paramref name="speed"/> meets the target's straight path, at the
+        /// soonest time that works, capped at <paramref name="maxTime"/> seconds. A target we can't catch gets the
+        /// capped <see cref="InterceptPoint"/> instead.
+        /// </summary>
+        public static Vector3 CollisionPoint(Vector3 position, float speed, Vector3 targetPosition, Vector3 targetVelocity,
+            float maxTime = 6f)
+        {
+            // |r + v t| = s t  →  (v·v − s²) t² + 2 (r·v) t + r·r = 0
+            Vector3 r = targetPosition - position;
+            float a = Vector3.Dot(targetVelocity, targetVelocity) - speed * speed;
+            float b = 2f * Vector3.Dot(r, targetVelocity);
+            float c = Vector3.Dot(r, r);
+            float t = -1f;
+            if (Mathf.Abs(a) < 1e-3f)
+            {
+                if (b < 0f)
+                    t = -c / b;
+            }
+            else
+            {
+                float disc = b * b - 4f * a * c;
+                if (disc >= 0f)
+                {
+                    float root = Mathf.Sqrt(disc);
+                    float t1 = (-b - root) / (2f * a), t2 = (-b + root) / (2f * a);
+                    t = t1 > 0f && (t1 < t2 || t2 <= 0f) ? t1 : t2;
+                }
+            }
+            if (t <= 0f)
+                return InterceptPoint(position, speed, targetPosition, targetVelocity, maxTime);
+            return targetPosition + targetVelocity * Mathf.Min(t, maxTime);
+        }
+
+        /// <summary>
         /// A formation slot: <paramref name="offset"/> in the leader's level frame (x right, y up, z forward,
         /// so a bank doesn't swing the wingman up or down).
         /// </summary>

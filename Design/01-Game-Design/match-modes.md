@@ -200,9 +200,48 @@ Capturers and cover by roster slot (4 / 3 in 7), split over the fields by value;
 
 - **Framework:** `MatchMode.FreeForAllSize` (0 = the level's teams) and `MatchMode.Lives` (0 = unlimited; `CanRespawn` checks deaths against it), so any later mode (Free For All, Sky Racing) gets both by overriding two numbers.
 - **Teams:** in a free-for-all mode `MatchManager` has the `BotRoster` fill **16 teams of 1** (`BotRoster.SetTeams`); the player stays team 0 and bots take teams 1–15, named `Bot 5 (Fighter)`. A team's name is its pilot's name, and each pilot has its own colour (`FreeForAll.PilotColor`: 16 hues, the first two are the usual West blue and East red). The level's 2 × 8 come back on Dismiss or when the scene goes. A bot with no home airfield appears wherever the match's spawn rules put it (the arena's air ring).
-- **`RamRoyaleMode`** (`MatchMode.cs`, card still IN DEVELOPMENT): 16 pilots, one life, plays in the `RamRoyale` arena even off the card. For now a knock-out scores 100 to whoever gets the credit, with no assists; the score bar shows only the clock; scoreboard columns KO / OUT / SCORE, pilots still flying listed first; headline "7 OF 16 STILL FLYING". Weapons, ram damage and the last-plane win are the next steps.
+- **`RamRoyaleMode`** (`MatchMode.cs`, card still IN DEVELOPMENT): 16 pilots, one life, plays in the `RamRoyale` arena even off the card. For now a knock-out scores 100 to whoever gets the credit, with no assists; the score bar shows only the clock; scoreboard columns KO / RAMS / OUT / SCORE, pilots still flying listed first; headline "7 OF 16 STILL FLYING". Weapons are off (see [Loadout](#loadout-built-2026-10-21)) and ram damage is on (see [Ram damage](#ram-damage-built-2026-10-22)); the last plane flying wins (see [Win](#win-built-2026-10-22)).
 - **Spectating:** a player out of lives gets no respawn picker, no flight HUD and no controls (`MatchManager.IsSpectating`). The camera holds on the explosion for **2.5 s**, then follows the survivor nearest it in a plain chase view (`FlightCameraRig.Spectate`); when that plane goes down it holds on that explosion and moves to the next nearest. ← → (or LB / RB, or the on-screen < > buttons) switch planes. The screen shows YOU'RE OUT, the watched pilot at the bottom and a STILL FLYING list on the right with each pilot's colour. The scoreboard ends it and hands the camera back.
 - **Scoreboard (free for all):** one ranking split into two columns of 8, each row with its place and the pilot's colour dot.
+
+### Loadout (built 2026-10-21)
+
+- **Weapons off:** `RamRoyaleMode.OnSpawned` sets `PlaneController.WeaponsOff` on every plane it spawns (cleared on respawn, so other modes never see it). Guns, rockets, missiles and bombs then report `IsEquipped` false: the triggers do nothing, missiles don't lock (so nobody gets a lock warning), and the HUD's GUN / ammo rows, gun pippers and target brackets and the touch Fire / weapon buttons go away. Bots hold fire.
+- **Abilities:** Boost stays, and Barrel Roll, Afterburner and Armor Shield are unchanged. Support's Repair Aura becomes a **Ram Boost** (`RamBoostAbility`, given through `PlaneAbility.Override`, which any mode can use to swap a class's ability): a 1.5 s charge at ×1.3 speed and ×4 acceleration, 10 s cooldown, with `ramDamageMultiplier` ×1.5 on the damage it deals in rams landed while it runs. The class card still shows Repair Aura.
+- **Classes:** the class pick stays. In a free-for-all the bots balance classes across the whole field by the usual 3 / 2 / 2 / 1 weights (6 Fighters, 4 Interceptors, 4 Heavies, 2 Supports in 16), instead of every team of one taking a Fighter.
+
+### Ram damage (built 2026-10-22)
+
+- **On / off:** `RamRoyaleMode.OnSpawned` sets `PlaneController.RamDamage` (cleared on respawn, like `WeaponsOff`). Other modes keep the old rule: the plane that sweeps into another crashes, or loses the wing or tail that clipped it.
+- **The contact:** when a plane's collision sweep finds another plane, both planes take damage, are pushed apart, and then pass through each other for **1 s** so one contact counts once. The numbers are in `RamRules` (pure, on the plane's `PlaneController`, tunable per prefab).
+- **How much:** **1.2 damage per m/s of closing speed** (the speed the two were closing at). Head-on at cruise is about 200 m/s, so both planes take ~240 and die. Under **8 m/s** it's a harmless bump.
+- **Who hit whom:** a plane takes the full hit when it was in front of the other plane's nose (the other flew into it), and only **30%** when it hit the other from behind, above, below or the side, blending between the two over a ~45° cone (`headOnCone` 0.7). So a head-on hurts both fully, a hit from behind or above mostly hurts the plane that was hit, and a T-bone favours the plane that hit nose first.
+- **Mass:** `FlightStats.ramMass` (Fighter 1, Interceptor 0.8, Heavy 1.6, Support 1.2) splits each hit as 2 × its mass ÷ both masses, so a Heavy deals twice what it takes from an Interceptor, and the lighter plane is pushed further. The push apart is 25% of the closing speed (at most 30 m/s), split by mass, with a roll away from the side that was hit.
+- **Ram Boost:** a Support ramming during its Ram Boost deals ×1.5. Armor Shield halves ram damage taken, as with any damage.
+- **Parts:** the part that touched takes it: a wing or stabilizer (it comes off at 0, and any extra is lost), anything else (body, engine, nose) goes to the body. A part already gone passes the hit to the body. A crippled plane keeps flying; body at 0 is out.
+- **Kill credit:** each plane's damage is credited to the other, so a head-on that kills both gives each a knock-out. The death cause is the new `DeathCause.Rammed`: the wreck breaks up in mid-air, the death line reads RAMMED BY X and the kill feed X RAMMED Y. A plane that crashes after a ram credits whoever rammed it (the usual crash credit: 20 s, or until repaired when crippled; there's no repair here, so a lost part keeps the credit for good).
+- **Event:** `PlaneController.AnyRammed` (`RamInfo`: hitter, victim, point, damage each took, closing speed) for the HUD's ram flash (see [HUD](#hud-built-2026-10-22)) and the most-rams tiebreak (`MatchMode.RecordRam`, see [Win](#win-built-2026-10-22)).
+
+### Win (built 2026-10-22)
+
+- **Last plane flying:** `RamRoyaleMode.EarlyWinner` ends the match the moment one pilot is left (with at least two in the match), and that pilot wins. The headline reads "X · LAST PLANE FLYING".
+- **Going down together:** everyone out on the same frame shares the best of their places, so a head-on between the last two puts both 1st; the one with more rams wins, and level rams is a **draw** (`EarlyWinner` returns `MatchScore.Draw`, which still ends the match).
+- **At time (3:00):** among the planes still flying, the most **body HP** wins (absolute HP, so a Heavy's bigger body counts), then the most rams, else a draw. Body HP comes in through `RamRoyaleMode.BodyHealth` (`MatchManager` reads each plane's Body part).
+- **Rams:** a contact counts a ram for each plane that did the other damage (a head-on counts for both; a harmless bump for neither), in `PilotScore.Rams`, fed from `AnyRammed` through the new `MatchMode.RecordRam` hook. Scoreboard column RAMS.
+- **Places:** `PilotScore.Place` is given when a pilot goes out (how many still flying + 1). The scoreboard lists the flying by body HP, then the out by place, rams breaking ties, then score.
+- **Not yet:** the placement bonus points (for XP / coins later); KO points stay 100 each.
+
+### HUD (built 2026-10-22)
+
+`FlightHUD.RamRoyale.cs`, on while a Ram Royale match is on (`match.Mode is RamRoyaleMode`); the edge warning works for any hard-edged arena.
+
+- **Planes left:** the score bar shows PLANES LEFT 7 / 16 left of the clock, in place of the team scores (new `MatchWidgets.PlanesLeft`; flying = survivors plus the player if still in, out of `TeamCount`).
+- **Plane markers:** with the guns off there are no gun brackets, so every plane in view within 1.5 km gets small corner brackets in its pilot's colour. The **nearest plane** gets a pulsing ring with its name and distance, and CLOSING 85 M/S while closing; out of view, a big arrow on the screen edge points at it with its name and distance.
+- **INCOMING RAM · BOT 5:** a plane flying at us (at least 20 m/s of its own speed our way, so not one we're chasing) that will pass within 30 m in the next 2.5 s if both hold course, with an amber arrow round the crosshair pointing at it. Pure math in `HudMath.ClosestApproach` / `ClosingSpeed`.
+- **Minimap:** every plane shows, in its pilot's colour (a small arena, nowhere to hide); other modes still show only friends and radar contacts.
+- **Edge warning:** near a hard edge the line reads ARENA EDGE 120 M · TURN BACK (past it, the existing OUTSIDE THE ARENA countdown), a red arrow round the crosshair points back to the middle, and the screen's rim glows red, stronger the closer to the edge. The shrinking edge isn't built, so this is the fixed edge for now.
+- **Ram flash:** from `PlaneController.AnyRammed` when we're in the contact: RAMMED BOT 5! (gold, rim flashes gold) when we flew into them or did at least as much as we took, RAMMED BY BOT 5 (red; the damage vignette already flashes) when they flew into us and we came off worse; nothing for a harmless bump. Under it 120 DEALT · 36 TAKEN; pops in, fades over 1.6 s. A part knocked off by a ram pops WING / TAIL / FIN KNOCKED OFF! (not SHOT OFF).
+- **Fix found on the way:** at GO the air start used to bank the player hard away from the middle. During the frozen countdown the plane's interpolated transform still showed the hangar pose, the camera rig synced the mouse-aim direction to it, and at GO mouse aim steered back to the hangar's heading. The rig now reads the simulated pose (`PlaneController.Rotation`).
 
 ## Sky Racing (prototype)
 

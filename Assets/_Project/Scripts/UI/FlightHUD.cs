@@ -138,6 +138,7 @@ namespace WingingIt.UI
             PlaneHealth.AnyKilled += OnAnyKilled;
             PlaneHealth.AnyPartDestroyed += OnAnyPartDestroyed;
             GroundTarget.AnyDestroyed += OnGroundTargetDestroyed;
+            PlaneController.AnyRammed += OnAnyRammed;
         }
 
         void Start()
@@ -172,6 +173,7 @@ namespace WingingIt.UI
             PlaneHealth.AnyKilled -= OnAnyKilled;
             PlaneHealth.AnyPartDestroyed -= OnAnyPartDestroyed;
             GroundTarget.AnyDestroyed -= OnGroundTargetDestroyed;
+            PlaneController.AnyRammed -= OnAnyRammed;
             if (_score != null)
                 _score.Awarded -= OnAwarded;
             _g.Dispose();
@@ -245,7 +247,7 @@ namespace WingingIt.UI
         {
             if (plane == null || victim.Plane == plane || PlaneHealth.GetPlane(info.Source) != plane)
                 return;
-            string text = HudText.PartLost(info.Part.partType);
+            string text = HudText.PartLost(info.Part.partType, rammed: plane.WeaponsOff); // weapons off: only a ram takes parts
             if (text != null)
                 AddPopup(text, Amber, 1.2f);
         }
@@ -270,7 +272,7 @@ namespace WingingIt.UI
             else if (kill.Source is AAGun aa)
                 (line.Left, line.LeftColor) = ($"{TeamName(aa.Team)} AA", TeamColor(aa.Team));
             if (line.Left != null)
-                (line.Verb, line.Right, line.RightColor) = ("DOWNED", victimName, victimColor);
+                (line.Verb, line.Right, line.RightColor) = (kill.Cause == DeathCause.Rammed ? "RAMMED" : "DOWNED", victimName, victimColor);
             else
                 (line.Left, line.LeftColor) = ($"{victimName} CRASHED", victimColor);
             line.InvolvesUs = victim == plane || kill.Killer == plane;
@@ -330,6 +332,7 @@ namespace WingingIt.UI
             DrawCrosshair(scale);
             DrawHomeMarker(scale, width);
             DrawMissileWarning(scale, width);
+            DrawRamRoyale(scale, width);
             var widgets = match != null && !match.IsDismissed && match.Mode != null ? match.Mode.Widgets : MatchWidgets.All;
             if ((widgets & MatchWidgets.ScorePopups) != 0)
                 DrawPopups(width);
@@ -457,7 +460,7 @@ namespace WingingIt.UI
             _g.Panel(p, GlowRest, false);
             float x = p.x + 20f, y = p.y + 18f;
             const float row = 34f, meterW = 170f;
-            if (guns != null)
+            if (guns != null && guns.IsEquipped)
             {
                 bool flash = (guns.IsOverheated || guns.IsJammed) && GameSettings.Blink(Time.time, 0.4f, 0.5f);
                 Color heat = guns.IsOverheated ? (flash ? Color.white : Red) : Color.Lerp(new Color(1f, 0.85f, 0.4f), new Color(1f, 0.35f, 0.1f), guns.Heat);
@@ -565,7 +568,7 @@ namespace WingingIt.UI
         /// </summary>
         void DrawTargets(float scale, float width)
         {
-            if (viewCamera == null || guns == null || !plane.IsAlive)
+            if (viewCamera == null || guns == null || !guns.IsEquipped || !plane.IsAlive)
                 return;
 
             Vector3 nose = plane.transform.forward;
@@ -879,7 +882,8 @@ namespace WingingIt.UI
 
         /// <summary>
         /// Top-left, north up (or turned to our heading, by setting): the level photo, the boundary, airfields (team
-        /// colours; home fields outlined), friendly planes, enemies on our Support's radar, and us (white, bigger).
+        /// colours; home fields outlined), friendly planes, enemies on our Support's radar (every plane in Ram Royale),
+        /// and us (white, bigger).
         /// </summary>
         void DrawMinimap()
         {
@@ -919,12 +923,13 @@ namespace WingingIt.UI
 
             DrawBannerMapMarks(map, turn);
             DrawFieldMapMarks(map, turn);
+            bool ramRoyale = RamRoyale; // a small arena with nowhere to hide: everyone shows
             foreach (var other in PlaneController.All)
             {
                 if (other == plane || !other.IsAlive)
                     continue;
                 bool friend = other.Team == plane.Team;
-                if (!friend && !PlaneAbility.IsRevealedTo(other, plane.Team))
+                if (!friend && !ramRoyale && !PlaneAbility.IsRevealedTo(other, plane.Team))
                     continue;
                 Vector2 p = HudMath.MapPoint(other.Position, _mapCenter, _mapRadius, map, turn);
                 if (map.Contains(p))

@@ -14,6 +14,32 @@ namespace WingingIt.Flight
         ShotDown,
         /// <summary>Stayed past a hard arena edge too long (<see cref="WingingIt.World.FlightBoundary.hardEdge"/>).</summary>
         OutOfBounds,
+        /// <summary>Body HP reached 0 from ramming or being rammed (<see cref="PlaneController.RamDamage"/>).</summary>
+        Rammed,
+    }
+
+    /// <summary>One plane-on-plane contact with ram damage on: who flew into whom, and what each took.</summary>
+    public readonly struct RamInfo
+    {
+        /// <summary>The plane whose sweep found the contact (the one that flew into the other this step).</summary>
+        public readonly PlaneController Hitter;
+        public readonly PlaneController Victim;
+        public readonly Vector3 Point;
+        /// <summary>Damage actually taken by each, after shields and clamping to the part's HP.</summary>
+        public readonly float HitterDamage;
+        public readonly float VictimDamage;
+        public readonly float ClosingSpeed;
+
+        public RamInfo(PlaneController hitter, PlaneController victim, Vector3 point, float hitterDamage, float victimDamage,
+            float closingSpeed)
+        {
+            Hitter = hitter;
+            Victim = victim;
+            Point = point;
+            HitterDamage = hitterDamage;
+            VictimDamage = victimDamage;
+            ClosingSpeed = closingSpeed;
+        }
     }
 
     /// <summary>
@@ -39,6 +65,10 @@ namespace WingingIt.Flight
         [Range(0f, 1f)] [SerializeField] float clipSpeedLoss = 0.15f;
         [Tooltip("Yaw jolt (deg/s) toward a wing that clips something: the snag drags the nose round.")]
         [SerializeField] float clipYawKick = 40f;
+        [Tooltip("Plane-on-plane contacts while ram damage is on (Ram Royale): damage from the closing speed instead of a crash.")]
+        [SerializeField] RamRules ramRules = new();
+        [Tooltip("Roll jolt (deg/s) per m/s of ram knock, away from the side that was hit.")]
+        [SerializeField] float ramRollKick = 4f;
 
         [Header("Landing")]
         [SerializeField] LandingRules landingRules = new();
@@ -75,6 +105,9 @@ namespace WingingIt.Flight
 
         Rigidbody _rb;
         Collider[] _colliders;
+        PlaneAbility _ability;
+        /// <summary>Planes we just rammed (or that rammed us), passed through until the time given.</summary>
+        readonly Dictionary<PlaneController, float> _ramIgnoreUntil = new();
         StatModifierStack _modifiers;
         FlightInput _input;
         LandingGear _gear;
@@ -126,6 +159,16 @@ namespace WingingIt.Flight
         /// a <see cref="BannerDrag"/> modifier. Cleared on respawn.
         /// </summary>
         public bool CarryingBanner { get; set; }
+        /// <summary>No guns, rockets, missiles or bombs (Ram Royale). Set by the match when the plane spawns; cleared on respawn.</summary>
+        public bool WeaponsOff { get; set; }
+        /// <summary>
+        /// Flying into another plane damages both by the closing speed (<see cref="RamRules"/>) instead of crashing this
+        /// one (Ram Royale). Set by the match when the plane spawns; cleared on respawn.
+        /// </summary>
+        public bool RamDamage { get; set; }
+        public RamRules RamRules => ramRules;
+        /// <summary>Raised for every ram with damage on, after both planes took their damage.</summary>
+        public static event Action<RamInfo> AnyRammed;
         public bool IsOutOfBounds { get; private set; }
         public bool IsNearBoundary { get; private set; }
         public bool IsNearCeiling { get; private set; }
@@ -167,6 +210,7 @@ namespace WingingIt.Flight
             _rb = GetComponent<Rigidbody>();
             _gear = GetComponent<LandingGear>();
             _health = GetComponent<PlaneHealth>();
+            _ability = GetComponent<PlaneAbility>();
             _colliders = GetComponentsInChildren<Collider>();
             _rb.isKinematic = true;
             _rb.interpolation = RigidbodyInterpolation.Interpolate;
@@ -242,6 +286,9 @@ namespace WingingIt.Flight
         {
             Modifiers.Clear();
             CarryingBanner = false;
+            WeaponsOff = false;
+            RamDamage = false;
+            _ramIgnoreUntil.Clear();
             ResetState(position, rotation, throttle);
             if (grounded)
             {
@@ -759,8 +806,47 @@ namespace WingingIt.Flight
             float distance = step.magnitude;
             if (distance < 0.0001f)
                 return false;
+            Vector3 direction = step / distance;
 
-            var hits = _rb.SweepTestAll(step / distance, distance, QueryTriggerInteraction.Collide);
+            // A ram or a clipped part takes that contact out of the way, then the step is swept again: something else
+            // may still be in it. A few passes at most, so one bad contact can't sweep forever.
+            for (int pass = 0; pass < MaxSweepPasses; pass++)
+            {
+                var solid = FirstSolidHit(direction, distance);
+                if (solid == null)
+                    return false;
+                if (Velocity.magnitude < crashSpeed)
+                {
+                    Speed = 0f;
+                    _velocity = Vector3.zero;
+                    return true;
+                }
+
+                // With ram damage on, another plane is a ram, not a crash: both take damage, then pass through each other.
+                if (TryRam(solid.Value, direction))
+                {
+                    if (!IsAlive)
+                        return true;
+                    continue;
+                }
+
+                // A wing or tail that clips something breaks off; then the rest of the plane may still hit it.
+                if (TryClipPart(solid.Value, direction))
+                    continue;
+
+                CrashInto(solid.Value);
+                return true;
+            }
+            Debug.LogWarning($"{name}: still hitting something after {MaxSweepPasses} sweeps; moving on", this);
+            return false;
+        }
+
+        const int MaxSweepPasses = 4;
+
+        /// <summary>The nearest solid thing in the way of this step (passing ring gates on the way), or null.</summary>
+        RaycastHit? FirstSolidHit(Vector3 direction, float distance)
+        {
+            var hits = _rb.SweepTestAll(direction, distance, QueryTriggerInteraction.Collide);
             RaycastHit? solid = null;
             foreach (var hit in hits)
             {
@@ -770,39 +856,29 @@ namespace WingingIt.Flight
                         gate.OnPlanePassed(this);
                     continue;
                 }
-                if (PlaneDebris.IsDebris(hit.collider))
+                if (PlaneDebris.IsDebris(hit.collider) || IsIgnoredForRam(hit.collider))
                     continue;
                 if (solid == null || hit.distance < solid.Value.distance)
                     solid = hit;
             }
+            return solid;
+        }
 
-            if (solid == null)
-                return false;
-            if (Velocity.magnitude < crashSpeed)
-            {
-                Speed = 0f;
-                _velocity = Vector3.zero;
-                return true;
-            }
-
-            // A wing or tail that clips something breaks off; then the rest of the plane may still hit it.
-            if (TryClipPart(solid.Value, step / distance))
-                return SweepForCollisions(step);
-
+        void CrashInto(RaycastHit solid)
+        {
             // Hitting flat ground with the airframe while nearly level is a failed touchdown (for the HUD), not just a
             // crash: a belly landing without locked gear, or with it, a wingtip or tail striking first (past ~20°).
             // Setting down on the sea is always a ditching.
-            if (_gear != null && solid.Value.normal.y >= minGroundNormal)
+            if (_gear != null && solid.normal.y >= minGroundNormal)
             {
                 var info = JudgeTouchdown(_gear.IsLocked);
                 if (landingRules.IsLandingAttempt(info.Pitch, info.Roll))
                     RecordTouchdown(new TouchdownInfo(TouchdownResult.Crashed,
-                        IsWater(solid.Value.collider) ? TouchdownFault.Ditched
+                        IsWater(solid.collider) ? TouchdownFault.Ditched
                             : _gear.IsLocked ? TouchdownFault.BadAngle : TouchdownFault.GearNotLocked,
                         info.Speed, info.SinkRate, info.Pitch, info.Roll));
             }
-            Crash(solid.Value.point);
-            return true;
+            Crash(solid.point);
         }
 
         /// <summary>
@@ -830,6 +906,75 @@ namespace WingingIt.Flight
             if (part.partType is PlanePartType.WingLeft or PlanePartType.WingRight)
                 _angularRates.y += (part.partType == PlanePartType.WingLeft ? -1f : 1f) * clipYawKick;
             return true;
+        }
+
+        bool IsIgnoredForRam(Collider collider)
+        {
+            if (_ramIgnoreUntil.Count == 0)
+                return false;
+            var rb = collider.attachedRigidbody;
+            return rb != null && rb.TryGetComponent(out PlaneController other)
+                && _ramIgnoreUntil.TryGetValue(other, out float until) && Time.time < until;
+        }
+
+        /// <summary>
+        /// If ram damage is on and <paramref name="hit"/> is another plane, rams it (<see cref="RamRules"/>): damages
+        /// the part of each plane that touched, credits each plane with the other's damage, pushes them apart, and lets
+        /// them pass through each other for <see cref="RamRules.ignoreTime"/>. Returns true if it was a ram.
+        /// </summary>
+        bool TryRam(RaycastHit hit, Vector3 direction)
+        {
+            if (!RamDamage)
+                return false;
+            var rb = hit.collider.attachedRigidbody;
+            if (rb == null || !rb.TryGetComponent(out PlaneController other) || other == this || !other.IsAlive)
+                return false;
+
+            float until = Time.time + ramRules.ignoreTime;
+            _ramIgnoreUntil[other] = until;
+            other._ramIgnoreUntil[this] = until;
+
+            var outcome = ramRules.Resolve(AsRammer(_position + direction * hit.distance), other.AsRammer(other._position));
+            Knock(outcome.KnockA);
+            other.Knock(outcome.KnockB);
+            if (outcome.IsBump)
+                return true;
+
+            var ours = StrikingPart(hit, direction);
+            PlanePart.TryGetFromCollider(hit.collider, out var theirs);
+            // Both take their damage before either can die, so a head-on kills both and each credits the other.
+            float toThem = other.TakeRamDamage(theirs, outcome.DamageToB, hit.point, this);
+            float toUs = TakeRamDamage(ours, outcome.DamageToA, hit.point, other);
+            AnyRammed?.Invoke(new RamInfo(this, other, hit.point, toUs, toThem, outcome.ClosingSpeed));
+            return true;
+        }
+
+        /// <summary>
+        /// This plane in a ram at <paramref name="position"/>; it deals × the Ram Boost's multiplier while that runs.
+        /// Bots use it to predict a ram before it happens.
+        /// </summary>
+        public Rammer AsRammer(Vector3 position) => new(position, _rotation * Vector3.forward, Velocity,
+            stats != null ? stats.ramMass : 1f,
+            _ability != null && _ability.ActiveStats is RamBoostAbility boost ? boost.ramDamageMultiplier : 1f);
+
+        float TakeRamDamage(PlanePart touched, float amount, Vector3 point, PlaneController by)
+        {
+            if (_health == null || amount <= 0f)
+                return 0f;
+            var part = _health.GetPart(RamRules.DamagedPart(touched != null ? touched.partType : null));
+            if (part != null && part.IsDestroyed)
+                part = _health.GetPart(PlanePartType.Body); // a lost wing can't take it: the airframe does
+            return _health.ApplyDamage(part, amount, point, by, DeathCause.Rammed);
+        }
+
+        /// <summary>A push from a ram: changes the velocity (grip pulls it back to the nose) and speed, and rolls away from the hit.</summary>
+        void Knock(Vector3 dv)
+        {
+            if (!IsAlive || dv.sqrMagnitude < 1e-6f)
+                return;
+            _velocity += dv;
+            Speed = Mathf.Max(0f, Speed + Vector3.Dot(dv, _rotation * Vector3.forward));
+            _angularRates.z += Vector3.Dot(dv, _rotation * Vector3.right) * ramRollKick;
         }
 
         /// <summary>

@@ -228,9 +228,8 @@ namespace WingingIt.Editor
                 },
                 [VfxKind.RespawnShimmer] = new[]
                 {
-                    new Spec { name = "Sparkles", meshes = sparkle, burst = 16, life = new(0.4f, 0.8f), size = new(0.8f, 1.6f),
+                    new Spec { name = "Sparkles", meshes = sparkle, burst = 16, life = new(0.4f, 0.8f), size = new(0.6f, 1.2f),
                         speed = new(0.5f, 2f), radius = 5f, align = ParticleSystemRenderSpace.View, spin = false, roll = 180f },
-                    FacingRing(16f, 0.45f, new Color(0.75f, 0.92f, 1f)),
                 },
                 [VfxKind.ShieldHit] = new[]
                 {

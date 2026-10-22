@@ -210,9 +210,9 @@ namespace WingingIt.Input
             GameSettings.Current.Set(s =>
             {
                 if (controlMode == ControlMode.Follow)
-                    s.followPointer = false;
+                    s.SetFollowPointer(false, GameSettings.Current.IsMobile);
                 else
-                    s.mouseAim = controlMode != ControlMode.MouseAim;
+                    s.SetMouseAim(controlMode != ControlMode.MouseAim);
             });
 
         void OnNextClass(InputAction.CallbackContext _) => NextClassPressed?.Invoke();

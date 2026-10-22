@@ -95,6 +95,7 @@ namespace WingingIt.Flight
         readonly List<(Renderer renderer, int index)> _teamSlots = new();
         Vector3[] _muzzleDefaults, _railDefaults, _hitboxDefaults;
         Transform[] _extraPropellers, _radars;
+        List<Renderer> _discs;
         Color _teamColor;
         bool _teamTinted;
 
@@ -131,8 +132,10 @@ namespace WingingIt.Flight
         {
             if (!plane.IsAlive)
                 return;
+            bool spinning = plane.Throttle > 0.02f || plane.Speed > 1f || plane.IsBoosting;
+            UpdatePropDiscs(spinning);
             float throttle = plane.IsBoosting ? 1.3f : Mathf.Lerp(0.3f, 1f, plane.Throttle);
-            float degrees = propellerMaxRpm * 6f * throttle * plane.EffectiveThrust * Time.deltaTime;
+            float degrees = spinning ? propellerMaxRpm * 6f * throttle * plane.EffectiveThrust * Time.deltaTime : 0f;
             if (propeller != null)
                 propeller.Rotate(0f, 0f, degrees, Space.Self);
             if (_extraPropellers != null)
@@ -143,6 +146,22 @@ namespace WingingIt.Flight
                 foreach (var r in _radars)
                     if (r != null)
                         r.Rotate(0f, radarRpm * 6f * Time.deltaTime, 0f, Space.Self);
+        }
+
+        /// <summary>The blur discs only show while the prop turns; a stopped prop is just its blades.</summary>
+        void UpdatePropDiscs(bool spinning)
+        {
+            if (_discs == null)
+            {
+                _discs = new List<Renderer>();
+                foreach (var model in classModels)
+                foreach (var piece in model.pieces)
+                    if (piece != null && piece.name.EndsWith("PropDisc"))
+                        _discs.AddRange(piece.GetComponentsInChildren<Renderer>(true));
+            }
+            foreach (var r in _discs)
+                if (r != null && r.enabled != spinning)
+                    r.enabled = spinning;
         }
 
         void LateUpdate()
@@ -367,7 +386,7 @@ namespace WingingIt.Flight
         void OnCrashed(PlaneController _, Vector3 point)
         {
             Vector3 velocity = plane.Velocity;
-            bool shotDown = plane.LastDeathCause is DeathCause.ShotDown or DeathCause.OutOfBounds; // both break up in mid-air
+            bool shotDown = plane.LastDeathCause is DeathCause.ShotDown or DeathCause.OutOfBounds or DeathCause.Rammed; // all break up in mid-air
             _hidden.Clear();
 
             // Throw a copy of every part still attached, then hide the real plane until respawn.
@@ -417,6 +436,8 @@ namespace WingingIt.Flight
                     r.enabled = true;
             _hidden.Clear();
             ApplyClassModel(); // the class may have changed while the plane was down
+            if (Time.timeScale == 0f)
+                return; // the menu or scoreboard has time stopped: the sparkles would hang frozen in the air
             Vfx.Attach(VfxKind.RespawnShimmer, plane.transform, Vector3.zero, ClassScale);
         }
 

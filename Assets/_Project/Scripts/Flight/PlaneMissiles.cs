@@ -96,7 +96,7 @@ namespace WingingIt.Flight
         public MissileStats Stats => _plane.Stats != null && _plane.Stats.missiles != null ? _plane.Stats.missiles : FallbackStats();
         public int Ammo { get; private set; }
         /// <summary>Whether this plane's class carries missiles (its <see cref="FlightStats.missiles"/> is set). Without them ammo is 0.</summary>
-        public bool IsEquipped => _plane.Stats == null || _plane.Stats.missiles != null;
+        public bool IsEquipped => !_plane.WeaponsOff && (_plane.Stats == null || _plane.Stats.missiles != null);
         public int MaxAmmo => IsEquipped ? Stats.ammo : 0;
         /// <summary>Missiles in flight.</summary>
         public int InFlight => _missiles.Count;
@@ -241,7 +241,7 @@ namespace WingingIt.Flight
 
         void UpdateLock(MissileStats s, float dt)
         {
-            if (!_plane.IsAlive || Ammo <= 0)
+            if (!_plane.IsAlive || Ammo <= 0 || !IsEquipped)
             {
                 ClearLock(); // no lock (and no warning for the target) with nothing to fire
                 return;
@@ -321,7 +321,7 @@ namespace WingingIt.Flight
                 _cooldown -= dt;
 
             // One missile per press: the trigger has to be released before the next launch.
-            bool held = _plane.IsAlive && _plane.CurrentInput.FireMissile;
+            bool held = _plane.IsAlive && IsEquipped && _plane.CurrentInput.FireMissile;
             bool pressed = held && !_triggerLatched;
             _triggerLatched = held;
             if (pressed && IsLocked && Ammo > 0 && _cooldown <= 0f)

@@ -185,6 +185,27 @@ namespace WingingIt.Bots
             return miss.sqrMagnitude < radius * radius;
         }
 
+        /// <summary>Seconds until two planes flying straight are closest (0 if they're already opening).</summary>
+        public static float TimeToClosest(Vector3 relativePosition, Vector3 relativeVelocity)
+        {
+            float closing = relativeVelocity.sqrMagnitude;
+            return closing > 1e-4f ? Mathf.Max(0f, -Vector3.Dot(relativePosition, relativeVelocity) / closing) : 0f;
+        }
+
+        /// <summary>
+        /// The other plane (at <paramref name="relativePosition"/> from us) is flying at us with at least
+        /// <paramref name="minSpeed"/> m/s of its own speed: lining up on us, not one we're catching up with.
+        /// </summary>
+        public static bool IsComingAt(Vector3 relativePosition, Vector3 otherVelocity, float minSpeed = 20f) =>
+            relativePosition.sqrMagnitude > 1e-4f && Vector3.Dot(otherVelocity, -relativePosition.normalized) >= minSpeed;
+
+        /// <summary>
+        /// Ram Royale: let a plane coming at us hit us (rather than break away) only if we'd survive it and come off no
+        /// worse: <paramref name="damageToUs"/> under our <paramref name="bodyHealth"/> and no more than we deal.
+        /// </summary>
+        public static bool RamWorthTaking(float damageToUs, float damageToThem, float bodyHealth) =>
+            damageToUs < bodyHealth && damageToUs <= damageToThem;
+
         /// <summary>
         /// Where to steer to get clear of a plane that will pass at <paramref name="miss"/> (relative to us): straight
         /// ahead, offset away from it. Dead-on, it breaks right, like pilots do: two planes head-on doing the same

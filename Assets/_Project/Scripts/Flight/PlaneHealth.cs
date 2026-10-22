@@ -214,8 +214,12 @@ namespace WingingIt.Flight
         public float ApplyDamage(PlanePartType type, float amount, Vector3 point, UnityEngine.Object source = null) =>
             ApplyDamage(GetPart(type), amount, point, source);
 
-        /// <summary>Returns the damage actually taken (0 if the part is already destroyed or not ours).</summary>
-        public float ApplyDamage(PlanePart part, float amount, Vector3 point, UnityEngine.Object source = null)
+        /// <summary>
+        /// Returns the damage actually taken (0 if the part is already destroyed or not ours). A body brought to 0
+        /// destroys the plane with <paramref name="cause"/>.
+        /// </summary>
+        public float ApplyDamage(PlanePart part, float amount, Vector3 point, UnityEngine.Object source = null,
+            DeathCause cause = DeathCause.ShotDown)
         {
             if (part == null || !_plane.IsAlive || part.IsDestroyed || amount <= 0f || IsInvulnerable)
                 return 0f;
@@ -238,7 +242,7 @@ namespace WingingIt.Flight
                 PartDestroyed?.Invoke(this, info);
                 AnyPartDestroyed?.Invoke(this, info);
                 if (part.partType == PlanePartType.Body)
-                    _plane.Crash(_plane.Position, DeathCause.ShotDown);
+                    _plane.Crash(_plane.Position, cause);
             }
             return taken;
         }
