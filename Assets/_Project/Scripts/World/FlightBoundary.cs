@@ -67,6 +67,28 @@ namespace WingingIt.World
             Changed?.Invoke();
         }
 
+        /// <summary>
+        /// Where the ceiling takeover steers a plane over the ceiling: on along its heading, nose gently down. Near a
+        /// hard edge (<paramref name="turnIn"/>), where holding the heading could fly it out of the arena, it also turns
+        /// toward <paramref name="center"/>, at most <paramref name="maxTurn"/> degrees off the nose so it's a level turn.
+        /// </summary>
+        public static Vector3 CeilingReturnPoint(Vector3 position, Vector3 forward, Vector3 up, Vector3 center, bool turnIn,
+            float maxTurn = 80f)
+        {
+            Vector3 flat = Vector3.ProjectOnPlane(forward, Vector3.up);
+            if (flat.sqrMagnitude < 0.01f)
+                flat = Vector3.ProjectOnPlane(up, Vector3.up); // nose straight up or down: the way the cockpit roof faces
+            flat = flat.sqrMagnitude > 1e-4f ? flat.normalized : Vector3.forward;
+            Vector3 toCenter = center - position;
+            toCenter.y = 0f;
+            if (turnIn && toCenter.sqrMagnitude > 1f)
+            {
+                float angle = Mathf.Clamp(Vector3.SignedAngle(flat, toCenter, Vector3.up), -maxTurn, maxTurn);
+                flat = Quaternion.AngleAxis(angle, Vector3.up) * flat;
+            }
+            return position + flat * 300f + Vector3.down * 80f;
+        }
+
         /// <summary>Puts the level's own play area back after <see cref="UseArea"/>.</summary>
         public void RestoreArea()
         {

@@ -179,6 +179,20 @@ Tested: EditMode `DominationPlanTests` (11); PlayMode `DominationBotTests`: a fu
 
 **Not yet watched in a match** (only the test's log). Check: do capturers queue on final behind each other, is 4 / 3 the right split, and is cover at 250 m too high to stop a capturer landing.
 
+## Ram Royale (built 2026-10-25, prototype)
+
+With ram damage on (`PlaneController.RamDamage`, so only in Ram Royale) the brain swaps two behaviors and adds ability uses. Everything else (target picking, terrain, missiles that can't exist here) is unchanged.
+
+- **Ram, not shoot:** an engaged bot flies the new pilot order **Ram** (`BotPilot.Ram`): full speed at the **collision point**, where a straight line at its own speed meets the target's path (`BotSteering.CollisionPoint`, at most 6 s of lead; a target it can't catch gets the capped intercept point). The difficulty's aim wander applies, so an Easy bot misses some rams; inside 500 m it tracks finely, like the gun lead point. The point never goes below **70 m** (it doesn't chase a target down to the sea) or into the ceiling's warning band. Attack inside 600 m, else Chase. Its nose near the collision point counts as a shot coming for the stalemate breaker.
+- **Late boost:** boost when its path will pass within 15 m of the target inside **1 s**, so the target can't time a dodge (and on a long chase over 1 km, as before).
+- **Break away:** in place of the usual traffic sidestep (which would dodge the plane it's ramming), it watches only planes **flying at it** (at least 20 m/s of their own speed its way) that will pass within 30 m in the next 2.5 s. It judges the hit with the real `RamRules` a moment before contact (`PlaneController.AsRammer`): if it would survive and take no more than it deals (`BotSenses.RamWorthTaking`), it lets it come. Otherwise, if it noticed (**ram dodge chance**: Easy 40%, Normal 70%, Hard 90%, rolled once per plane, after the missile reaction delay), it breaks: a hard turn with boost from one behind it, a sidestep from one ahead. So two bots meeting head-on at cruise (which would kill both) usually break, and a bot coming round on someone's tail usually gets its hit.
+- **Abilities:** **Ram Boost** (Support) and **Afterburner** (Interceptor) fire as a charge when the ram will land inside 1.5 s; **Barrel Roll** (Fighter) while breaking from a ram inside 1 s; **Armor Shield** (Heavy) for any contact, ours or theirs, inside 0.6 s.
+- **The hard edge** (any hard-edged arena): the turn back is now a **level turn**, steering at most 80° off the nose toward the middle (`BotSenses.TurnBackPoint`); steering at the middle itself, behind the plane, made the autopilot roll over and pull through, diving toward the sea and coming back slowly. It starts with 4 s of flight to the warning margin (was 3), always heads back in once past the edge, and keeps the bot under the **ceiling's warning band** (over the ceiling the plane's own autopilot holds the heading, which near the edge flies it out). Terrain escape near a hard edge climbs and turns **inward** instead of along the slope.
+
+Tested: EditMode (`BotSteeringTests` collision point; `BotSensesTests` coming-at, time to closest, worth taking, turn-back point; `BotDifficultyTests` dodge chance); PlayMode `RamBotTests` (FlightTest: rams a slow plane from behind, boosting at the end, and flies on; a Support's Ram Boost is running when it hits; a head-on breaks away instead of dying with it) and `RamRoyaleMatchTests.SixteenBots_RamEachOther_AndKnockPlanesOut` (16 bots for 120 s of the 180 s match).
+
+**Not yet watched in a match** (only the test's log). Check: do bots spend too long low (they follow low targets down and pull up early: ~20% of bot time in terrain avoidance) or turning from the edge (~25%: the 700 m arena is small for 16), are rams too rare to end a match before the clock (two runs: 14–18 rams, 4–5 of 16 out in 2 minutes, none uncredited), and does anyone want the head-on game of chicken.
+
 ## Tested
 
 - EditMode (`BotSteeringTests`): throttle commands (air, ground, lost thrust, dead engine), intercept lead + cap, formation slot frame + speed trim, orbit point, stick slew.

@@ -248,6 +248,21 @@ namespace WingingIt.Tests
         }
 
         [Test]
+        public void TurnBackPoint_TurnsLevel_AtMost80DegreesOffTheNose()
+        {
+            // Heading straight away from the middle, nose a little down: a level turn, not a point behind us.
+            Vector3 pos = new Vector3(0f, 300f, 600f);
+            Vector3 p = BotSenses.TurnBackPoint(pos, new Vector3(0f, -0.3f, 1f), Vector3.zero);
+            Assert.AreEqual(300f, p.y, 1e-3f, "at our altitude");
+            Assert.AreEqual(80f, Vector3.Angle(Vector3.forward, p - pos), 0.1f, "capped at 80° off the nose");
+
+            // The middle already 30° to the left: straight at it.
+            Vector3 left = Quaternion.AngleAxis(-30f, Vector3.up) * Vector3.forward;
+            Vector3 q = BotSenses.TurnBackPoint(Vector3.zero, Vector3.forward, left * 500f);
+            Assert.AreEqual(0f, Vector3.Angle(left, q), 0.1f);
+        }
+
+        [Test]
         public void TimeToClosest_ClosingAndOpening()
         {
             Assert.AreEqual(2.5f, BotSenses.TimeToClosest(new Vector3(0f, 0f, 500f), new Vector3(0f, 0f, -200f)), 1e-4f);

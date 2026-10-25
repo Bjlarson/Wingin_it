@@ -124,6 +124,10 @@ namespace WingingIt.Bots
         [Tooltip("...within this many seconds.")]
         [SerializeField] float collisionHorizon = 2f;
 
+        [Header("Hard arena edge")]
+        [Tooltip("Turn back when this many seconds of flight would take us within the edge's warning margin.")]
+        [SerializeField] float edgeLookahead = 4f;
+
         [Header("Ram Royale")]
         [Tooltip("Boost when our ram will land within this many seconds (a late boost the target can't plan for).")]
         [SerializeField] float lateBoostTime = 1f;
@@ -378,7 +382,16 @@ namespace WingingIt.Bots
             {
                 State = BotState.AvoidTerrain;
                 Vector3 forward = _plane.Velocity.sqrMagnitude > 1f ? _plane.Velocity : _plane.Rotation * Vector3.forward;
-                _pilot.Override(BotSenses.EscapePoint(_plane.Position, forward, _avoidNormal), null, 1.5f);
+                // Near a hard edge, climb away turning in toward the middle, never along a cliff out of the arena.
+                Vector3 normal = _avoidNormal;
+                var boundary = FlightBoundary.Active;
+                if (boundary != null && boundary.hardEdge && boundary.IsNearEdge(_plane.Position))
+                {
+                    Vector3 inward = boundary.Center - _plane.Position;
+                    inward.y = 0f;
+                    normal = inward.normalized + Vector3.up;
+                }
+                _pilot.Override(BotSenses.EscapePoint(_plane.Position, forward, normal), null, 1.5f);
             }
             else if (CheckArenaEdge())
             {
@@ -407,16 +420,28 @@ namespace WingingIt.Bots
 
         /// <summary>
         /// A hard arena edge (Ram Royale) has no autopilot turn-back, so a bot heading out of it turns back to the
-        /// middle at its height on its own (see <see cref="BotSenses.ShouldTurnFromEdge"/>). True while it's turning.
+        /// middle on its own, in a level turn (see <see cref="BotSenses.ShouldTurnFromEdge"/>,
+        /// <see cref="BotSenses.TurnBackPoint"/>), and keeps under the ceiling's warning band. True while it's doing either.
         /// </summary>
         bool CheckArenaEdge()
         {
             var boundary = FlightBoundary.Active;
-            if (boundary == null || !boundary.hardEdge
-                || !BotSenses.ShouldTurnFromEdge(_plane.Position, _plane.Velocity, boundary.Center, boundary.radius, boundary.warningMargin))
+            if (boundary == null || !boundary.hardEdge)
                 return false;
-            Vector3 c = boundary.Center;
-            _pilot.Override(new Vector3(c.x, _plane.Position.y, c.z), null, 1.5f);
+            Vector3 pos = _plane.Position;
+            // Over the ceiling the plane's own autopilot holds the heading, nose down, which near a hard edge flies it
+            // out: stay under the ceiling's warning band.
+            float maxY = boundary.ceiling - boundary.ceilingWarningMargin;
+            bool high = pos.y > maxY && _plane.Velocity.y > 0f;
+            if (!high && !boundary.IsOutside(pos) && // past the edge: always head back in
+                !BotSenses.ShouldTurnFromEdge(pos, _plane.Velocity, boundary.Center, boundary.radius, boundary.warningMargin,
+                    edgeLookahead))
+                return false;
+            Vector3 point = high && !boundary.IsNearEdge(pos)
+                ? pos + Vector3.ProjectOnPlane(_plane.Rotation * Vector3.forward, Vector3.up).normalized * 400f
+                : BotSenses.TurnBackPoint(pos, _plane.Rotation * Vector3.forward, boundary.Center);
+            point.y = Mathf.Min(pos.y, maxY - 30f);
+            _pilot.Override(point, null, 1.5f);
             return true;
         }
 

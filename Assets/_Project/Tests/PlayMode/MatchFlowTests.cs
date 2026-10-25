@@ -570,6 +570,31 @@ namespace WingingIt.Tests
         }
 
         [UnityTest]
+        public IEnumerator OverTheCeiling_NearAHardEdge_TheTakeoverTurnsBackIn()
+        {
+            // Hands off, over the ceiling, close to the edge and heading out: the ceiling takeover used to hold the
+            // heading, flying the plane out of the arena while the pilot couldn't steer.
+            _match.SetMode(new TestMode { Arena = "RamRoyale" });
+            yield return StartPlaying();
+            var boundary = FlightBoundary.Active;
+            Vector3 outward = Vector3.forward;
+            Vector3 start = boundary.Center + outward * (boundary.radius - 120f);
+            start.y = boundary.ceiling + 40f;
+            _player.Respawn(start, Quaternion.LookRotation(outward));
+            // Until the takeover hands the stick back (back under the ceiling): below it, the edge is the pilot's job.
+            float t = Time.time, outside = 0f;
+            while (_player.IsAlive && _player.Position.y > boundary.ceiling && Time.time - t < 8f)
+            {
+                outside = Mathf.Max(outside, _player.OutOfBoundsTime);
+                yield return null;
+            }
+            Assert.IsTrue(_player.IsAlive, $"flown out of the arena ({_player.LastDeathCause}, {outside:0.0} s outside)");
+            Assert.LessOrEqual(_player.Position.y, boundary.ceiling, "brought back under the ceiling");
+            Assert.Less(outside, boundary.outOfBoundsGrace, "never outside long enough to be out");
+            Assert.Less(Vector3.Dot(_player.Rotation * Vector3.forward, outward), 0f, "handed back heading in");
+        }
+
+        [UnityTest]
         public IEnumerator Bots_StayInsideAHardEdge()
         {
             _match.SetMode(new TestMode { Arena = "RamRoyale" });

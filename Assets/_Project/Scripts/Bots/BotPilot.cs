@@ -68,6 +68,8 @@ namespace WingingIt.Bots
         [SerializeField] float ramLeadTime = 6f;
         [Tooltip("Ram: inside this distance (m), track the collision point finely (like the gun lead point).")]
         [SerializeField] float ramTrackDistance = 500f;
+        [Tooltip("Ram: never steer below this height (m, world). A target skimming the sea is rammed from level, not chased down.")]
+        [SerializeField] float ramFloor = 70f;
         [Tooltip("Land: aim this far (m) ahead along the glide path, far out. Shorter tracks it tighter but twitchier.")]
         [SerializeField] float glideLead = 250f;
         [Tooltip("Land: ...shrinking to this (m) near the runway.")]
@@ -389,6 +391,9 @@ namespace WingingIt.Bots
                         Vector2 wander = BotSteering.AimWander(_aimSeed, Time.fixedTime) * aimError;
                         steer = BotSteering.OffsetAim(pos, steer, _plane.Rotation * Vector3.up, wander.x, wander.y);
                     }
+                    steer.y = Mathf.Max(steer.y, ramFloor); // don't follow a target down to the sea...
+                    if (FlightBoundary.Active is { } boundary) // ...or up over the ceiling, where the plane's autopilot takes over
+                        steer.y = Mathf.Min(steer.y, boundary.ceiling - boundary.ceilingWarningMargin);
                     if (Vector3.Distance(pos, Target.Position) <= ramTrackDistance)
                     {
                         sensitivity *= 1.5f; // fine tracking on the way in
