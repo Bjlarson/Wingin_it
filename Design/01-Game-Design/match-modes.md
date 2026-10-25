@@ -243,6 +243,12 @@ Capturers and cover by roster slot (4 / 3 in 7), split over the fields by value;
 - **Ram flash:** from `PlaneController.AnyRammed` when we're in the contact: RAMMED BOT 5! (gold, rim flashes gold) when we flew into them or did at least as much as we took, RAMMED BY BOT 5 (red; the damage vignette already flashes) when they flew into us and we came off worse; nothing for a harmless bump. Under it 120 DEALT · 36 TAKEN; pops in, fades over 1.6 s. A part knocked off by a ram pops WING / TAIL / FIN KNOCKED OFF! (not SHOT OFF).
 - **Fix found on the way:** at GO the air start used to bank the player hard away from the middle. During the frozen countdown the plane's interpolated transform still showed the hangar pose, the camera rig synced the mouse-aim direction to it, and at GO mouse aim steered back to the hangar's heading. The rig now reads the simulated pose (`PlaneController.Rotation`).
 
+### Bots (built 2026-10-25)
+
+Bots ram rather than shoot: full speed at the collision point (not the gun lead point), a boost in the last second, Ram Boost / Afterburner as a charge, Armor Shield just before contact. They break away (Barrel Roll if they have it) from a plane flying at them only when the hit would hurt them more than it, or kill them, so a head-on at cruise usually ends in both breaking. They stay inside the hard edge and under the ceiling. Details in [bots](../02-Mechanics/bots.md#ram-royale-built-2026-10-25-prototype).
+
+- **Fixed on the way:** over the ceiling a plane's own autopilot takes the stick and held the heading, nose down, so near a hard edge it could fly a player out of the arena while they tried to turn back. Now, over the ceiling near (or past) a hard edge, the takeover also turns back toward the middle, a level turn at most 80° off the nose (`FlightBoundary.CeilingReturnPoint`), and hands the stick back heading in. Elsewhere it still just holds the heading, and under the ceiling a hard edge still never turns a plane back. Bots also keep under the ceiling.
+
 ## Sky Racing (prototype)
 
 *Working name. Added 2026-10-20; design decided below, nothing built.* A kart-racer in the air, in the spirit of Diddy Kong Racing and Mario Kart: fly a lap course through gates, fly through **colored mystery boxes** to get an item, and use it on the pack. Finish first.

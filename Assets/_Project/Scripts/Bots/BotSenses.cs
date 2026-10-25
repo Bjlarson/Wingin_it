@@ -132,6 +132,25 @@ namespace WingingIt.Bots
         }
 
         /// <summary>
+        /// Where to steer to turn back toward <paramref name="center"/> in a level turn: toward it, but at most
+        /// <paramref name="maxAngle"/> degrees off the (level) nose and at our altitude. Steering straight at a point
+        /// behind makes the autopilot roll over and pull through (a split-S), which dives and is slow to come back.
+        /// </summary>
+        public static Vector3 TurnBackPoint(Vector3 position, Vector3 forward, Vector3 center, float maxAngle = 80f,
+            float distance = 400f)
+        {
+            Vector3 flat = Vector3.ProjectOnPlane(forward, Vector3.up);
+            if (flat.sqrMagnitude < 1e-4f)
+                flat = Vector3.forward;
+            Vector3 toCenter = center - position;
+            toCenter.y = 0f;
+            if (toCenter.sqrMagnitude < 1f)
+                return position + flat.normalized * distance;
+            float angle = Mathf.Clamp(Vector3.SignedAngle(flat, toCenter, Vector3.up), -maxAngle, maxAngle);
+            return position + Quaternion.AngleAxis(angle, Vector3.up) * flat.normalized * distance;
+        }
+
+        /// <summary>
         /// Where to circle <paramref name="point"/> at <paramref name="orbitRadius"/> without the circle reaching within
         /// <paramref name="margin"/> of the play area's edge (out there the boundary turn-back would take the stick, and it
         /// doesn't watch the ground). The point itself if it's far enough in, else pulled straight in toward the middle.

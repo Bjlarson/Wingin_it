@@ -404,11 +404,10 @@ namespace WingingIt.Flight
             }
             else
             {
-                // Over the ceiling: keep heading, nose gently down.
-                Vector3 flat = Vector3.ProjectOnPlane(_rotation * Vector3.forward, Vector3.up);
-                if (flat.sqrMagnitude < 0.01f)
-                    flat = _rotation * Vector3.up;
-                target = _position + flat.normalized * 300f + Vector3.down * 80f;
+                // Over the ceiling: keep heading, nose gently down; near a hard edge, also turn back in, or holding the
+                // heading would fly the plane out of the arena while its pilot can't steer.
+                target = FlightBoundary.CeilingReturnPoint(_position, _rotation * Vector3.forward, _rotation * Vector3.up,
+                    boundary.Center, boundary.hardEdge && (IsNearBoundary || IsOutOfBounds));
             }
 
             FlightAutopilot.SteerTowards(_position, _rotation, target, boundarySteerSensitivity, 15f,

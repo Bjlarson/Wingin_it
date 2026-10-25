@@ -11,6 +11,25 @@ namespace WingingIt.Tests
         static readonly Vector3 Center = new(100f, 0f, -2000f);
 
         [Test]
+        public void CeilingReturnPoint_KeepsHeading_UnlessNearAHardEdge_ThenTurnsIn()
+        {
+            // Over the ceiling, near the north edge, heading straight out (north).
+            Vector3 pos = Center + new Vector3(0f, 500f, 650f);
+            Vector3 keep = FlightBoundary.CeilingReturnPoint(pos, Vector3.forward, Vector3.up, Center, turnIn: false);
+            Assert.AreEqual(0f, Vector3.Angle(Vector3.forward, Vector3.ProjectOnPlane(keep - pos, Vector3.up)), 0.1f, "holds the heading");
+            Assert.Less(keep.y, pos.y, "nose down");
+
+            Vector3 turn = FlightBoundary.CeilingReturnPoint(pos, Vector3.forward, Vector3.up, Center, turnIn: true);
+            Assert.AreEqual(80f, Vector3.Angle(Vector3.forward, Vector3.ProjectOnPlane(turn - pos, Vector3.up)), 0.1f,
+                "turns back in, a level turn at most 80° off the nose");
+            Assert.Less(turn.y, pos.y, "still nose down");
+
+            // Already heading in: straight on toward the middle.
+            Vector3 inward = FlightBoundary.CeilingReturnPoint(pos, Vector3.back, Vector3.up, Center, turnIn: true);
+            Assert.AreEqual(0f, Vector3.Angle(Vector3.back, Vector3.ProjectOnPlane(inward - pos, Vector3.up)), 0.1f);
+        }
+
+        [Test]
         public void RingSlots_AreEvenlyRoundTheRing_LevelAndFacingTheMiddle()
         {
             for (int i = 0; i < 16; i++)
