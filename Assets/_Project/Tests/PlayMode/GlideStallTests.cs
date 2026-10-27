@@ -78,7 +78,7 @@ namespace WingingIt.Tests
             float speed0 = _plane.Speed, y0 = _plane.Position.y, highest = y0;
 
             // Idle, and hold the nose a few degrees up: the descent stops while the speed bleeds, then the plane settles.
-            for (float t = 0f; t < 4f; t += Time.fixedDeltaTime)
+            for (float t = 0f; t < 5f; t += Time.fixedDeltaTime)
             {
                 float pitch = Mathf.Clamp((6f - Pitch) * 0.08f, -1f, 1f);
                 yield return RunwayLanding.Fly(_plane, new FlightInput { Throttle = -1f, Pitch = pitch }, Time.fixedDeltaTime);

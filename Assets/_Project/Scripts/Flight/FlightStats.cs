@@ -101,11 +101,11 @@ namespace WingingIt.Flight
         public float stallSpeed = 32f;
         public float noseDropRate = 30f;
         [Tooltip("Idle speed as a fraction of the stall speed: throttle held all the way down settles just below the stall.")]
-        [Range(0.5f, 1f)] public float idleSpeedFactor = 0.9f;
+        [Range(0.5f, 1f)] public float idleSpeedFactor = 0.92f;
         [Tooltip("Pull (m/s²) of the idling engine below idle speed: keeps it turning, not enough to fly on.")]
         public float idleAcceleration = 3f;
         [Tooltip("Speed lost per second at idle in level flight. Lower = a longer glide.")]
-        public float idleDeceleration = 4f;
+        public float idleDeceleration = 3f;
         [Tooltip("Speed lost per second while pulling the nose up hard near the stall (a flare).")]
         public float flareDrag = 10f;
 
