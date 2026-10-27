@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using WingingIt.Bots;
 using WingingIt.Dev;
@@ -22,13 +21,12 @@ namespace WingingIt.Tests
         [UnitySetUp]
         public IEnumerator LoadScene()
         {
-            yield return SceneManager.LoadSceneAsync("Island", LoadSceneMode.Single);
-            yield return null;
+            yield return MapTestScene.Load();
             Object.FindAnyObjectByType<MatchManager>()?.Dismiss(); // free flight: no menu, no match clock
             Object.FindAnyObjectByType<BotRoster>()?.Clear(); // an empty sky: these tests fly alone
             yield return null;
             var go = GameObject.Find("Player Plane");
-            Assert.IsNotNull(go, "Island scene has no Player Plane");
+            Assert.IsNotNull(go, "MainMenu + Map_Island have no Player Plane");
             _player = go.GetComponent<PlaneController>();
             foreach (var mb in _player.GetComponents<MonoBehaviour>())
                 if (mb.GetType().Name is "PlayerFlightInput" or "ClassSwitcher" or "DamageTester")
@@ -159,11 +157,11 @@ namespace WingingIt.Tests
         {
             float cruise = FighterCruise();
             Vector3 west = Home(0).transform.position, east = Home(1).transform.position;
-            Vector3 Region(MapRegion region) => Landmark.All.First(l => l.Region == region).transform.position;
-            foreach (var (name, position) in FightAreas().Where(a => a.name == "City center").Append(("Ocean landmark", Region(MapRegion.Ocean))))
+            Vector3 Region(string region) => Landmark.All.First(l => l.Region == region).transform.position;
+            foreach (var (name, position) in FightAreas().Where(a => a.name == "City center").Append(("Ocean landmark", Region("LighthouseSea"))))
                 Assert.AreEqual(FlatDistance(position, west) / cruise, FlatDistance(position, east) / cruise, 1f, $"{name} favors one team");
 
-            Vector3 summit = Region(MapRegion.Mountains), pyramid = Region(MapRegion.Desert);
+            Vector3 summit = Region("Mountains"), pyramid = Region("Desert");
             Assert.AreEqual(FlatDistance(summit, west) / cruise, FlatDistance(pyramid, east) / cruise, 1f, "home-region landmarks are uneven");
         }
 
@@ -177,10 +175,14 @@ namespace WingingIt.Tests
         }
 
         [Test]
-        public void EveryRegion_HasOneLandmark()
+        public void EveryRegion_HasOneLandmark_StandingInIt()
         {
-            foreach (MapRegion region in System.Enum.GetValues(typeof(MapRegion)))
-                Assert.AreEqual(1, Landmark.All.Count(l => l.Region == region), $"{region} should have exactly one landmark");
+            var regions = Object.FindAnyObjectByType<WingingIt.Maps.ModePieceBuilder>().Map.regions;
+            foreach (var area in regions.areas)
+                Assert.AreEqual(1, Landmark.All.Count(l => l.Region == area.name), $"{area.name} should have exactly one landmark");
+            foreach (var l in Landmark.All)
+                Assert.AreEqual(l.Region, regions.RegionAt(new Vector2(l.transform.position.x, l.transform.position.z)),
+                    $"{l.DisplayName} stands in its region on the map");
         }
 
         /// <summary>A landmark is solid, and stands clearly above everything around it.</summary>
@@ -481,8 +483,10 @@ namespace WingingIt.Tests
             Assert.AreEqual("Winging It/Water", mat.shader.name);
             Assert.IsNotNull(mat.GetTexture("_ShoreTex"), "no shore map");
 
-            yield return null;
-            yield return null;
+            // Past the first frames' hitch (the mode pieces spawn and upload at load): one slow frame moves the camera
+            // further than a step at spawn speed.
+            for (int i = 0; i < 10; i++)
+                yield return null;
             // Within a step of the camera (it may move again after the snap, in the same frame), on the sea level.
             var cam = Camera.main.transform.position;
             var at = surface.transform.position;
@@ -701,7 +705,7 @@ namespace WingingIt.Tests
             var data = terrain.terrainData;
             Assert.Greater(data.treeInstanceCount, 1000, "the island is bare");
             Assert.Greater(data.treePrototypes.Length, 15, "too few kinds of tree, bush and rock");
-            var spire = Landmark.All.First(l => l.Region == MapRegion.City);
+            var spire = Landmark.All.First(l => l.Region == "City");
             foreach (var tree in data.treeInstances)
             {
                 Vector3 p = terrain.transform.position + Vector3.Scale(tree.position, data.size);
@@ -729,7 +733,7 @@ namespace WingingIt.Tests
                 Assert.Greater(hit.point.y - mesa.position.y, 80f, $"{mesa.name} is too low");
             }
 
-            var lighthouse = Landmark.All.First(l => l.Region == MapRegion.Ocean);
+            var lighthouse = Landmark.All.First(l => l.Region == "LighthouseSea");
             Vector3 lawn = lighthouse.transform.position + new Vector3(-30f, 200f, -20f);
             Assert.IsTrue(Physics.Raycast(lawn, Vector3.down, out var top, 400f), "nothing under the islet's top");
             Assert.AreEqual("Islet", top.collider.name);

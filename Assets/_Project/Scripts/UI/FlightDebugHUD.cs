@@ -4,6 +4,7 @@ using UnityEngine.InputSystem;
 using WingingIt.Dev;
 using WingingIt.Flight;
 using WingingIt.Input;
+using WingingIt.Maps;
 using WingingIt.Settings;
 using WingingIt.World;
 
@@ -20,6 +21,8 @@ namespace WingingIt.UI
         [SerializeField] bool showHelp = true;
 
         GUIStyle _tiny, _small;
+        MapDefinition _map; // the map being played, for its region names; null in a test level
+        bool _mapLooked;
         const float ReferenceHeight = 1080f;
 
         void Awake() => useGUILayout = false; // no GUILayout here: skips IMGUI's layout pass
@@ -46,7 +49,7 @@ namespace WingingIt.UI
 
         /// <summary>
         /// Bottom left, dev info the real HUD doesn't show: the control mode and held buttons, ring progress, the nearest
-        /// landmark, the nearest friendly field (with the auto-brake stop distance) and who its AA is shooting at.
+        /// landmark, the map region below, the nearest friendly field (with the auto-brake stop distance) and who its AA is shooting at.
         /// </summary>
         void DrawDevPanel()
         {
@@ -68,6 +71,13 @@ namespace WingingIt.UI
                 Vector3 d = landmark.transform.position - plane.transform.position;
                 lines.Add($"Near {landmark.DisplayName} ({landmark.Region}) {new Vector2(d.x, d.z).magnitude / 1000f:0.0} km");
             }
+            if (!_mapLooked)
+            {
+                _map = MapScene.CurrentMap;
+                _mapLooked = true;
+            }
+            if (_map != null)
+                lines.Add($"Over {RegionUnder(plane.transform.position)}");
             var home = Airfield.NearestFriendly(plane.transform.position, plane.Team);
             if (home != null)
             {
@@ -90,6 +100,15 @@ namespace WingingIt.UI
                 GUI.Label(new Rect(x, y - 2f, 390f, 24f), line, _tiny);
                 y += lineHeight;
             }
+        }
+
+        /// <summary>The map's region name at <paramref name="p"/>: the ground straight down tells land from sea.</summary>
+        string RegionUnder(Vector3 p)
+        {
+            float aboveSea = float.PositiveInfinity;
+            if (Physics.Raycast(new Vector3(p.x, 3000f, p.z), Vector3.down, out var hit, 4000f, ~0, QueryTriggerInteraction.Ignore))
+                aboveSea = PlaneController.IsWater(hit.collider) ? 0f : hit.point.y - _map.seaLevel;
+            return _map.regions.RegionAt(new Vector2(p.x, p.z), aboveSea);
         }
 
         /// <summary>The planes our home airfield's AA guns are shooting at, or null if none.</summary>

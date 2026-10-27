@@ -3,6 +3,7 @@ using UnityEngine;
 using WingingIt.CameraSystem;
 using WingingIt.Flight;
 using WingingIt.Input;
+using WingingIt.Maps;
 using WingingIt.Match;
 using WingingIt.Settings;
 using WingingIt.World;
@@ -60,6 +61,10 @@ namespace WingingIt.UI
         float _mapTurn;         // how far the map is turned (clockwise degrees; 0 = north up)
         Vector2 _mapCenter;
         float _mapRadius;
+        bool _mapStale;         // the mode's pieces changed: photograph the level again
+        Color _mapSea = DefaultMapSea;
+        ModePieceBuilder _pieces;
+        MapMinimap _mapSettings; // the map's minimap settings, null in a level with no map definition
         MatchScore _score;
         Rect _clusterRect; // where the cluster was drawn this frame, in HUD space
 
@@ -130,6 +135,9 @@ namespace WingingIt.UI
             }
             if (missiles != null)
                 missiles.HitPlane += OnMissileHit;
+            _pieces = match != null ? match.Pieces : null;
+            if (_pieces != null)
+                _pieces.Changed += OnPiecesChanged;
             if (bombs != null)
             {
                 bombs.HitPlane += OnBombHit;
@@ -144,6 +152,7 @@ namespace WingingIt.UI
         void Start()
         {
             FollowScore();
+            _mapSettings = MapSettings();
             RenderMap();
         }
 
@@ -165,6 +174,8 @@ namespace WingingIt.UI
             }
             if (missiles != null)
                 missiles.HitPlane -= OnMissileHit;
+            if (_pieces != null)
+                _pieces.Changed -= OnPiecesChanged;
             if (bombs != null)
             {
                 bombs.HitPlane -= OnBombHit;
@@ -207,7 +218,7 @@ namespace WingingIt.UI
         void LateUpdate()
         {
             FollowScore();
-            RenderMap(); // again only if a mode's arena moved the boundary
+            RenderMap(); // again only if a mode's arena moved the boundary or its pieces changed
             _mapTurn = GameSettings.Current.Data.minimapHeadingUp && plane != null && plane.IsAlive ? -HudMath.Heading(plane.transform.forward) : 0f;
             if (_mapTurn != 0f && _map != null)
                 TurnMap(_mapTurn);
@@ -799,26 +810,37 @@ namespace WingingIt.UI
         // ---------- Minimap ----------
 
         /// <summary>
-        /// Photographs the level once from straight above, north up, out to the flight boundary: terrain, sea, city and
-        /// airfields, without clouds, fog or planes. Needs a <see cref="FlightBoundary"/>; without one there's no minimap.
-        /// Taken again when a mode's arena changes the boundary (a smaller map for a smaller arena).
+        /// Photographs the level once from straight above, north up, out to the flight boundary (times the map's
+        /// <see cref="MapMinimap.margin"/>): terrain, sea, city and airfields, without clouds, fog or planes. A map with a
+        /// baked <see cref="MapMinimap.image"/> uses that instead while its own boundary is in force. Needs a
+        /// <see cref="FlightBoundary"/>; without one there's no minimap. Taken again when a mode's arena changes the
+        /// boundary (a smaller map for a smaller arena) or the mode's pieces change (other airfields).
         /// </summary>
         void RenderMap()
         {
             var boundary = FlightBoundary.Active;
             if (boundary == null)
                 return;
+            var settings = _mapSettings;
             var center = new Vector2(boundary.transform.position.x, boundary.transform.position.z);
-            float radius = boundary.radius * 1.06f;
-            if (_map != null && center == _mapCenter && Mathf.Approximately(radius, _mapRadius))
+            float radius = boundary.radius * (settings?.margin ?? DefaultMapMargin);
+            if (_map != null && !_mapStale && center == _mapCenter && Mathf.Approximately(radius, _mapRadius))
                 return;
             if (_map != null)
             {
                 _map.Release();
                 Destroy(_map);
             }
+            _mapStale = false;
             _mapCenter = center;
             _mapRadius = radius;
+            _mapSea = settings?.sea ?? DefaultMapSea;
+            _map = new RenderTexture(MapResolution, MapResolution, 24) { name = "Minimap" };
+            if (settings?.image != null && !boundary.IsOverridden)
+            {
+                Graphics.Blit(settings.image, _map);
+                return;
+            }
 
             var hidden = new List<Renderer>();
             foreach (var cloud in FindObjectsByType<CloudBank>(FindObjectsSortMode.None))
@@ -828,7 +850,6 @@ namespace WingingIt.UI
             bool fog = RenderSettings.fog;
             RenderSettings.fog = false;
 
-            _map = new RenderTexture(MapResolution, MapResolution, 24) { name = "Minimap" };
             var go = new GameObject("Minimap Capture");
             var cam = go.AddComponent<Camera>();
             cam.enabled = false;
@@ -838,7 +859,7 @@ namespace WingingIt.UI
             cam.nearClipPlane = 1f;
             cam.farClipPlane = 5000f;
             cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = MapSea;
+            cam.backgroundColor = _mapSea;
             cam.transform.SetPositionAndRotation(new Vector3(_mapCenter.x, 3000f, _mapCenter.y), Quaternion.Euler(90f, 0f, 0f));
             cam.targetTexture = _map;
             cam.Render();
@@ -851,7 +872,21 @@ namespace WingingIt.UI
                     r.enabled = true;
         }
 
-        static readonly Color MapSea = new(0.12f, 0.3f, 0.42f);
+        static readonly Color DefaultMapSea = new(0.12f, 0.3f, 0.42f);
+        const float DefaultMapMargin = 1.06f;
+
+        /// <summary>The minimap settings of the map being played: the match's layout map, else the loaded map scene's; null in a test level.</summary>
+        MapMinimap MapSettings()
+        {
+            var map = _pieces != null && _pieces.Map != null ? _pieces.Map : MapScene.CurrentMap;
+            return map != null ? map.minimap : null;
+        }
+
+        void OnPiecesChanged()
+        {
+            _mapStale = true;
+            _mapSettings = MapSettings();
+        }
 
         /// <summary>Redraws the level photo into <see cref="_mapView"/> turned clockwise by <paramref name="degrees"/>, sea round the corners.</summary>
         void TurnMap(float degrees)
@@ -860,7 +895,7 @@ namespace WingingIt.UI
                 _mapView = new RenderTexture(MapResolution, MapResolution, 0) { name = "Minimap View" };
             var old = RenderTexture.active;
             RenderTexture.active = _mapView;
-            GL.Clear(false, true, MapSea);
+            GL.Clear(false, true, _mapSea);
             GL.PushMatrix();
             GL.LoadPixelMatrix(0f, MapResolution, MapResolution, 0f); // y down, like GUI space
             var pivot = new Vector3(MapResolution * 0.5f, MapResolution * 0.5f, 0f);

@@ -1,0 +1,369 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5ad68c3fa88fa04383a14113509ef11, type: 3}
+  m_Name: BroadReach
+  m_EditorClassIdentifier: WingingIt.Runtime::WingingIt.Maps.MapDefinition
+  displayName: Broad Reach
+  heightmapRaw: {fileID: 4900000, guid: 6ea64096962b4004d9cc1fda6fdfff08, type: 3}
+  heightmapImage: {fileID: 0}
+  worldSize: 8192
+  baseHeight: -40
+  heightRange: 1440
+  seaLevel: 0
+  boundaryRadius: 3800
+  ceiling: 1500
+  seed: 4101
+  rules:
+    beachHeight: 6
+    beachFade: 6
+    rockSlope: {x: 22, y: 34}
+    rockHeight: {x: 350, y: 560}
+    snowHeight: {x: 868, y: 1008.00006}
+    snowSlope: {x: 40, y: 55}
+    treeLine: 700
+    pineHeight: 50
+    treeSpacing: 24
+  layout:
+    airfields:
+    - name: South Home Airfield
+      team: 0
+      home: 1
+      twoWay: 0
+      capturable: 0
+      position: {x: 400, y: -2700}
+      elevation: 30
+      yaw: 180
+    - name: North Home Airfield
+      team: 1
+      home: 1
+      twoWay: 0
+      capturable: 0
+      position: {x: 0, y: 2300}
+      elevation: 72
+      yaw: 0
+    - name: Central Airfield
+      team: -1
+      home: 0
+      twoWay: 1
+      capturable: 1
+      position: {x: 800, y: -150}
+      elevation: 35.5
+      yaw: 0
+    - name: Ridge Gap Airfield
+      team: -1
+      home: 0
+      twoWay: 1
+      capturable: 1
+      position: {x: -600, y: -280}
+      elevation: 90
+      yaw: 0
+    - name: West Plain Airfield
+      team: -1
+      home: 0
+      twoWay: 1
+      capturable: 1
+      position: {x: -2400, y: -400}
+      elevation: 27.5
+      yaw: 165
+    lanes:
+    - airfield: South Home Airfield
+      name: Valley Run
+      color: {r: 0.6, g: 1, b: 0.2, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: 400.0002, y: -300}
+        agl: 60
+      - xz: {x: 400.00015, y: -1100}
+        agl: 50
+    - airfield: South Home Airfield
+      name: West Bend
+      color: {r: 0.95, g: 0.35, b: 0.9, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: -1099.9999, y: -799.9999}
+        agl: 70
+      - xz: {x: -699.9999, y: -1199.9999}
+        agl: 60
+      - xz: {x: -99.99991, y: -1500}
+        agl: 50
+    - airfield: South Home Airfield
+      name: East Bend
+      color: {r: 0.2, g: 0.85, b: 1, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: 1900.0001, y: -800.0001}
+        agl: 70
+      - xz: {x: 1500.0001, y: -1200.0001}
+        agl: 60
+      - xz: {x: 900.0001, y: -1500}
+        agl: 50
+    - airfield: North Home Airfield
+      name: Valley Run
+      color: {r: 0.6, g: 1, b: 0.2, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: 0, y: -100}
+        agl: 60
+      - xz: {x: 0, y: 700}
+        agl: 50
+    - airfield: North Home Airfield
+      name: East Bend
+      color: {r: 0.95, g: 0.35, b: 0.9, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: 1500, y: 400}
+        agl: 70
+      - xz: {x: 1100, y: 800}
+        agl: 60
+      - xz: {x: 500, y: 1100}
+        agl: 50
+    - airfield: North Home Airfield
+      name: West Bend
+      color: {r: 0.2, g: 0.85, b: 1, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: -1500, y: 400}
+        agl: 70
+      - xz: {x: -1100, y: 800}
+        agl: 60
+      - xz: {x: -500, y: 1100}
+        agl: 50
+    - airfield: Central Airfield
+      name: South Final
+      color: {r: 1, g: 0.8, b: 0.2, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: 100, y: -2150}
+        agl: 60
+      - xz: {x: 400, y: -1550}
+        agl: 50
+    - airfield: Central Airfield
+      name: North Final
+      color: {r: 1, g: 0.8, b: 0.2, a: 1}
+      reverseEnd: 1
+      points:
+      - xz: {x: 100.00018, y: 1850.0001}
+        agl: 60
+      - xz: {x: 400.00012, y: 1250}
+        agl: 50
+    - airfield: Ridge Gap Airfield
+      name: South Final
+      color: {r: 1, g: 0.55, b: 0.2, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: -100, y: -2180}
+        agl: 60
+      - xz: {x: -400, y: -1680}
+        agl: 50
+    - airfield: Ridge Gap Airfield
+      name: North Final
+      color: {r: 1, g: 0.55, b: 0.2, a: 1}
+      reverseEnd: 1
+      points:
+      - xz: {x: -1099.9999, y: 1620}
+        agl: 60
+      - xz: {x: -799.9999, y: 1120}
+        agl: 50
+    - airfield: West Plain Airfield
+      name: North Final
+      color: {r: 1, g: 0.55, b: 0.2, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: -3107.356, y: 1273.9614}
+        agl: 60
+      - xz: {x: -2833.0574, y: 829.82153}
+        agl: 50
+    - airfield: West Plain Airfield
+      name: South Final
+      color: {r: 1, g: 0.55, b: 0.2, a: 1}
+      reverseEnd: 1
+      points:
+      - xz: {x: -1692.6438, y: -2073.9614}
+        agl: 60
+      - xz: {x: -1966.9424, y: -1629.8215}
+        agl: 50
+    bannerStands:
+    - airfield: South Home Airfield
+      distance: 150
+    - airfield: North Home Airfield
+      distance: 150
+    arenas:
+    - modeId: RamRoyale
+      center: {x: 200, y: -500}
+      radius: 1000
+      warning: 150
+      ceiling: 750
+      hardEdge: 1
+      closeAirfields: 1
+      airStart: 1
+      startRadius: 800
+      startAltitude: 350
+      startSlots: 16
+      fightAreas:
+      - xz: {x: 200, y: -500}
+        agl: 300
+      - xz: {x: 553.5534, y: -146.44666}
+        agl: 300
+      - xz: {x: 553.55334, y: -853.55334}
+        agl: 300
+      - xz: {x: -153.55334, y: -853.55347}
+        agl: 300
+      - xz: {x: -153.5534, y: -146.44666}
+        agl: 300
+    fightAreas:
+    - name: Central Airfield
+      point:
+        xz: {x: 800, y: -150}
+        agl: 250
+    - name: Ridge Gap
+      point:
+        xz: {x: -600, y: -280}
+        agl: 250
+    - name: West Plain
+      point:
+        xz: {x: -2400, y: -400}
+        agl: 250
+    - name: Central Spur
+      point:
+        xz: {x: 90, y: -620}
+        agl: 300
+    - name: South Valley
+      point:
+        xz: {x: 500, y: -1400}
+        agl: 200
+    - name: North Valley
+      point:
+        xz: {x: 300, y: 1100}
+        agl: 200
+    modes:
+    - modeId: Teams
+      airfields:
+      - South Home Airfield
+      - North Home Airfield
+      - Central Airfield
+      - Ridge Gap Airfield
+      - West Plain Airfield
+      bannerStands: 0
+      arena: 
+      fightAreas: []
+    - modeId: Banner
+      airfields:
+      - South Home Airfield
+      - North Home Airfield
+      - Central Airfield
+      - Ridge Gap Airfield
+      - West Plain Airfield
+      bannerStands: 1
+      arena: 
+      fightAreas: []
+    - modeId: Domination
+      airfields:
+      - South Home Airfield
+      - North Home Airfield
+      - Central Airfield
+      - Ridge Gap Airfield
+      - West Plain Airfield
+      bannerStands: 0
+      arena: 
+      fightAreas: []
+    - modeId: RamRoyale
+      airfields: []
+      bannerStands: 0
+      arena: RamRoyale
+      fightAreas: []
+  regions:
+    areas:
+    - name: Central Spur
+      shape: 0
+      center: {x: 90, y: -620}
+      size: {x: 350, y: 350}
+      landOnly: 1
+    - name: Ridge Gap
+      shape: 0
+      center: {x: -650, y: -300}
+      size: {x: 500, y: 450}
+      landOnly: 1
+    - name: West Plains
+      shape: 1
+      center: {x: -3000, y: 0}
+      size: {x: 1100, y: 4100}
+      landOnly: 1
+    - name: West Ridges
+      shape: 1
+      center: {x: -1500, y: 0}
+      size: {x: 400, y: 4100}
+      landOnly: 1
+    - name: East Ridges
+      shape: 1
+      center: {x: 2900, y: 0}
+      size: {x: 1200, y: 4100}
+      landOnly: 1
+    - name: North Valley
+      shape: 1
+      center: {x: 0, y: 2150}
+      size: {x: 1700, y: 1950}
+      landOnly: 1
+    sea: Sea
+    fallback: South Valley
+    seaDepth: 1
+  landmarks:
+  - kind: 0
+    xz: {x: 90, y: -620}
+    searchHalfSize: {x: 0, y: 0}
+    region: Central Spur
+  - kind: 1
+    xz: {x: 2800, y: 0}
+    searchHalfSize: {x: 800, y: 1800}
+    region: East Ridges
+  - kind: 2
+    xz: {x: -2750, y: 1300}
+    searchHalfSize: {x: 0, y: 0}
+    region: West Plains
+  minimap:
+    image: {fileID: 0}
+    sea: {r: 0.22, g: 0.32, b: 0.2, a: 1}
+    margin: 1.06
+  sky:
+    skybox: {fileID: 2100000, guid: 453db78019ab37d459d5e99adf7e5795, type: 2}
+    sunAngles: {x: 48, y: -35}
+    sunIntensity: 1.4
+    fogColor: {r: 0.72, g: 0.82, b: 0.92, a: 1}
+    fogStart: 1200
+    fogEnd: 9000
+    clouds:
+    - xz: {x: 600, y: -1100}
+      radius: 260
+      altitude: 520
+      seed: 11
+    - xz: {x: -500, y: -1300}
+      radius: 240
+      altitude: 560
+      seed: 23
+    - xz: {x: -1700, y: -900}
+      radius: 260
+      altitude: 600
+      seed: 37
+    - xz: {x: 1300, y: -1900}
+      radius: 230
+      altitude: 500
+      seed: 41
+    - xz: {x: -1300, y: -2300}
+      radius: 250
+      altitude: 620
+      seed: 53
+    - xz: {x: -2700, y: -1500}
+      radius: 260
+      altitude: 520
+      seed: 67
+    mirrorClouds: 1
+    cloudCoreHalfHeight: 70
+    cloudClearance: 80

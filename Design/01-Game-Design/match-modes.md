@@ -82,7 +82,7 @@ Today `MatchManager` hard-codes Teams. The three prototypes need it split up:
 
 ### Arenas (built 2026-10-19)
 
-A mode plays on the Island **as built** unless the level has an arena for it. The geometry lives in the level, not the mode: a `ModeArena` object in the scene names the mode it's for (`GameModeInfo.Id`; `MatchMode.ArenaId` can point elsewhere), and the match puts it in force when the class is picked (before anyone spawns) and puts the Island back on Dismiss or when the scene goes.
+A mode plays on the Island **as built** unless the level has an arena for it. The geometry lives in the level, not the mode: a `ModeArena` (spawned from the map's layout when the mode is picked, see [island-map](../05-Levels/island-map.md#mode-pieces-built-2026-10-26)) names the mode it's for (`GameModeInfo.Id`; `MatchMode.ArenaId` can point elsewhere), and the match puts it in force when the class is picked (before anyone spawns) and puts the Island back on Dismiss or when the scene goes.
 
 - **Play area:** center, radius, ceiling and edge type. The `FlightBoundary` swaps to it (`UseArea` / `RestoreArea`), the minimap is photographed again for the smaller area, and the buoy ring is laid round the new edge.
 - **Hard edge (new):** no autopilot turn-back. Past the edge the HUD counts down OUTSIDE THE ARENA — GET BACK IN 2.1, and after **3 s** outside the plane is out (`DeathCause.OutOfBounds`, breaks up in mid-air, OUT OF THE ARENA). Kill credit follows the crash rule (the last attacker, if recent). Bots turn back toward the middle on their own when they're heading out and will be within the edge margin in 3 s (`BotState.AvoidEdge`, above everything but terrain). The ceiling still pushes down softly.

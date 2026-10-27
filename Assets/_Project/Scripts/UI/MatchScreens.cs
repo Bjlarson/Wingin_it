@@ -6,6 +6,7 @@ using UnityEngine.InputSystem;
 using WingingIt.Bots;
 using WingingIt.CameraSystem;
 using WingingIt.Flight;
+using WingingIt.Maps;
 using WingingIt.Match;
 using WingingIt.Settings;
 using static WingingIt.UI.GlassGUI;
@@ -15,7 +16,7 @@ namespace WingingIt.UI
     /// <summary>
     /// Every screen outside the cockpit, drawn with IMGUI over the <see cref="MatchManager"/>
     /// (Design/06-UI-UX/front-end-menus.md): the main menu over the player's plane in its hangar, the game mode cards,
-    /// class select, the 3-2-1, the clock + team score bar in play, the in-match menu (Esc / Start /
+    /// the map cards, class select, the 3-2-1, the clock + team score bar in play, the in-match menu (Esc / Start /
     /// ☰, the match keeps running) with the live scoreboard, Settings, and the end-of-match scoreboard. In play it also
     /// draws the class picker (while dead, and parked + repaired at home with Tab or CHANGE PLANE). Everything works
     /// with mouse, keyboard (arrows, Enter, Esc, Q / E), gamepad (D-pad / stick, A, B, LB / RB) and touch, through
@@ -39,6 +40,7 @@ namespace WingingIt.UI
         {
             Main,
             GameMode,
+            Map,
         }
 
         // Main menu rows (keyboard / gamepad focus): PLAY, then the gear and QUIT in the corner.
@@ -55,6 +57,7 @@ namespace WingingIt.UI
         int _mode;           // highlighted game mode card (index into GameModeInfo.All)
         List<int> _cards;    // the cards on the game mode screen (modes in development only in dev builds)
         int _modeRow;        // 0 = the card, 1 = its BOTS row
+        int _map;            // highlighted map card (index into MapInfo.All)
         int _highlight = -1; // highlighted class card on class select
         bool _leaveArmed;    // LEAVE MATCH pressed once: the next press confirms
         object _screen;
@@ -79,6 +82,8 @@ namespace WingingIt.UI
                 return;
             _nav.Read();
             TrackScreen();
+            if (match.IsLoadingMap)
+                return; // the loading screen takes no input
 
             if (_settingsOpen && match.Phase != MatchPhase.Menu && !match.MenuOpen)
                 _settingsOpen = false; // time ran out with Settings open over the match
@@ -100,7 +105,7 @@ namespace WingingIt.UI
         }
 
         /// <summary>What's on screen, to re-run the open glow when it changes.</summary>
-        object ScreenKey() => (match.Phase, _front, _settingsOpen, match.MenuOpen, match.Picker, match.IsSpectating);
+        object ScreenKey() => (match.Phase, _front, _settingsOpen, match.MenuOpen, match.Picker, match.IsSpectating, match.IsLoadingMap);
 
         /// <summary>Notes when the screen changes, for the open glow and the fade-in. Checked in OnGUI too, so a screen
         /// opened by input this frame starts faded out rather than flashing in for a frame.</summary>
@@ -127,6 +132,11 @@ namespace WingingIt.UI
                 if (_nav.Down) _focus = MenuMath.Step(_focus, 1, rows);
                 if (_nav.Confirm)
                     ActivateMain(_focus);
+                return;
+            }
+            if (_front == Front.Map)
+            {
+                MapInput();
                 return;
             }
 
@@ -189,8 +199,26 @@ namespace WingingIt.UI
         {
             if (!GameModeInfo.All[_mode].IsPlayable)
                 return; // in development: the card shows, PLAY doesn't
-            _highlight = match.SelectedClass;
             match.SelectMode(_mode);
+            _front = Front.Map;
+            _map = match.MapIndex;
+        }
+
+        void MapInput()
+        {
+            int n = MapInfo.All.Count;
+            if (_nav.Left) _map = Mathf.Clamp(_map - 1, 0, n - 1);
+            if (_nav.Right) _map = Mathf.Clamp(_map + 1, 0, n - 1);
+            if (_nav.Confirm)
+                ConfirmMap();
+            else if (_nav.Back)
+                _front = Front.GameMode;
+        }
+
+        void ConfirmMap()
+        {
+            _highlight = match.SelectedClass;
+            match.SelectMap(_map);
             match.OpenClassSelect();
         }
 
@@ -213,7 +241,7 @@ namespace WingingIt.UI
             match.PreviewClass(_highlight); // the highlighted plane waits in the hangar
             if (_nav.Back)
             {
-                _front = Front.GameMode;
+                _front = Front.Map;
                 match.BackToMenu();
             }
             else if (_nav.Confirm)
@@ -413,10 +441,17 @@ namespace WingingIt.UI
                         DrawSettings(width, true);
                     else if (_front == Front.Main)
                         DrawMainMenu(width);
+                    else if (_front == Front.Map)
+                        DrawMaps(width);
                     else
                         DrawGameModes(width);
                     break;
-                case MatchPhase.ClassSelect: DrawClassSelect(width); break;
+                case MatchPhase.ClassSelect:
+                    if (match.IsLoadingMap)
+                        DrawLoading(width);
+                    else
+                        DrawClassSelect(width);
+                    break;
                 case MatchPhase.Countdown:
                 case MatchPhase.Playing:
                     if (match.Phase == MatchPhase.Countdown)
@@ -671,6 +706,117 @@ namespace WingingIt.UI
                 HintStrip(width, "LEFT / RIGHT  MODE    UP / DOWN  TIME / BOTS    ENTER  PLAY    ESC  BACK", "D-PAD  MODE / TIME / BOTS    A  PLAY    B  BACK");
         }
 
+        // ---------- Map select ----------
+
+        const float MapCardH = 470f;
+
+        /// <summary>After the game mode: a card per map, laid out like the mode cards. PLAY goes on to class select.</summary>
+        void DrawMaps(float width)
+        {
+            _g.Fill(new Rect(0f, 0f, width, _height), Alpha(Dim, 0.25f));
+            _g.Shadowed(new Rect(0f, 110f, width, 60f), "MAP", _g.Title, 8f, TextAnchor.MiddleCenter, Color.white);
+            if (match.Mode?.Info != null)
+                _g.Tracked(new Rect(0f, 172f, width, 30f), match.Mode.Info.Name.ToUpperInvariant(), _g.Hint, 5f, TextAnchor.MiddleCenter, Steel);
+
+            int n = MapInfo.All.Count;
+            float total = n * CardW + (n - 1) * CardGap;
+            float s = Mathf.Min(1f, (width - 80f) / total); // narrow screens: shrink to fit
+            var old = GUI.matrix;
+            GUI.matrix = old * Matrix4x4.TRS(new Vector3((width - total * s) / 2f, 230f, 0f), Quaternion.identity, new Vector3(s, s, 1f));
+            float glow = OpenGlow();
+            for (int i = 0; i < n; i++)
+            {
+                var map = MapInfo.All[i];
+                var card = new Rect(i * (CardW + CardGap), 0f, CardW, MapCardH);
+                if (_nav.MouseMoved && Event.current.type == EventType.Repaint && card.Contains(Event.current.mousePosition))
+                    _map = i; // focus follows the mouse
+                bool selected = i == _map;
+                _g.Panel(card, selected ? Mathf.Max(glow, GlowSettle) : glow * 0.5f);
+
+                var head = new Rect(card.x, card.y + 22f, card.width, 44f);
+                if (selected)
+                    _g.Lit(head, 1f, true);
+                string name = map.Name.ToUpperInvariant();
+                float fit = Mathf.Min(1f, (card.width - 56f) / _g.TrackedWidth(name, _g.Item, 3.4f)); // long names shrink
+                _g.Tracked(new Rect(card.x + 28f, head.y, card.width - 56f, head.height), name, _g.Item, 3.4f, TextAnchor.MiddleLeft, Color.white, fit);
+                _g.Fill(new Rect(card.x + 28f, head.yMax + 8f, card.width - 56f, 1f), Alpha(Color.white, 0.14f));
+
+                DrawMapSketch(new Rect(card.x + 28f, head.yMax + 24f, card.width - 56f, 120f), map.Sketch);
+                GUI.color = _g.Faded(Body);
+                GUI.Label(new Rect(card.x + 28f, head.yMax + 158f, card.width - 56f, 96f), map.Pitch, _g.BodyText);
+                GUI.color = Color.white;
+
+                float y = head.yMax + 262f;
+                Fact(card, y, "SIZE", map.Size);
+                Fact(card, y + 34f, "TERRAIN", map.Terrain);
+
+                var play = new Rect(card.x, card.yMax - 78f, card.width, 56f);
+                if (_g.Button(play, "PLAY", _nav.Glyph("ENTER", "A"), selected, false, true))
+                {
+                    _map = i;
+                    ConfirmMap();
+                }
+                if (GUI.Button(card, GUIContent.none, GUIStyle.none)) // a click or tap anywhere else on the card picks it
+                    _map = i;
+            }
+
+            if (BackButton(new Rect(total / 2f - 130f, MapCardH + 36f, 260f, 56f)))
+                _front = Front.GameMode;
+            GUI.matrix = old;
+            HintStrip(width, "LEFT / RIGHT  MAP    ENTER  PLAY    ESC  BACK", "D-PAD  MAP    A  PLAY    B  BACK");
+        }
+
+        /// <summary>A map card's picture: its land and sea from above, with each team's home runway in its colour.</summary>
+        void DrawMapSketch(Rect r, MapSketch sketch)
+        {
+            _g.RoundFill(r, 8f, new Color(0.05f, 0.16f, 0.24f, 0.55f)); // sea
+            var land = new Color(0.55f, 0.72f, 0.5f, 0.3f);
+            var rock = new Color(0.82f, 0.84f, 0.88f, 0.3f);
+            var sand = new Color(0.95f, 0.84f, 0.6f, 0.3f);
+            Color west = match.TeamColor(0), east = match.TeamColor(1);
+            Vector2 c = r.center;
+            switch (sketch)
+            {
+                case MapSketch.Island: // one island: mountains north, desert east, a city in the middle
+                    _g.RoundFill(new Rect(c.x - 92f, c.y - 50f, 184f, 100f), 46f, land);
+                    _g.RoundFill(new Rect(c.x - 50f, c.y - 46f, 100f, 28f), 14f, rock);
+                    _g.RoundFill(new Rect(c.x + 30f, c.y - 8f, 54f, 48f), 22f, sand);
+                    for (int b = 0; b < 6; b++) // city blocks
+                        _g.Fill(new Rect(c.x - 26f + (b % 3) * 11f, c.y - 4f + (b / 3) * 11f, 8f, 8f), Alpha(White, 0.45f));
+                    _g.RoundFill(new Rect(c.x + 100f, c.y + 34f, 9f, 9f), 4.5f, rock); // Lighthouse Rock
+                    Runway(new Vector2(c.x - 74f, c.y + 10f), true, west);
+                    Runway(new Vector2(c.x + 74f, c.y - 26f), true, east);
+                    break;
+
+                case MapSketch.BroadReach: // land to the edges: a valley up the middle between long ridges, plains west
+                    _g.RoundFill(r, 8f, land);
+                    _g.RoundFill(new Rect(c.x - 64f, r.y + 8f, 18f, r.height - 16f), 9f, rock); // west ridges
+                    _g.RoundFill(new Rect(c.x + 48f, r.y + 6f, 26f, r.height - 12f), 13f, rock); // east ridges
+                    _g.RoundFill(new Rect(c.x - 6f, c.y - 6f, 16f, 16f), 8f, rock);              // the Central Spur
+                    Runway(new Vector2(c.x + 4f, r.yMax - 18f), false, west);
+                    Runway(new Vector2(c.x, r.y + 18f), false, east);
+                    break;
+
+                case MapSketch.Archipelago: // a chain of small islands, south-west to north-east, open sea either side
+                    float[] sizes = { 22f, 16f, 26f, 14f, 30f, 20f };
+                    for (int k = 0; k < sizes.Length; k++)
+                    {
+                        var at = new Vector2(r.x + 30f + k * (r.width - 60f) / (sizes.Length - 1), r.yMax - 26f - k * (r.height - 52f) / (sizes.Length - 1));
+                        float d = sizes[k];
+                        _g.RoundFill(new Rect(at.x - d / 2f, at.y - d / 2f, d, d), d / 2f, k % 2 == 0 ? land : rock);
+                    }
+                    _g.RoundFill(new Rect(c.x - 20f, c.y - 44f, 8f, 8f), 4f, rock); // the Northern Isles
+                    _g.RoundFill(new Rect(c.x - 6f, c.y - 50f, 6f, 6f), 3f, rock);
+                    Runway(new Vector2(c.x - 70f, r.y + 22f), true, west);
+                    Runway(new Vector2(c.x + 70f, r.yMax - 22f), true, east);
+                    break;
+            }
+        }
+
+        /// <summary>A home runway on a map sketch, in its team's colour.</summary>
+        void Runway(Vector2 at, bool across, Color team) =>
+            _g.Fill(across ? new Rect(at.x - 12f, at.y - 2f, 24f, 4f) : new Rect(at.x - 2f, at.y - 12f, 4f, 24f), team);
+
         void Fact(Rect card, float y, string label, string value)
         {
             _g.Tracked(new Rect(card.x + 28f, y, card.width - 56f, 30f), label, _g.Hint, 2.4f, TextAnchor.MiddleLeft, Steel);
@@ -794,11 +940,42 @@ namespace WingingIt.UI
                 match.SelectClass(picked);
             if (BackButton(new Rect(cardsW / 2f - 130f, top + SelectCardH + 18f, 260f, 56f)))
             {
-                _front = Front.GameMode;
+                _front = Front.Map;
                 match.BackToMenu();
             }
             GUI.matrix = old;
             HintStrip(width, "ARROWS  MOVE    ENTER  FLY    1 – 4  PICK    ESC  BACK", "D-PAD  MOVE    A  FLY    B  BACK");
+        }
+
+        /// <summary>The class is picked and the map scene is loading: its name and a progress bar over the dimmed hangar.</summary>
+        void DrawLoading(float width)
+        {
+            Backdrop(width);
+            var loader = match.MapLoader;
+            string map = MapTitle(loader.MapName);
+            var title = new Rect(0f, _height * 0.40f, width, 60f);
+            _g.Shadowed(title, "LOADING", _g.Title, 8f, TextAnchor.MiddleCenter, Color.white);
+            _g.Tracked(new Rect(0f, title.yMax + 6f, width, 30f), map, _g.Hint, 5f, TextAnchor.MiddleCenter, Steel);
+            var bar = Centered(width, 480f, 6f, title.yMax + 56f);
+            _g.RoundFill(bar, 3f, Alpha(White, 0.12f));
+            float done = Mathf.Max(bar.height, bar.width * loader.Progress);
+            _g.RoundFill(new Rect(bar.x, bar.y, done, bar.height), 3f, Glow);
+        }
+
+        /// <summary>"Map_ShatteredArchipelago" → "SHATTERED ARCHIPELAGO".</summary>
+        static string MapTitle(string scene)
+        {
+            if (string.IsNullOrEmpty(scene))
+                return "";
+            string name = scene.StartsWith("Map_") ? scene.Substring(4) : scene;
+            var sb = new StringBuilder();
+            for (int i = 0; i < name.Length; i++)
+            {
+                if (i > 0 && char.IsUpper(name[i]) && !char.IsUpper(name[i - 1]))
+                    sb.Append(' ');
+                sb.Append(char.ToUpperInvariant(name[i]));
+            }
+            return name == "Island" ? "THE ISLAND" : sb.ToString();
         }
 
         /// <summary>

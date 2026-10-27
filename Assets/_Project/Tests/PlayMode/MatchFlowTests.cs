@@ -2,11 +2,11 @@ using System.Collections;
 using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using WingingIt.Bots;
 using WingingIt.Flight;
 using WingingIt.Input;
+using WingingIt.Maps;
 using WingingIt.Match;
 using WingingIt.Settings;
 using WingingIt.UI;
@@ -25,10 +25,9 @@ namespace WingingIt.Tests
         public IEnumerator LoadScene()
         {
             GameSettings.UseForTests(new GameSettings(false, null)); // defaults, nothing saved
-            yield return SceneManager.LoadSceneAsync("Island", LoadSceneMode.Single);
-            yield return null;
+            yield return MapTestScene.Load();
             _match = Object.FindAnyObjectByType<MatchManager>();
-            Assert.IsNotNull(_match, "Island scene has no MatchManager");
+            Assert.IsNotNull(_match, "MainMenu + Map_Island have no MatchManager");
             _roster = Object.FindAnyObjectByType<BotRoster>();
             _player = GameObject.Find("Player Plane").GetComponent<PlaneController>();
         }
@@ -497,14 +496,136 @@ namespace WingingIt.Tests
             Assert.IsTrue(Airfield.All.All(f => f.IsOpen));
         }
 
+        [Test]
+        public void ModePieces_FollowTheMode_AndFreeFlightGetsThemAll()
+        {
+            Assert.IsNotNull(_match.Pieces, "the Island spawns its mode pieces from its layout");
+            Assert.AreEqual(5, Airfield.All.Count, "Teams: every field");
+            Assert.AreEqual(12, ApproachLane.All.Count);
+            Assert.AreEqual(0, BannerStand.All.Count, "no banner stands in Teams");
+            Assert.AreEqual(3, FieldDefenses.All.Count, "the capture fields' tower and light AA (dormant)");
+            Assert.IsNull(ModeArena.For("RamRoyale"));
+            var westHome = Airfield.HomeOf(0);
+
+            _match.SetMode(new BannerMode());
+            Assert.AreEqual(2, BannerStand.All.Count, "a stand at each home field");
+            Assert.AreEqual(5, Airfield.All.Count);
+
+            _match.SetMode(new RamRoyaleMode());
+            Assert.AreEqual(2, Airfield.All.Count, "only the home fields (their hangars are the menu's backdrop)");
+            Assert.IsTrue(Airfield.All.All(f => f.IsHome));
+            Assert.AreEqual(6, ApproachLane.All.Count, "the home fields keep their lanes");
+            Assert.AreEqual(0, BannerStand.All.Count);
+            Assert.AreEqual(0, FieldDefenses.All.Count);
+            Assert.IsNotNull(ModeArena.For("RamRoyale"));
+            Assert.AreSame(westHome, Airfield.HomeOf(0), "a field both modes use stays put");
+            Assert.IsNotNull(_match.HangarSpot);
+
+            _match.Dismiss();
+            Assert.AreEqual(5, Airfield.All.Count, "free flight: the map as built");
+            Assert.AreEqual(12, ApproachLane.All.Count);
+            Assert.AreEqual(2, BannerStand.All.Count);
+            Assert.AreEqual(3, FieldDefenses.All.Count);
+            Assert.IsNotNull(ModeArena.For("RamRoyale"));
+        }
+
+        [UnityTest]
+        public IEnumerator Bots_PatrolTheLayoutsFightAreas_NotOnesBakedForTheIsland()
+        {
+            var pieces = _match.Pieces;
+            var islandXZ = pieces.Map.layout.fightAreas.Select(a => a.point.xz).ToList();
+            CollectionAssert.AreEqual(islandXZ, _roster.FightAreas.Select(FlatXZ).ToList(), "Teams patrols the Island's areas");
+            foreach (var (area, anchor) in _roster.FightAreas.Zip(pieces.Map.layout.fightAreas, (a, b) => (a, b)))
+                Assert.AreEqual(ModePieceBuilder.HighestPointNear(anchor.point.xz, 150f) + anchor.point.agl, area.y, 0.5f,
+                    $"{anchor.name} flies its height above the ground and pieces");
+
+            // Another map: the same pieces builder, a layout with one field per team and its own patrols.
+            var island = pieces.Map;
+            var other = Object.Instantiate(island);
+            other.layout = new MapLayout();
+            other.layout.airfields.Add(island.layout.Airfield("West Home Airfield"));
+            other.layout.airfields.Add(island.layout.Airfield("East Home Airfield"));
+            other.layout.fightAreas.Add(new FightAreaAnchor { name = "North", point = new LayoutPoint(new Vector2(0f, 1500f), 300f) });
+            other.layout.fightAreas.Add(new FightAreaAnchor { name = "South", point = new LayoutPoint(new Vector2(0f, -1500f), 300f) });
+            other.layout.modes.Add(new ModeLayout { modeId = "Teams", airfields = new[] { "West Home Airfield", "East Home Airfield" } });
+            try
+            {
+                pieces.Configure(other, pieces.Kit);
+                _match.SetMode(new TeamsMode());
+                Assert.AreEqual(2, Airfield.All.Count, "only the other map's fields");
+                CollectionAssert.AreEqual(new[] { new Vector2(0f, 1500f), new Vector2(0f, -1500f) }, _roster.FightAreas.Select(FlatXZ).ToArray(),
+                    "bots patrol the other map's areas");
+                yield return StartPlaying();
+                foreach (var bot in _roster.Bots)
+                    foreach (var point in bot.PatrolRoute)
+                        Assert.Contains(point, _roster.FightAreas.ToList(), $"{bot.name} patrols the other map");
+            }
+            finally
+            {
+                pieces.Configure(island, pieces.Kit);
+                Object.Destroy(other);
+            }
+        }
+
+        static Vector2 FlatXZ(Vector3 p) => new(p.x, p.z);
+
+        [UnityTest]
+        public IEnumerator DominationAndBanner_PlayAnotherMapsLayout_NotTheIslands()
+        {
+            var pieces = _match.Pieces;
+            var island = pieces.Map;
+            _match.SetMode(new BannerMode());
+            var islandStands = new[] { BannerStand.Of(0).Position, BannerStand.Of(1).Position };
+
+            // Another map: one capture field (Central) and banner stands 150 m further out than the Island's.
+            var other = Object.Instantiate(island);
+            other.layout = new MapLayout();
+            string[] fields = { "West Home Airfield", "East Home Airfield", "Central Airfield" };
+            foreach (var n in fields)
+                other.layout.airfields.Add(island.layout.Airfield(n));
+            foreach (var s in island.layout.bannerStands)
+                other.layout.bannerStands.Add(new BannerStandAnchor { airfield = s.airfield, distance = s.distance + 150f });
+            other.layout.fightAreas.AddRange(island.layout.fightAreas);
+            other.layout.modes.Add(new ModeLayout { modeId = BannerMode.Id, airfields = new[] { fields[0], fields[1] }, bannerStands = true });
+            other.layout.modes.Add(new ModeLayout { modeId = DominationMode.Id, airfields = fields });
+            try
+            {
+                pieces.Configure(other, pieces.Kit);
+                _match.SetMode(new BannerMode());
+                Assert.AreEqual(2, Airfield.All.Count, "Banner on the other map: its two home fields");
+                for (int t = 0; t < 2; t++)
+                    Assert.AreEqual(150f, Vector3.Distance(islandStands[t], BannerStand.Of(t).Position), 1f, $"team {t}'s stand is where the other map puts it");
+
+                _match.SetMode(new DominationMode());
+                yield return StartPlaying();
+                var world = DominationWorld.Active;
+                Assert.IsNotNull(world);
+                var central = Airfield.All.Single(f => f.DisplayName == "Central Airfield");
+                CollectionAssert.AreEqual(new[] { central }, world.Fields, "the other map's one capture field, not the Island's three");
+                Assert.AreEqual(1, world.Board.FieldCount);
+                Assert.IsFalse(Airfield.All.Any(f => f.DisplayName.StartsWith("South")), "no Island-only fields");
+
+                yield return new WaitForSeconds(3f); // bots pick their fields every 2 s
+                var picked = _roster.Bots.Select(b => b.DominationField).Where(f => f != null).ToList();
+                Assert.IsNotEmpty(picked, "bots go for a field");
+                Assert.IsTrue(picked.All(f => f == central), "every bot goes for the one field the map has");
+            }
+            finally
+            {
+                pieces.Configure(island, pieces.Kit);
+                Object.Destroy(other);
+            }
+        }
+
         [UnityTest]
         public IEnumerator RamRoyalesArena_ShrinksTheMap_ClosesTheFields_AndStartsEveryoneOnARing()
         {
-            var arena = ModeArena.For("RamRoyale");
-            Assert.IsNotNull(arena, "the Island has a Ram Royale arena");
-            Assert.IsFalse(arena.IsApplied, "not before the match");
+            Assert.IsNull(ModeArena.For("RamRoyale"), "Teams spawns no arena");
             var islandAreas = _roster.FightAreas.ToList();
             _match.SetMode(new TestMode { Arena = "RamRoyale" });
+            var arena = ModeArena.For("RamRoyale");
+            Assert.IsNotNull(arena, "the Island's layout has a Ram Royale arena, spawned with the mode");
+            Assert.IsFalse(arena.IsApplied, "not before the match");
             yield return StartPlaying();
 
             Assert.AreSame(arena, _match.Arena);

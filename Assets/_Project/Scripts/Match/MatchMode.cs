@@ -94,6 +94,12 @@ namespace WingingIt.Match
         /// </summary>
         public virtual string ArenaId => Info?.Id;
 
+        /// <summary>
+        /// Which of the map layout's mode entries (<see cref="Maps.ModeLayout.modeId"/>) says what the mode spawns: its own
+        /// card's id by default. Null, or an id the map doesn't list, spawns every piece (the map as built).
+        /// </summary>
+        public virtual string LayoutId => Info?.Id;
+
         /// <summary>A fresh score for a match of <paramref name="teamCount"/> teams.</summary>
         public virtual MatchScore CreateScore(int teamCount) => new MatchScore(teamCount);
 
@@ -165,6 +171,11 @@ namespace WingingIt.Match
     /// </summary>
     public sealed class TeamsMode : MatchMode
     {
+        public const string Id = "Teams";
+
+        /// <summary>The Teams layout even when the mode isn't played from its card (tests).</summary>
+        public override string LayoutId => Info?.Id ?? Id;
+
         static readonly ScoreColumn[] s_columns =
         {
             new("K", p => p.Kills.ToString()),
@@ -196,6 +207,11 @@ namespace WingingIt.Match
     /// </summary>
     public sealed class BannerMode : MatchMode
     {
+        public const string Id = "Banner";
+
+        /// <summary>The Banner layout even when the mode isn't played from its card (tests).</summary>
+        public override string LayoutId => Info?.Id ?? Id;
+
         static readonly ScoreColumn[] s_columns =
         {
             new("K", p => p.Kills.ToString()),
@@ -266,6 +282,11 @@ namespace WingingIt.Match
     /// </summary>
     public sealed class DominationMode : MatchMode
     {
+        public const string Id = "Domination";
+
+        /// <summary>The Domination layout even when the mode isn't played from its card (tests).</summary>
+        public override string LayoutId => Info?.Id ?? Id;
+
         static readonly ScoreColumn[] s_columns =
         {
             new("K", p => p.Kills.ToString()),
@@ -406,6 +427,8 @@ namespace WingingIt.Match
 
         /// <summary>The Ram Royale arena even when the mode isn't played from its card (tests).</summary>
         public override string ArenaId => Info?.Id ?? Id;
+
+        public override string LayoutId => Info?.Id ?? Id;
 
         public override int FreeForAllSize => Pilots;
 

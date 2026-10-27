@@ -1,7 +1,7 @@
 # Island Map
 
 Status: Draft
-Last updated: 2026-10-19
+Last updated: 2026-10-26
 
 ## Summary
 
@@ -171,7 +171,75 @@ The edge is a circle 2600 m from the island center, all over open sea (the neare
 
 ### Mode arenas (built, 2026-10-19)
 
-Modes that need a different play area get an arena on this map instead of a new scene (`Mode Arenas` in the scene, `ModeArena`; rules in [match-modes](../01-Game-Design/match-modes.md#arenas-built-2026-10-19)). Only **Ram Royale** has one so far: a 700 m circle round Lighthouse Rock with a 450 m ceiling and a hard edge, every airfield closed, an air start on a 550 m ring. While it's in force the buoy ring moves to its edge (~30 buoys). Its north edge just reaches the south coast; the rest is open sea.
+Modes that need a different play area get an arena on this map instead of a new scene (`ModeArena`, spawned from the map's layout with the mode, see [Mode pieces](#mode-pieces-built-2026-10-26); rules in [match-modes](../01-Game-Design/match-modes.md#arenas-built-2026-10-19)). Only **Ram Royale** has one so far: a 700 m circle round Lighthouse Rock with a 450 m ceiling and a hard edge, every airfield closed, an air start on a 550 m ring. While it's in force the buoy ring moves to its edge (~30 buoys). Its north edge just reaches the south coast; the rest is open sea.
+
+### Mode pieces (built, 2026-10-26)
+
+`Island.unity` no longer has airfields, approach lanes, banner stands or arenas baked in. They spawn at runtime from the Island's `MapDefinition` layout (`ModePieceBuilder` on the scene's **Mode Pieces** object, assets from `Maps/ModePieceKit.asset`), when a mode is picked, and only the ones that mode uses:
+
+| Mode | Spawns |
+|---|---|
+| Teams | All 5 airfields (capture fields' tower and light AA dormant) and their 12 lanes |
+| Capture the Banner | As Teams, plus the 2 banner stands |
+| Airfield Domination | As Teams (the 3 capture fields come alive) |
+| Ram Royale | The 2 home fields only (closed by the arena: their hangars are the menu's backdrop while the menu shares this scene) and the Ram Royale arena |
+| Free flight (`Dismiss`), or a mode the layout doesn't list | Every piece |
+
+Switching modes keeps the pieces both use (the home field and the plane in its hangar stay put) and removes the rest; leaving the match clears them. The editor still spawns them all for a moment while building, so the clouds clear them as before.
+
+Nothing at runtime assumes the Island (2026-10-26): bots patrol the layout's fight areas (a mode's own, else the map's), placed by `ModePieceBuilder` at their height above the highest ground or piece within 150 m when the mode's pieces spawn; a mode's arena still swaps in its own. The roster has no patrols baked in. Mode rules, bots' lane and field picks and the HUD find the spawned airfields, lanes, stands, defenses and arenas through their registries. The minimap is photographed again whenever the pieces change, and takes its sea colour, margin and optional baked picture from the map's `MapMinimap`. Landmarks name their region by the map's own area names (`Landmark.Region` is a `MapRegions` area, no longer an Island-only enum), and the dev overlay shows the map region under the plane (`MapScene.CurrentMap`). A piece is reused across a mode switch only when it comes from the same layout entries (an airfield with the same anchor and lanes, a stand with the same anchor), so another map's field or stand of the same name spawns where that map puts it. `MatchFlowTests` plays Teams, Banner and Domination on a second, made-up layout (one capture field, stands further out) and checks the fields, stands, patrols and bots' field picks follow it.
+
+## Map List (decided 2026-10-26)
+
+Phase 6.7 builds **three maps**. Every map supports every mode (Teams, Banner, Domination, Ram Royale); the list is about each map's character. Findings from [mode-map-review](mode-map-review.md). Sizes are starting points, to be set by the scale test.
+
+| Map | Character | What it fixes |
+|---|---|---|
+| **The Island** (built) | Mixed terrain: city, mountains, desert, ocean | Stays the Teams map. Banner stands move closer (~2 km apart, so a carry is ~30 s) and off the full home AA umbrella. Domination fields spread into the north regions instead of only the south third |
+| **Broad Reach** (new) | Large and open: rolling plains, a few long ridges, a river or lake. Bigger than the Island | Domination fields spread far enough that holding all three is a stretch. Long sightlines, with ridges and cloud as the only cover |
+| **Shattered Archipelago** (new) | Tight and vertical: many small islands, sea stacks, arches, one canyon | A Ram Royale arena with obstacles and room, walled by terrain instead of an invisible edge. Short Banner runs with low cover. Close, fast Teams fights |
+
+Each new map is built from a heightmap by the Phase 6.7 terrain tool. The Island is baked through the same tool first, to prove it matches.
+
+### Broad Reach (built 2026-10-27)
+
+Built from `Valley.png` (8192 m, boundary radius 3800 m, ceiling 1500 m, no sea): a long north-south valley with a rocky knoll in the middle (the **Central Spur**), the **West Ridges** and the open **West Plains** beyond them, and high **East Ridges**. Its definition is written by `Winging It/Map/Write Broad Reach Definition` (`BroadReachDefinition`, helpers in `MapLayoutWriter`); `Build Map Scene` then makes `Map_BroadReach`.
+
+| Piece | Where | Notes |
+|---|---|---|
+| South Home (team 0) | (400, -2700), lands south | Valley Run straight up the valley, West Bend and East Bend round either side; banner stand 150 m past the far end |
+| North Home (team 1) | (0, 2300), lands north | The same three lanes, turned round |
+| Central | (800, -150), both ends | Capture field; one lane into each end |
+| Ridge Gap | (-600, -280), both ends | Capture field on the plateau between the spur and the west ridges (90 m up) |
+| West Plain | (-2400, -400), both ends | Capture field out on the plains |
+| Ram Royale arena | 1 km circle round (200, -500), ceiling 750 m | Round the spur, whose Spire (top ~770 m) stands through it as an obstacle; no airfields |
+| Landmarks | Spire on the spur, Summit Radar on the highest east peak, Pyramid on the West Plains | Each names its region |
+| Clouds | 6 banks over the valley, ridges and plains, each mirrored through the middle | Fog out to 9 km for long sightlines |
+
+The three capture fields stand in a line across the middle, each as far from one home as the other (within 3%), ~3.2 km from end to end, so holding all three is a stretch. Every mode but Ram Royale uses all five fields. The terrain builder now levels a flat pad under every layout airfield on a heightmap map (`MapTerrainBuilder.LoadGround`, the same 260 x 800 m pad and 250 m blend as the Island) and keeps trees and grass off it; landmarks come from the definition's `landmarks` list.
+
+**Survey (bot-only, 2026-10-27, `MapSurveyTests`):** Teams 510-500 with 87% of plane time in a fight (Island 89%), first contact at 20 s (Island 13 s); fights stay in the valley, the ridges see none. Domination ran 196 s before one team held all three (Island 108 s). Ram Royale filled its arena (98% in a fight), with the spur in the middle of it. Banner runners still pass over the stands too high to grab, as on the Island (a bot issue, not the map's). Not yet flown by hand.
+
+### Shattered Archipelago (built 2026-10-27)
+
+Built from `archipelago.png` (4096 m, boundary radius 1900 m, ceiling 1100 m, sea all round): a chain of steep islands running south-west to north-east (the **Western Isle**, **Saddle Peak**, **Lagoon Isle**, the **Long Ridge** at 970 m, **Crown Island** at 1010 m) with the small **Northern Isles** above the middle, open sea either side. Its definition is written by `Winging It/Map/Write Shattered Archipelago Definition` (`ShatteredArchipelagoDefinition`); `Build Map Scene` then makes `Map_ShatteredArchipelago`.
+
+No island has 800 m of level ground (the flattest spot found still rises 430 m across a runway's pad), so **every airfield is a shore strip**: a runway at 8 m built up out of the shallows by the pad levelling, the islands rising beside it. The homes are sand strips out in the open sea; Central is the exception, cut 90 m up into a notch between two peaks (the map's canyon).
+
+| Piece | Where | Notes |
+|---|---|---|
+| West Home (team 0) | (-760, 1010), lands north-east, 8 m | Out in the open sea north-west of the chain. West Sound from the south over open water, Inner Bend off the Northern Isles, North Pass round the north channel; banner stand 150 m past the far end |
+| East Home (team 1) | (760, -1010), lands south-west, 8 m | The same out in the south-east sea: East Sound, Inner Bend along the south shore, South Pass |
+| Central | (-150, -100), lands north only, 90 m | Capture field in the notch on Lagoon Isle; its final comes in at 120 m over the sea (hills past the far end) |
+| Western Isle | (-950, -700), both ends, 8 m | Capture field on the Western Isle's east shore; one lane into each end |
+| Long Ridge | (770, 580), lands south-east only, 34 m | Capture field on the north shore of the Long Ridge, across the channel from Crown Island |
+| Ram Royale arena | 900 m circle round (-100, 300), ceiling 750 m | Over the inner islands: the Long Ridge rises through its east edge and the Spire (top ~700 m) stands inside; air start 550 m out at 500 m, clear of the ground |
+| Landmarks | Spire on the Northern Isles, Summit Radar on Crown Island's peak | Each names its region |
+| Clouds | 5 banks over the sounds, each mirrored through the middle | Fog 800–6000 m, closer than the open maps |
+
+The homes sit either side of the chain, so the chain is the line equally far from both: each capture field is within 3% as far from one home as from the other (Central 1.3 km, Long Ridge 1.6 km, Western Isle 1.7 km), and the homes are 2.5 km apart, so Banner carries are short. Every mode but Ram Royale uses all five fields.
+
+**Survey (bot-only, 2026-10-27, `MapSurveyTests`):** Teams 630-510 with 92% of plane time in a fight (Island 89%), first contact at 8.5 s (Island 13 s); the fighting leans south-west, over the Western Isle and the sea round it, and the Long Ridge sees almost none. Domination: every field changed hands and one team held all three at 208 s (Island 108 s, Broad Reach 196 s); Central's capture zone is where most planes die. Ram Royale filled its arena (100% in a fight), bots spending 41% of their time turning from the edge or the ground (Island 55%). Banner runners still don't grab, as on the other maps. Not yet flown by hand.
 
 ## Design Rules
 

@@ -7,17 +7,12 @@ namespace WingingIt.Editor
 {
     /// <summary>
     /// The course markers and range targets (ArtSource/Markers/build_markers.py → Art/Models/Markers/Markers.fbx), the
-    /// Pack 7 pieces the scene builders place: approach-lane gate pylons, boundary buoys, the flight-test rings and the
-    /// bombing range's truck and radar post, one object each on the shared plane materials. <see cref="Load"/> returns
-    /// null when the FBX hasn't been generated, and the builders keep their greybox.
+    /// Pack 7 pieces the scene builders place (boundary buoys, the flight-test rings, the bombing range's truck and radar
+    /// post) and the approach-lane gate pylon's meshes for the mode piece kit, one object each on the shared plane
+    /// materials. <see cref="Load"/> returns null when the FBX hasn't been generated, and the builders keep their greybox.
     /// </summary>
     internal class MarkerModels : PackModels
     {
-        /// <summary>PylonTop's sleeve reaches this far below the gate point; the stretched pole meets it there.</summary>
-        const float SleeveLength = 16f;
-        /// <summary>How far the pole runs up inside the sleeve, so the joint never shows a gap.</summary>
-        const float PoleOverlap = 0.5f;
-
         MarkerModels(GameObject source) : base(source) { }
 
         public static MarkerModels Load()
@@ -44,29 +39,6 @@ namespace WingingIt.Editor
             mat.enableInstancing = true;
             EditorUtility.SetDirty(mat);
             return mat;
-        }
-
-        /// <summary>
-        /// A gate pylon standing on <paramref name="gate"/> (on the ground) with its marker <paramref name="height"/> up:
-        /// footing, a white pole stretched to the obstruction sleeve, and the marker in <paramref name="laneMaterial"/>.
-        /// A pylon too short for the sleeve shrinks the whole top instead.
-        /// </summary>
-        public void Pylon(Transform gate, float height, Material laneMaterial)
-        {
-            Child("PylonBase", gate, Vector3.zero);
-            var top = Child("PylonTop", gate, new Vector3(0f, height, 0f));
-            var r = top.GetComponent<Renderer>();
-            var mats = r.sharedMaterials;
-            for (int i = 0; i < mats.Length; i++)
-                if (mats[i] != null && mats[i].name == "Weapon_Glow")
-                    mats[i] = laneMaterial;
-            r.sharedMaterials = mats;
-
-            float pole = height - SleeveLength + PoleOverlap;
-            if (pole > 1f)
-                Child("PylonPole", gate, Vector3.zero).transform.localScale = new Vector3(1f, pole, 1f);
-            else
-                top.transform.localScale = Vector3.one * Mathf.Max(0.1f, height / (SleeveLength + 1f));
         }
 
         /// <summary>A boundary buoy on <paramref name="buoy"/> (on the waterline). Returns its lamp, for BoundaryBuoys to blink.</summary>

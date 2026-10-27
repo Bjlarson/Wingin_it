@@ -86,6 +86,14 @@ namespace WingingIt.World
             repairZone = zone;
         }
 
+        /// <summary>Names a field spawned from a map layout and gives it its owner (before it's enabled).</summary>
+        public void SetIdentity(string name, int owner, bool home)
+        {
+            displayName = name;
+            team = owner;
+            isHome = home;
+        }
+
         public void SetTwoWay(bool value) => twoWay = value;
 
         public void SetHangarSpot(Transform spot) => hangarSpot = spot;

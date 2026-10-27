@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using WingingIt.Bots;
 using WingingIt.Dev;
@@ -260,13 +259,12 @@ namespace WingingIt.Tests
         [UnitySetUp]
         public IEnumerator LoadScene()
         {
-            yield return SceneManager.LoadSceneAsync("Island", LoadSceneMode.Single);
-            yield return null;
+            yield return MapTestScene.Load();
             Object.FindAnyObjectByType<MatchManager>()?.Dismiss(); // free flight: no menu, no match clock
             Object.FindAnyObjectByType<BotRoster>()?.Clear(); // an empty sky: these tests fly alone
             yield return null;
             var go = GameObject.Find("Player Plane");
-            Assert.IsNotNull(go, "Island scene has no Player Plane");
+            Assert.IsNotNull(go, "MainMenu + Map_Island have no Player Plane");
             _plane = go.GetComponent<PlaneController>();
             foreach (var mb in _plane.GetComponents<MonoBehaviour>())
                 if (mb.GetType().Name is "PlayerFlightInput" or "ClassSwitcher" or "DamageTester")

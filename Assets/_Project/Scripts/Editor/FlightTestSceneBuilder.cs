@@ -716,6 +716,34 @@ namespace WingingIt.Editor
             return r;
         }
 
+        internal static Renderer Sphere(string name, Transform parent, Vector3 localPos, float diameter, Material mat, bool collider)
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            go.name = name;
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = localPos;
+            go.transform.localScale = Vector3.one * diameter;
+            if (!collider)
+                Object.DestroyImmediate(go.GetComponent<Collider>());
+            var r = go.GetComponent<Renderer>();
+            r.sharedMaterial = mat;
+            return r;
+        }
+
+        /// <summary>A collider-less cylinder <paramref name="diameter"/> across and <paramref name="height"/> tall.</summary>
+        internal static Renderer Cylinder(string name, Transform parent, Vector3 localPos, float diameter, float height, Material mat)
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            go.name = name;
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = localPos;
+            go.transform.localScale = new Vector3(diameter, height * 0.5f, diameter); // the primitive is 2 units tall
+            Object.DestroyImmediate(go.GetComponent<Collider>());
+            var r = go.GetComponent<Renderer>();
+            r.sharedMaterial = mat;
+            return r;
+        }
+
         // ------------------------------------------------------------------ airfield prefab
 
         /// <summary>
@@ -889,7 +917,7 @@ namespace WingingIt.Editor
         /// mesh collider from its walls, roof and doors, the workshop modelled inside, warm lamps under the trusses and a
         /// mechanic by the plane. Returns the parking spot (nose to the doors), the main menu's backdrop.
         /// </summary>
-        static Transform BuildHangar(Transform parent, Vector3 center, AirfieldModels models)
+        internal static Transform BuildHangar(Transform parent, Vector3 center, AirfieldModels models)
         {
             var hangar = models.Child("Hangar", parent, center, colliderMesh: "HangarCol").transform;
             models.Prop("Mechanic", hangar, new Vector3(8f, 0.1f, -11f), 0f, solid: false);
@@ -917,7 +945,7 @@ namespace WingingIt.Editor
         /// parking T. It's the main menu's backdrop, so it has an interior. Walls and roof are solid (flying into them is
         /// a crash); the floor is paint on the airfield pad. Returns the parking spot (nose to the doors).
         /// </summary>
-        static Transform BuildHangar(Transform parent, Vector3 center, Materials m)
+        internal static Transform BuildHangar(Transform parent, Vector3 center, Materials m)
         {
             const float depth = 40f, width = 32f, height = 14f, wall = 1f, doorHeight = 11f;
             var root = new GameObject("Hangar").transform;

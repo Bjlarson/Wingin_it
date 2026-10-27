@@ -1,0 +1,34 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5ad68c3fa88fa04383a14113509ef11, type: 3}
+  m_Name: MountainRange
+  m_EditorClassIdentifier: WingingIt.Runtime::WingingIt.Maps.MapDefinition
+  displayName: Mountain Range
+  heightmapRaw: {fileID: 4900000, guid: cec80fe8bfd52f442a4763117a946e2a, type: 3}
+  heightmapImage: {fileID: 0}
+  worldSize: 4608
+  baseHeight: -40
+  heightRange: 1060
+  seaLevel: 0
+  boundaryRadius: 2100
+  ceiling: 1100
+  seed: 5202
+  rules:
+    beachHeight: 6
+    beachFade: 6
+    rockSlope: {x: 22, y: 34}
+    rockHeight: {x: 255, y: 408}
+    snowHeight: {x: 632.4, y: 734.4}
+    snowSlope: {x: 40, y: 55}
+    treeLine: 510
+    pineHeight: 50
+    treeSpacing: 24
