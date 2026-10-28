@@ -25,9 +25,11 @@ namespace WingingIt.Editor
         /// The sea. What you hit is "Ocean": a flat 30 km box at y = 0 on the Water layer, solid (flying into it is a crash)
         /// but never landable (<see cref="PlaneController.IsWater"/>). What you see is "Ocean Surface" beside it: the wave
         /// shader on a grid that follows the camera (<see cref="OceanSurface"/>), with the shallows and shore foam baked
-        /// from the heightmap (<see cref="BakeShore"/>). The canal is the same sea, so it gets both for free.
+        /// from the heightmap (<see cref="BakeShore"/>). The canal is the same sea, so it gets both for free. Each map
+        /// (<paramref name="mapName"/>) gets its own shore map and water material, a copy of the shared, hand-tuned
+        /// <c>Water.mat</c>; without a name (the Island's own scene) the shared ones are used.
         /// </summary>
-        public static void Build(Transform parent, float terrainSize, System.Func<float, float, float> height)
+        public static void Build(Transform parent, float terrainSize, System.Func<float, float, float> height, string mapName = null)
         {
             var ocean = new GameObject("Ocean");
             ocean.layer = PlaneController.WaterLayer;
@@ -49,13 +51,16 @@ namespace WingingIt.Editor
             surface.transform.SetParent(parent, false);
             surface.GetComponent<MeshFilter>().sharedMesh = mesh;
             var renderer = surface.GetComponent<MeshRenderer>();
-            renderer.sharedMaterial = WaterMaterial(BakeShore(terrainSize, height), terrainSize);
+            renderer.sharedMaterial = WaterMaterial(BakeShore(terrainSize, height, mapName), terrainSize, mapName);
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             surface.AddComponent<OceanSurface>();
         }
 
-        /// <summary>The water material (kept between builds for hand tuning), pointed at this build's shore map.</summary>
-        static Material WaterMaterial(Texture2D shore, float terrainSize)
+        /// <summary>
+        /// The water material, pointed at this build's shore map: the shared one (kept between builds for hand tuning), or
+        /// for a named map its own copy of it, refreshed from the shared one on every build.
+        /// </summary>
+        static Material WaterMaterial(Texture2D shore, float terrainSize, string mapName)
         {
             var mat = AssetDatabase.LoadAssetAtPath<Material>(WaterMaterialPath);
             if (mat == null)
@@ -65,6 +70,19 @@ namespace WingingIt.Editor
                 mat.SetColor("_Deep", Hex("1E6E9C"));
                 mat.SetColor("_Foam", Hex("F4FBFF"));
                 AssetDatabase.CreateAsset(mat, WaterMaterialPath);
+            }
+            if (mapName != null)
+            {
+                string path = $"{B.MaterialsFolder}/Water_{mapName}.mat";
+                var own = AssetDatabase.LoadAssetAtPath<Material>(path);
+                if (own == null)
+                {
+                    own = new Material(mat);
+                    AssetDatabase.CreateAsset(own, path);
+                }
+                else
+                    own.CopyPropertiesFromMaterial(mat);
+                mat = own;
             }
             mat.SetTexture("_ShoreTex", shore);
             mat.SetTexture("_FoamTex", FoamTexture());
@@ -148,7 +166,7 @@ namespace WingingIt.Editor
         /// (0 at <see cref="ShallowDepth"/> and deeper, 1 at the waterline and on land), G the shore foam (1 on land,
         /// falling to 0 <see cref="ShoreFoamReach"/> m out). Beyond the square it's open sea (the sampler clamps).
         /// </summary>
-        static Texture2D BakeShore(float terrainSize, System.Func<float, float, float> height)
+        static Texture2D BakeShore(float terrainSize, System.Func<float, float, float> height, string mapName)
         {
             const int res = ShoreResolution;
             float cell = terrainSize / res, half = terrainSize * 0.5f;
@@ -180,11 +198,12 @@ namespace WingingIt.Editor
                 pixels[i * 2 + 1] = (byte)Mathf.RoundToInt(Mathf.Clamp01(1f - nearest / ShoreFoamReach) * 255f);
             }
 
-            var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(OceanShorePath);
+            string shorePath = mapName == null ? OceanShorePath : $"{MapTerrainBuilder.TerrainFolder}/{mapName}_OceanShore.asset";
+            var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(shorePath);
             if (tex == null)
             {
                 tex = new Texture2D(res, res, TextureFormat.RG16, true, true) { name = "Ocean Shore" };
-                AssetDatabase.CreateAsset(tex, OceanShorePath);
+                AssetDatabase.CreateAsset(tex, shorePath);
             }
             tex.wrapMode = TextureWrapMode.Clamp;
             tex.filterMode = FilterMode.Bilinear;

@@ -256,7 +256,7 @@ namespace WingingIt.Editor
             BuildMatch(roster, classes, pieces);
 
             EditorSceneManager.SaveScene(scene, ScenePath);
-            B.AddSceneToBuildSettings(ScenePath, first: false); // the tests' level; a build opens MainMenu
+            B.RemoveSceneFromBuildSettings(ScenePath); // the old standalone level: neither the game nor the tests load it
             AssetDatabase.SaveAssets();
             Debug.Log($"[Winging It] Built {ScenePath}");
         }

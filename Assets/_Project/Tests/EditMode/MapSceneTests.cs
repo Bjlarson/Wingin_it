@@ -16,7 +16,10 @@ namespace WingingIt.Tests
     /// </summary>
     public class MapSceneTests
     {
-        static readonly string[] Maps = { "Island", "BroadReach", "ShatteredArchipelago" };
+        /// <summary>The shipped maps, in map select order.</summary>
+        static readonly string[] GameMaps = { "IslandV2", "BroadReach", "ShatteredArchipelago", "MountainRange" };
+        /// <summary>Every map scene: the shipped ones and the tests' Island.</summary>
+        static readonly string[] Maps = { "IslandV2", "BroadReach", "ShatteredArchipelago", "MountainRange", "Island" };
 
         static string Path(string map) => $"Assets/_Project/Scenes/Maps/Map_{map}.unity";
 
@@ -69,7 +72,7 @@ namespace WingingIt.Tests
             });
         }
 
-        static readonly string[] NewMaps = { "BroadReach", "ShatteredArchipelago" };
+        static readonly string[] NewMaps = { "IslandV2", "BroadReach", "ShatteredArchipelago", "MountainRange" };
 
         [TestCaseSource(nameof(NewMaps))]
         public void NewMapHasFlatPadsAndLandmarks(string mapName)
@@ -110,17 +113,57 @@ namespace WingingIt.Tests
         [Test]
         public void MapSelect_HasACardPerMap_EachInBuildSettings()
         {
-            Assert.AreEqual(Maps.Length, MapInfo.All.Count, "a map select card per game map");
-            for (int i = 0; i < Maps.Length; i++)
+            Assert.AreEqual(GameMaps.Length, MapInfo.All.Count, "a map select card per game map");
+            for (int i = 0; i < GameMaps.Length; i++)
             {
                 var card = MapInfo.All[i];
-                Assert.AreEqual($"Map_{Maps[i]}", card.Scene);
+                Assert.AreEqual($"Map_{GameMaps[i]}", card.Scene);
                 Assert.AreEqual(i, MapInfo.IndexOf(card.Scene));
                 Assert.IsFalse(string.IsNullOrEmpty(card.Name) || string.IsNullOrEmpty(card.Pitch), $"{card.Scene}: name and pitch");
-                Assert.IsTrue(System.Array.Exists(EditorBuildSettings.scenes, s => s.enabled && s.path == Path(Maps[i])),
+                Assert.IsTrue(System.Array.Exists(EditorBuildSettings.scenes, s => s.enabled && s.path == Path(GameMaps[i])),
                     $"{card.Scene} is in Build Settings, so the match can load it");
             }
             Assert.AreEqual(-1, MapInfo.IndexOf("Island"), "only map scenes");
+        }
+
+        [Test]
+        public void TestIsland_HasNoCard_AndIsLeftOutOfTheRelease()
+        {
+            Assert.AreEqual(-1, MapInfo.IndexOf("Map_Island"), "no map select card");
+            foreach (var path in new[] { Path("Island"), "Assets/_Project/Scenes/Island.unity" })
+                Assert.IsFalse(System.Array.Exists(EditorBuildSettings.scenes, s => s.path == path), $"{path} is not in Build Settings");
+        }
+
+        [Test]
+        public void MountainRange_IsSnowy()
+        {
+            WithScene("MountainRange", scene =>
+            {
+                var map = InScene<MapScene>(scene)[0].Definition;
+                Assert.IsTrue(map.rules.winter, "winter rules: no grass, snowy woods");
+                Assert.AreEqual(1, InScene<Snowfall>(scene).Length, "snow falls");
+                var terrain = InScene<Terrain>(scene)[0].terrainData;
+                // The snow layer (splat 3) covers most of the ground; grass (splat 0) none of it.
+                var splat = terrain.GetAlphamaps(0, 0, terrain.alphamapWidth, terrain.alphamapHeight);
+                double grass = 0, snow = 0;
+                for (int z = 0; z < splat.GetLength(0); z += 8)
+                for (int x = 0; x < splat.GetLength(1); x += 8)
+                {
+                    grass += splat[z, x, 0];
+                    snow += splat[z, x, 3];
+                }
+                Assert.Greater(snow, 4 * grass + 1, $"snow {snow:F0} vs grass {grass:F0}");
+                int snowyPines = 0;
+                foreach (var tree in terrain.treeInstances)
+                {
+                    string kind = terrain.treePrototypes[tree.prototypeIndex].prefab.name;
+                    Assert.IsFalse(kind.StartsWith("TreeOak") || kind.StartsWith("TreePalm"), $"a {kind} in the snow");
+                    if (kind == "TreePineSnow")
+                        snowyPines++;
+                }
+                Assert.Greater(snowyPines, 1000, "snowy pine woods");
+            });
+            WithScene("BroadReach", scene => Assert.IsEmpty(InScene<Snowfall>(scene), "only the winter map snows"));
         }
     }
 }

@@ -1571,6 +1571,14 @@ namespace WingingIt.Editor
             EditorBuildSettings.scenes = scenes.ToArray();
         }
 
+        /// <summary>Takes <paramref name="path"/> out of the build scenes (a test level the release leaves out).</summary>
+        internal static void RemoveSceneFromBuildSettings(string path)
+        {
+            var scenes = new List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
+            if (scenes.RemoveAll(s => s.path == path) > 0)
+                EditorBuildSettings.scenes = scenes.ToArray();
+        }
+
         internal static void EnsureFolder(string path)
         {
             if (AssetDatabase.IsValidFolder(path))

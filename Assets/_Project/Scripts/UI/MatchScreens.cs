@@ -777,15 +777,13 @@ namespace WingingIt.UI
             Vector2 c = r.center;
             switch (sketch)
             {
-                case MapSketch.Island: // one island: mountains north, desert east, a city in the middle
-                    _g.RoundFill(new Rect(c.x - 92f, c.y - 50f, 184f, 100f), 46f, land);
-                    _g.RoundFill(new Rect(c.x - 50f, c.y - 46f, 100f, 28f), 14f, rock);
-                    _g.RoundFill(new Rect(c.x + 30f, c.y - 8f, 54f, 48f), 22f, sand);
-                    for (int b = 0; b < 6; b++) // city blocks
-                        _g.Fill(new Rect(c.x - 26f + (b % 3) * 11f, c.y - 4f + (b / 3) * 11f, 8f, 8f), Alpha(White, 0.45f));
-                    _g.RoundFill(new Rect(c.x + 100f, c.y + 34f, 9f, 9f), 4.5f, rock); // Lighthouse Rock
-                    Runway(new Vector2(c.x - 74f, c.y + 10f), true, west);
-                    Runway(new Vector2(c.x + 74f, c.y - 26f), true, east);
+                case MapSketch.Island: // one long island north to south, split by a strait: a plateau north, peaks south
+                    _g.RoundFill(new Rect(c.x - 22f, r.y + 8f, 40f, 46f), 16f, land);  // the North Plateau
+                    _g.RoundFill(new Rect(c.x - 20f, c.y + 6f, 48f, 50f), 18f, land);  // the south half
+                    _g.RoundFill(new Rect(c.x - 12f, c.y + 18f, 26f, 30f), 12f, rock); // the South Peaks
+                    _g.Fill(new Rect(c.x - 1f, c.y - 8f, 3f, 16f), Alpha(White, 0.45f)); // Central's strip across the strait
+                    Runway(new Vector2(c.x - 70f, c.y + 8f), false, west);
+                    Runway(new Vector2(c.x + 76f, c.y - 8f), false, east);
                     break;
 
                 case MapSketch.BroadReach: // land to the edges: a valley up the middle between long ridges, plains west
@@ -809,6 +807,14 @@ namespace WingingIt.UI
                     _g.RoundFill(new Rect(c.x - 6f, c.y - 50f, 6f, 6f), 3f, rock);
                     Runway(new Vector2(c.x - 70f, r.y + 22f), true, west);
                     Runway(new Vector2(c.x + 70f, r.yMax - 22f), true, east);
+                    break;
+
+                case MapSketch.Mountains: // snow to the edges, ridges running north-west to south-east, homes in the valleys
+                    _g.RoundFill(r, 8f, new Color(0.9f, 0.93f, 0.97f, 0.35f));
+                    for (int k = 0; k < 4; k++) // the ridges, stepping down the card
+                        _g.RoundFill(new Rect(r.x + 18f + k * 38f, r.y + 10f + k * 22f, 64f, 16f), 8f, rock);
+                    Runway(new Vector2(c.x - 30f, r.yMax - 16f), false, west);
+                    Runway(new Vector2(c.x + 36f, r.y + 16f), false, east);
                     break;
             }
         }
@@ -962,11 +968,14 @@ namespace WingingIt.UI
             _g.RoundFill(new Rect(bar.x, bar.y, done, bar.height), 3f, Glow);
         }
 
-        /// <summary>"Map_ShatteredArchipelago" → "SHATTERED ARCHIPELAGO".</summary>
+        /// <summary>A map card's name ("Map_IslandV2" → "THE ISLAND"); else the scene name spaced out ("Map_FooBar" → "FOO BAR").</summary>
         static string MapTitle(string scene)
         {
             if (string.IsNullOrEmpty(scene))
                 return "";
+            int card = MapInfo.IndexOf(scene);
+            if (card >= 0)
+                return MapInfo.All[card].Name.ToUpperInvariant();
             string name = scene.StartsWith("Map_") ? scene.Substring(4) : scene;
             var sb = new StringBuilder();
             for (int i = 0; i < name.Length; i++)
@@ -975,7 +984,7 @@ namespace WingingIt.UI
                     sb.Append(' ');
                 sb.Append(char.ToUpperInvariant(name[i]));
             }
-            return name == "Island" ? "THE ISLAND" : sb.ToString();
+            return name == "Island" ? "TEST ISLAND" : sb.ToString();
         }
 
         /// <summary>

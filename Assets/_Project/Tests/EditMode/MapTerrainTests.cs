@@ -91,5 +91,21 @@ namespace WingingIt.Tests
             Assert.AreEqual(0, rules.Detail(300f, 5f, 0.6f, 0.1f).grass, "too high");
             Assert.AreEqual(0, rules.Detail(-3f, 5f, 0.6f, 0.1f).grass, "underwater");
         }
+
+        [Test]
+        public void Winter_SnowEverywhereButSteepFaces_SnowyWoods_NoGrass()
+        {
+            var map = UnityEditor.AssetDatabase.LoadAssetAtPath<MapDefinition>("Assets/_Project/Maps/MountainRange/MountainRange.asset");
+            Assert.IsNotNull(map);
+            var rules = map.rules;
+            Assert.IsTrue(rules.winter, "Mountain Range is the winter map (Winging It/Map/Write Mountain Range Definition)");
+            Assert.Greater(rules.Layers(300f, 10f).w, 0.99f, "snow on a valley floor");
+            Assert.Greater(rules.Layers(300f, 55f).z, 0.99f, "bare rock on a cliff");
+            Assert.AreEqual(0f, rules.Layers(300f, 10f).x, 0.001f, "no grass");
+            Assert.AreEqual(0, rules.Detail(300f, 5f, 0.9f, 0.1f).grass, "no tufts on snow");
+            Assert.AreEqual("TreePineSnow", rules.PickTree(400f, 10f, 0.3f, 0.9f)?.kind, "a wood");
+            Assert.IsNull(rules.PickTree(400f, 10f, 0.3f, 0.1f), "a clearing");
+            Assert.AreNotEqual("TreePineSnow", rules.PickTree(900f, 10f, 0.05f, 0.9f)?.kind, "above the tree line");
+        }
     }
 }

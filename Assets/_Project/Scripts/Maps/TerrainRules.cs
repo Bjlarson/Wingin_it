@@ -27,6 +27,8 @@ namespace WingingIt.Maps
         public float pineHeight;
         [Tooltip("Meters between jittered tree cells; each grows at most one.")]
         public float treeSpacing;
+        [Tooltip("Winter: no grass or flowers, and the snowy pines grow in woods with clearings instead of evenly.")]
+        public bool winter;
 
         public static TerrainRules Default => new()
         {
@@ -70,7 +72,10 @@ namespace WingingIt.Maps
             if (aboveSea > treeLine)
                 return roll < 0.1f ? ("RockSnow", 1.8f, 3.5f) : null;
             if (aboveSea > snowHeight.x - 50f)
-                return roll < 0.4f ? ("TreePineSnow", 1.5f, 2.1f) : roll < 0.46f ? ("RockSnow", 1.8f, 3f) : null;
+            {
+                float pines = winter ? 0.08f + 0.6f * Smooth(0.4f, 0.6f, grove) : 0.4f;
+                return roll < pines ? ("TreePineSnow", 1.5f, 2.1f) : roll < pines + 0.06f ? ("RockSnow", 1.8f, 3f) : null;
+            }
             if (aboveSea < beachHeight + beachFade && aboveSea < 10f) // the low strip along the coast
                 return roll < 0.07f ? ("TreePalm", 1.5f, 2.1f) : roll < 0.12f ? ("TreePalmBent", 1.5f, 2.1f)
                     : roll < 0.15f ? ("Driftwood", 1.5f, 2.2f) : roll < 0.18f ? ("BeachRocks", 1.5f, 2.6f) : null;
@@ -93,7 +98,7 @@ namespace WingingIt.Maps
         /// <summary>Grass tufts (0 none, 1 sparse, 2 thick) and whether flowers grow with them, on open low ground.</summary>
         public (int grass, bool flowers) Detail(float aboveSea, float slopeDegrees, float meadow, float roll)
         {
-            if (aboveSea < 2f || aboveSea > 250f || slopeDegrees > 25f || aboveSea < beachHeight)
+            if (winter || aboveSea < 2f || aboveSea > 250f || slopeDegrees > 25f || aboveSea < beachHeight)
                 return (0, false);
             int grass = meadow > 0.45f ? 2 : roll < 0.5f ? 1 : 0;
             return (grass, meadow > 0.55f && roll < 0.25f);

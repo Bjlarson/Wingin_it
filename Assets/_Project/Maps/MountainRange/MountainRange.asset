@@ -25,10 +25,339 @@ MonoBehaviour:
   rules:
     beachHeight: 6
     beachFade: 6
-    rockSlope: {x: 22, y: 34}
-    rockHeight: {x: 255, y: 408}
-    snowHeight: {x: 632.4, y: 734.4}
-    snowSlope: {x: 40, y: 55}
-    treeLine: 510
+    rockSlope: {x: 24, y: 36}
+    rockHeight: {x: 5000, y: 5100}
+    snowHeight: {x: -200, y: -100}
+    snowSlope: {x: 34, y: 48}
+    treeLine: 850
     pineHeight: 50
-    treeSpacing: 24
+    treeSpacing: 26
+    winter: 1
+  layout:
+    airfields:
+    - name: West Home Airfield
+      team: 0
+      home: 1
+      twoWay: 0
+      capturable: 0
+      position: {x: -650, y: -1290}
+      elevation: 606
+      yaw: 255
+    - name: East Home Airfield
+      team: 1
+      home: 1
+      twoWay: 0
+      capturable: 0
+      position: {x: 790, y: 1110}
+      elevation: 606.5
+      yaw: 105
+    - name: Central Pass Airfield
+      team: -1
+      home: 0
+      twoWay: 0
+      capturable: 1
+      position: {x: -330, y: 150}
+      elevation: 555.5
+      yaw: 255
+    - name: Ridge Airfield
+      team: -1
+      home: 0
+      twoWay: 0
+      capturable: 1
+      position: {x: 470, y: -330}
+      elevation: 675.5
+      yaw: 165
+    - name: Frozen Valley Airfield
+      team: -1
+      home: 0
+      twoWay: 0
+      capturable: 1
+      position: {x: -1210, y: 710}
+      elevation: 281
+      yaw: 330
+    lanes:
+    - airfield: West Home Airfield
+      name: Valley Run
+      color: {r: 0.6, g: 1, b: 0.2, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: 798.8887, y: -901.7715}
+        agl: 70
+      - xz: {x: 412.51843, y: -1005.2991}
+        agl: 60
+    - airfield: West Home Airfield
+      name: Right Shoulder
+      color: {r: 0.95, g: 0.35, b: 0.9, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: 424.53027, y: -277.38727}
+        agl: 80
+      - xz: {x: 296.04987, y: -570.6325}
+        agl: 70
+      - xz: {x: 264.162, y: -837.99585}
+        agl: 60
+    - airfield: West Home Airfield
+      name: Left Shoulder
+      color: {r: 0.2, g: 0.85, b: 1, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: 599.69763, y: -1317.4912}
+        agl: 80
+      - xz: {x: 457.90466, y: -1251.9569}
+        agl: 70
+      - xz: {x: 322.4892, y: -1132.95}
+        agl: 60
+    - airfield: East Home Airfield
+      name: Valley Run
+      color: {r: 0.6, g: 1, b: 0.2, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: -658.8887, y: 1498.2285}
+        agl: 70
+      - xz: {x: -272.51843, y: 1394.7009}
+        agl: 60
+    - airfield: East Home Airfield
+      name: Right Shoulder
+      color: {r: 0.95, g: 0.35, b: 0.9, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: -646.87683, y: 770.31665}
+        agl: 80
+      - xz: {x: -388.98694, y: 960.0343}
+        agl: 70
+      - xz: {x: -227.68964, y: 1175.6338}
+        agl: 60
+    - airfield: East Home Airfield
+      name: Left Shoulder
+      color: {r: 0.2, g: 0.85, b: 1, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: -278.5243, y: 1758.6567}
+        agl: 80
+      - xz: {x: -188.49512, y: 1631.006}
+        agl: 70
+      - xz: {x: -130.7254, y: 1460.2352}
+        agl: 60
+    - airfield: Central Pass Airfield
+      name: Left Final
+      color: {r: 1, g: 0.8, b: 0.2, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: 1222.4163, y: 151.85815}
+        agl: 70
+      - xz: {x: 771.3412, y: 289.812}
+        agl: 60
+    - airfield: Central Pass Airfield
+      name: Right Final
+      color: {r: 1, g: 0.8, b: 0.2, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: 1015.3611, y: 924.5988}
+        agl: 70
+      - xz: {x: 693.69556, y: 579.5897}
+        agl: 60
+    - airfield: Ridge Airfield
+      name: Left Final
+      color: {r: 1, g: 0.55, b: 0.2, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: 468.14157, y: 1222.4161}
+        agl: 70
+      - xz: {x: 330.1878, y: 771.3412}
+        agl: 60
+    - airfield: Ridge Airfield
+      name: Right Final
+      color: {r: 1, g: 0.55, b: 0.2, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: -304.599, y: 1015.36084}
+        agl: 70
+      - xz: {x: 40.410095, y: 693.6954}
+        agl: 60
+    - airfield: Frozen Valley Airfield
+      name: Left Final
+      color: {r: 1, g: 0.55, b: 0.2, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: -806.40985, y: -789.0381}
+        agl: 70
+      - xz: {x: -789.90356, y: -317.62793}
+        agl: 60
+    - airfield: Frozen Valley Airfield
+      name: Right Final
+      color: {r: 1, g: 0.55, b: 0.2, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: -113.5896, y: -389.03784}
+        agl: 70
+      - xz: {x: -530.096, y: -167.6278}
+        agl: 60
+    bannerStands:
+    - airfield: West Home Airfield
+      distance: 150
+    - airfield: East Home Airfield
+      distance: 150
+    arenas:
+    - modeId: RamRoyale
+      center: {x: -1100, y: 300}
+      radius: 700
+      warning: 120
+      ceiling: 1050
+      hardEdge: 1
+      closeAirfields: 1
+      airStart: 1
+      startRadius: 550
+      startAltitude: 800
+      startSlots: 16
+      fightAreas:
+      - xz: {x: -1100, y: 300}
+        agl: 850
+      - xz: {x: -817.1572, y: 582.84265}
+        agl: 850
+      - xz: {x: -817.1573, y: 17.157318}
+        agl: 850
+      - xz: {x: -1382.8427, y: 17.157227}
+        agl: 850
+      - xz: {x: -1382.8428, y: 582.84265}
+        agl: 850
+    fightAreas:
+    - name: Central Pass
+      point:
+        xz: {x: -330, y: 150}
+        agl: 250
+    - name: Ridge
+      point:
+        xz: {x: 470, y: -330}
+        agl: 250
+    - name: Frozen Valley
+      point:
+        xz: {x: -1210, y: 710}
+        agl: 250
+    - name: North Slopes
+      point:
+        xz: {x: 300, y: 1300}
+        agl: 200
+    - name: South Slopes
+      point:
+        xz: {x: -300, y: -1300}
+        agl: 200
+    - name: Summit Ridge
+      point:
+        xz: {x: 1000, y: -700}
+        agl: 200
+    modes:
+    - modeId: Teams
+      airfields:
+      - West Home Airfield
+      - East Home Airfield
+      - Central Pass Airfield
+      - Ridge Airfield
+      - Frozen Valley Airfield
+      bannerStands: 0
+      arena: 
+      fightAreas: []
+    - modeId: Banner
+      airfields:
+      - West Home Airfield
+      - East Home Airfield
+      - Central Pass Airfield
+      - Ridge Airfield
+      - Frozen Valley Airfield
+      bannerStands: 1
+      arena: 
+      fightAreas: []
+    - modeId: Domination
+      airfields:
+      - West Home Airfield
+      - East Home Airfield
+      - Central Pass Airfield
+      - Ridge Airfield
+      - Frozen Valley Airfield
+      bannerStands: 0
+      arena: 
+      fightAreas: []
+    - modeId: RamRoyale
+      airfields: []
+      bannerStands: 0
+      arena: RamRoyale
+      fightAreas: []
+  regions:
+    areas:
+    - name: Central Pass
+      shape: 0
+      center: {x: -100, y: -50}
+      size: {x: 500, y: 400}
+      landOnly: 1
+    - name: Frozen Valley
+      shape: 1
+      center: {x: -1150, y: 500}
+      size: {x: 450, y: 700}
+      landOnly: 1
+    - name: Summit Ridge
+      shape: 1
+      center: {x: 1000, y: -700}
+      size: {x: 600, y: 600}
+      landOnly: 1
+    - name: North Slopes
+      shape: 1
+      center: {x: 400, y: 1350}
+      size: {x: 900, y: 500}
+      landOnly: 1
+    - name: South Slopes
+      shape: 1
+      center: {x: -400, y: -1350}
+      size: {x: 900, y: 500}
+      landOnly: 1
+    sea: Frozen Lake
+    fallback: High Country
+    seaDepth: 1
+  landmarks:
+  - kind: 0
+    xz: {x: -1100, y: 300}
+    searchHalfSize: {x: 0, y: 0}
+    region: Frozen Valley
+  - kind: 1
+    xz: {x: 1000, y: -700}
+    searchHalfSize: {x: 500, y: 500}
+    region: Summit Ridge
+  minimap:
+    image: {fileID: 0}
+    sea: {r: 0.78, g: 0.82, b: 0.88, a: 1}
+    margin: 1.06
+  sky:
+    skybox: {fileID: 2100000, guid: 78b20538dd9df7349932079551280cfd, type: 2}
+    sunAngles: {x: 40, y: -140}
+    sunIntensity: 1.15
+    sunColor: {r: 0.9, g: 0.95, b: 1, a: 1}
+    fogColor: {r: 0.8, g: 0.85, b: 0.9, a: 1}
+    fogStart: 300
+    fogEnd: 3400
+    clouds:
+    - xz: {x: -1100, y: 600}
+      radius: 230
+      altitude: 700
+      seed: 11
+    - xz: {x: 1450, y: 450}
+      radius: 230
+      altitude: 650
+      seed: 23
+    - xz: {x: 150, y: -1100}
+      radius: 220
+      altitude: 850
+      seed: 37
+    - xz: {x: -50, y: 1000}
+      radius: 220
+      altitude: 850
+      seed: 41
+    - xz: {x: -1300, y: -700}
+      radius: 210
+      altitude: 800
+      seed: 53
+    - xz: {x: 1200, y: 1500}
+      radius: 210
+      altitude: 750
+      seed: 67
+    mirrorClouds: 0
+    cloudCoreHalfHeight: 70
+    cloudClearance: 80
+    snowfall: 1

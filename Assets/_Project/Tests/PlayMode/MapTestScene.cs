@@ -15,9 +15,12 @@ namespace WingingIt.Tests
     /// </summary>
     public static class MapTestScene
     {
+        /// <summary>The first, hand-built Island: the tests' level (left out of Build Settings; the editor loads it by path).</summary>
         public const string Island = "Map_Island";
+        public const string IslandV2 = "Map_IslandV2";
         public const string BroadReach = "Map_BroadReach";
         public const string ShatteredArchipelago = "Map_ShatteredArchipelago";
+        public const string MountainRange = "Map_MountainRange";
 
         public static MatchManager Match { get; private set; }
         public static PlaneController Player { get; private set; }

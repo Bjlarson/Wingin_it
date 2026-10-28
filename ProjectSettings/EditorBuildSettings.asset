@@ -9,22 +9,22 @@ EditorBuildSettings:
     path: Assets/_Project/Scenes/MainMenu.unity
     guid: bef25643a9a898044882153eb86e6741
   - enabled: 1
-    path: Assets/_Project/Scenes/Island.unity
-    guid: bc361a42be35e9440a40fdca94c97a92
-  - enabled: 1
     path: Assets/_Project/Scenes/SampleScene.unity
     guid: 99c9720ab356a0642a771bea13969a05
   - enabled: 1
     path: Assets/_Project/Scenes/FlightTest.unity
     guid: 0a17bc7ec65c70b4fb185ddd6c99d4e5
   - enabled: 1
-    path: Assets/_Project/Scenes/Maps/Map_Island.unity
-    guid: 2fe7a4fc472f3c54badd50e54ec97c8b
+    path: Assets/_Project/Scenes/Maps/Map_IslandV2.unity
+    guid: d343e5923b011ad45aa8e58f746809e9
   - enabled: 1
     path: Assets/_Project/Scenes/Maps/Map_BroadReach.unity
     guid: 482274ef0f781a44a958c8014f40dcfb
   - enabled: 1
     path: Assets/_Project/Scenes/Maps/Map_ShatteredArchipelago.unity
     guid: d6a81f40029f1f041909d9a40d977c86
+  - enabled: 1
+    path: Assets/_Project/Scenes/Maps/Map_MountainRange.unity
+    guid: 1bcd57a33d504104dab59a6b2cdee4d4
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}

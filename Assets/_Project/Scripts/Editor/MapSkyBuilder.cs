@@ -22,6 +22,7 @@ namespace WingingIt.Editor
             var sun = RenderSettings.sun;
             sun.transform.rotation = Quaternion.Euler(sky.sunAngles.x, sky.sunAngles.y, 0f);
             sun.intensity = sky.sunIntensity;
+            sun.color = sky.sunColor;
             RenderSettings.fogColor = sky.fogColor;
             RenderSettings.skybox = sky.skybox != null ? sky.skybox : GreyboxSky();
         }
@@ -37,6 +38,60 @@ namespace WingingIt.Editor
             sky.SetFloat("_AtmosphereThickness", 0.9f);
             AssetDatabase.CreateAsset(sky, SkyPath);
             return sky;
+        }
+
+        /// <summary>
+        /// A pale, hazy winter sky: a washed-out grey-blue atmosphere, a small soft sun and the lower half the snow fog's
+        /// colour, so the far peaks melt into it. Made or updated in place.
+        /// </summary>
+        internal static Material WinterSky(Color fog)
+        {
+            string path = B.MaterialsFolder + "/Sky_Winter.mat";
+            var sky = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (sky == null)
+            {
+                sky = new Material(Shader.Find("Skybox/Procedural"));
+                AssetDatabase.CreateAsset(sky, path);
+            }
+            sky.SetColor("_SkyTint", new Color(0.56f, 0.59f, 0.64f)); // grey: an overcast, snowy sky rather than a deep blue one
+            sky.SetColor("_GroundColor", fog);
+            sky.SetFloat("_AtmosphereThickness", 0.7f); // thin enough for no orange at the horizon
+            sky.SetFloat("_Exposure", 1.5f);
+            sky.SetFloat("_SunSize", 0.03f);
+            EditorUtility.SetDirty(sky);
+            return sky;
+        }
+
+        /// <summary>Unlit, opaque white for <see cref="Snowfall"/>'s flakes. Made or updated in place.</summary>
+        internal static Material SnowflakeMaterial()
+        {
+            string path = B.MaterialsFolder + "/Env_Snowflake.mat";
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (mat == null)
+            {
+                mat = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
+                AssetDatabase.CreateAsset(mat, path);
+            }
+            mat.SetColor("_BaseColor", Color.white);
+            mat.SetFloat("_Surface", 1f); // transparent, so the flakes can fade in and out
+            mat.SetFloat("_Blend", 0f);   // alpha
+            mat.SetFloat("_ZWrite", 0f);
+            mat.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            mat.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            mat.enableInstancing = true;
+            EditorUtility.SetDirty(mat);
+            return mat;
+        }
+
+        /// <summary>Falling snow round the camera, under <paramref name="parent"/>.</summary>
+        public static Snowfall BuildSnowfall(Transform parent)
+        {
+            var snow = new GameObject("Snowfall").AddComponent<Snowfall>();
+            snow.transform.SetParent(parent, false);
+            snow.Configure(SnowflakeMaterial());
+            return snow;
         }
 
         /// <summary>

@@ -70,7 +70,7 @@ namespace WingingIt.Tests
             yield return PickClassAndLoad();
             var map = MapScene.Current;
             Assert.IsNotNull(map, "the map scene is loaded");
-            Assert.AreEqual("Island", map.Definition.name);
+            Assert.AreEqual("IslandV2", map.Definition.name, "the first map card");
             Assert.AreEqual(map.gameObject.scene, SceneManager.GetActiveScene(), "the map's sky and fog are in force");
             Assert.AreEqual(2, SceneManager.sceneCount, "the menu scene stays loaded beside it");
             Assert.IsNull(MenuStage.Current, "the menu stage hides");

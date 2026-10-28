@@ -8,6 +8,7 @@ namespace WingingIt.Maps
         Island,
         BroadReach,
         Archipelago,
+        Mountains,
     }
 
     /// <summary>
@@ -31,10 +32,10 @@ namespace WingingIt.Maps
         {
             new MapInfo
             {
-                Scene = "Map_Island",
+                Scene = "Map_IslandV2",
                 Name = "The Island",
-                Pitch = "City, mountains, desert and sea round one island. The all-rounder.",
-                Size = "5.2 KM",
+                Pitch = "A long island split by a strait: a green plateau north, sharp peaks south. The all-rounder.",
+                Size = "6.6 KM",
                 Terrain = "MIXED",
                 Sketch = MapSketch.Island,
             },
@@ -55,6 +56,15 @@ namespace WingingIt.Maps
                 Size = "3.8 KM",
                 Terrain = "TIGHT",
                 Sketch = MapSketch.Archipelago,
+            },
+            new MapInfo
+            {
+                Scene = "Map_MountainRange",
+                Name = "Mountain Range",
+                Pitch = "Snowbound peaks and frozen passes under falling snow. Thread the valleys or climb above them.",
+                Size = "4.2 KM",
+                Terrain = "SNOW",
+                Sketch = MapSketch.Mountains,
             },
         };
 

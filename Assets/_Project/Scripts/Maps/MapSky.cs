@@ -30,6 +30,8 @@ namespace WingingIt.Maps
         public Material skybox;
         public Vector2 sunAngles = new(48f, -35f);
         public float sunIntensity = 1.4f;
+        [Tooltip("The sun's colour: warm by default, cool white on a winter map.")]
+        public Color sunColor = new(1f, 0.957f, 0.839f);
         public Color fogColor = new(0.72f, 0.82f, 0.92f);
         public float fogStart = 900f, fogEnd = 6500f;
         public List<CloudBankAnchor> clouds = new();
@@ -39,6 +41,8 @@ namespace WingingIt.Maps
         public float cloudCoreHalfHeight = 70f;
         [Tooltip("A bank's underside stays at least this far above anything solid below it.")]
         public float cloudClearance = 80f;
+        [Tooltip("Snow falls round the camera (a Snowfall object in the map scene).")]
+        public bool snowfall;
 
         /// <summary>Every bank built, mirrors included, in build order (each bank then its mirror).</summary>
         public IEnumerable<CloudBankAnchor> AllClouds()

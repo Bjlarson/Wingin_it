@@ -9,14 +9,18 @@ namespace WingingIt.Maps
     /// Loads a map scene (<c>Scenes/Maps/Map_&lt;name&gt;</c>) beside the main menu scene, which stays loaded and keeps
     /// the match, the player, the HUD and the cameras. The map becomes the active scene, so its sun, fog and sky take
     /// over, and the <see cref="MenuStage"/> is hidden. Leaving the match reloads the menu scene on its own, which
-    /// unloads the map with it.
+    /// unloads the map with it. In the editor a map scene missing from Build Settings (a test map, which the release
+    /// leaves out) still loads, by its path under <see cref="ScenesFolder"/>.
     /// </summary>
     public class MapLoader : MonoBehaviour
     {
         [Tooltip("The map scene loaded when none is named (scene name, listed in Build Settings). The match names the picked one.")]
-        [SerializeField] string defaultMap = "Map_Island";
+        [SerializeField] string defaultMap = "Map_IslandV2";
         [Tooltip("The menu's backdrop, hidden once a map is in.")]
         [SerializeField] MenuStage stage;
+
+        /// <summary>Where the map scenes live (the editor's way to load a test map that isn't in Build Settings).</summary>
+        public const string ScenesFolder = "Assets/_Project/Scenes/Maps";
 
         Scene _loaded;
 
@@ -48,7 +52,7 @@ namespace WingingIt.Maps
             MapName = string.IsNullOrEmpty(mapScene) ? defaultMap : mapScene;
             IsLoading = true;
             Progress = 0f;
-            var op = SceneManager.LoadSceneAsync(MapName, LoadSceneMode.Additive);
+            var op = LoadAsync(MapName);
             if (op == null)
             {
                 IsLoading = false;
@@ -73,6 +77,17 @@ namespace WingingIt.Maps
             Progress = 1f;
             IsLoading = false;
             done?.Invoke(Map);
+        }
+
+        static AsyncOperation LoadAsync(string mapScene)
+        {
+#if UNITY_EDITOR
+            string path = $"{ScenesFolder}/{mapScene}.unity";
+            if (SceneUtility.GetBuildIndexByScenePath(path) < 0 && System.IO.File.Exists(path))
+                return UnityEditor.SceneManagement.EditorSceneManager.LoadSceneAsyncInPlayMode(path,
+                    new LoadSceneParameters(LoadSceneMode.Additive));
+#endif
+            return SceneManager.LoadSceneAsync(mapScene, LoadSceneMode.Additive);
         }
     }
 }

@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5ad68c3fa88fa04383a14113509ef11, type: 3}
   m_Name: Island
   m_EditorClassIdentifier: WingingIt.Runtime::WingingIt.Maps.MapDefinition
-  displayName: The Island
+  displayName: Test Island
   heightmapRaw: {fileID: 4900000, guid: 3098d294a88cc0946a5eb714fc060346, type: 3}
   heightmapImage: {fileID: 0}
   worldSize: 5600
@@ -32,6 +32,7 @@ MonoBehaviour:
     treeLine: 430
     pineHeight: 50
     treeSpacing: 24
+    winter: 0
   layout:
     airfields:
     - name: West Home Airfield
@@ -343,6 +344,7 @@ MonoBehaviour:
     sea: Sea
     fallback: Grassland
     seaDepth: 1
+  landmarks: []
   minimap:
     image: {fileID: 0}
     sea: {r: 0.12, g: 0.3, b: 0.42, a: 1}
@@ -382,3 +384,4 @@ MonoBehaviour:
     mirrorClouds: 1
     cloudCoreHalfHeight: 70
     cloudClearance: 80
+    snowfall: 0

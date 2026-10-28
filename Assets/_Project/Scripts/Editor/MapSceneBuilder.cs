@@ -19,8 +19,19 @@ namespace WingingIt.Editor
         public const string ScenesFolder = B.Root + "/Scenes/Maps";
         const string MapsFolder = B.Root + "/Maps";
 
-        /// <summary>The maps decided on for the game (2026-10-26), by definition name.</summary>
-        public static readonly string[] GameMaps = { "Island", "BroadReach", "ShatteredArchipelago" };
+        /// <summary>
+        /// The maps that ship, by definition name (2026-10-27: the Island v2 heightmap replaced the hand-built Island,
+        /// and the snowy Mountain Range joined). Each is listed in Build Settings.
+        /// </summary>
+        public static readonly string[] GameMaps = { "IslandV2", "BroadReach", "ShatteredArchipelago", "MountainRange" };
+
+        /// <summary>
+        /// Maps built for the tests only, kept out of Build Settings so a release leaves them out: the first, hand-built
+        /// Island, which most PlayMode tests fly on. The editor loads them by path (<see cref="MapLoader"/>).
+        /// </summary>
+        public static readonly string[] TestMaps = { "Island" };
+
+        public static bool IsGameMap(string mapName) => System.Array.IndexOf(GameMaps, mapName) >= 0;
 
         public static string ScenePath(string mapName) => $"{ScenesFolder}/Map_{mapName}.unity";
 
@@ -46,13 +57,13 @@ namespace WingingIt.Editor
         }
 
         /// <summary>
-        /// Builds every map in <see cref="GameMaps"/> (a few minutes: the Island's city and each terrain's scatter), then
-        /// reopens the scene that was open before.
+        /// Builds every map in <see cref="GameMaps"/> and <see cref="TestMaps"/> (a few minutes: the test Island's city
+        /// and each terrain's scatter), then reopens the scene that was open before.
         /// </summary>
         public static void BuildAll()
         {
             string open = SceneManager.GetActiveScene().path;
-            foreach (string name in GameMaps)
+            foreach (string name in System.Linq.Enumerable.Concat(GameMaps, TestMaps))
                 Build(LoadDefinition(name) ?? throw new System.InvalidOperationException($"No map definition for {name}."));
             if (!string.IsNullOrEmpty(open))
                 EditorSceneManager.OpenScene(open);
@@ -77,6 +88,8 @@ namespace WingingIt.Editor
             BuildLandmarks(map, world, terrain);
             Physics.SyncTransforms();
             MapSkyBuilder.BuildClouds(world, sky, NatureModels.Load());
+            if (sky.snowfall)
+                MapSkyBuilder.BuildSnowfall(world);
             Save(scene, path);
         }
 
@@ -123,7 +136,8 @@ namespace WingingIt.Editor
         }
 
         /// <summary>
-        /// Saves a map scene and lists it in Build Settings after the scenes already there. Takes the definition's path,
+        /// Saves a map scene and lists it in Build Settings after the scenes already there (a game map) or takes it out
+        /// (a test map). Takes the definition's path,
         /// not the asset: the builders' asset imports can unload it, so it is loaded again and set on the marker here.
         /// </summary>
         internal static void Save(Scene scene, string definitionPath)
@@ -135,7 +149,10 @@ namespace WingingIt.Editor
             B.EnsureFolder(ScenesFolder);
             string path = ScenePath(map.name);
             EditorSceneManager.SaveScene(scene, path);
-            B.AddSceneToBuildSettings(path, first: false);
+            if (IsGameMap(map.name))
+                B.AddSceneToBuildSettings(path, first: false);
+            else
+                B.RemoveSceneFromBuildSettings(path);
             AssetDatabase.SaveAssets();
             Debug.Log($"[Winging It] Built {path}");
         }

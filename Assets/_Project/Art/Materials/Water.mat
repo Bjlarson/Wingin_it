@@ -48,6 +48,6 @@ Material:
     - _Deep: {r: 0.11764706, g: 0.43137255, b: 0.6117647, a: 1}
     - _Foam: {r: 0.95686275, g: 0.9843137, b: 1, a: 1}
     - _Shallow: {r: 0.24705882, g: 0.75686276, b: 0.7882353, a: 1}
-    - _ShoreRect: {r: -2048, g: -2048, b: 0.00024414062, a: 0}
+    - _ShoreRect: {r: -2800, g: -2800, b: 0.00017857143, a: 0}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

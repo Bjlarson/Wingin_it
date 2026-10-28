@@ -34,7 +34,10 @@ namespace WingingIt.Tests
 
         static IEnumerable<string> Modes => new[] { "Teams", "Banner", "Domination", "RamRoyale" };
         /// <summary>Map scenes to survey: every game map.</summary>
-        static IEnumerable<string> MapScenes => new[] { MapTestScene.Island, MapTestScene.BroadReach, MapTestScene.ShatteredArchipelago };
+        static IEnumerable<string> MapScenes => new[]
+        {
+            MapTestScene.Island, MapTestScene.IslandV2, MapTestScene.BroadReach, MapTestScene.ShatteredArchipelago, MapTestScene.MountainRange,
+        };
 
         [TearDown]
         public void ResetTime()

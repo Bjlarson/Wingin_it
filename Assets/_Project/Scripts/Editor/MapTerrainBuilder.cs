@@ -74,7 +74,7 @@ namespace WingingIt.Editor
                 definition = ScriptableObject.CreateInstance<MapDefinition>();
                 AssetDatabase.CreateAsset(definition, $"{MapsFolder}/Island/Island.asset");
             }
-            definition.displayName = "The Island";
+            definition.displayName = "Test Island"; // the tests' level, left out of the release
             definition.worldSize = 5600f;
             definition.baseHeight = -40f;
             definition.heightRange = 800f;
@@ -220,7 +220,7 @@ namespace WingingIt.Editor
         public static FlightBoundary BuildSeaAndBoundary(MapDefinition map, Transform parent, bool buoys = true)
         {
             var heightmap = LoadGround(map);
-            MapOceanBuilder.Build(parent, map.worldSize, (x, z) => map.GroundHeight(heightmap, x, z) - map.seaLevel);
+            MapOceanBuilder.Build(parent, map.worldSize, (x, z) => map.GroundHeight(heightmap, x, z) - map.seaLevel, map.name);
             return MapBoundaryBuilder.Build(parent, map.boundaryRadius, map.ceiling, buoys, MarkerModels.Load());
         }
 

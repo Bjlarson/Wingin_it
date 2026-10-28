@@ -18,7 +18,7 @@ namespace WingingIt.Editor
     {
         public const string ScenePath = B.Root + "/Scenes/MainMenu.unity";
         /// <summary>The map a match loads until the setup has a map select.</summary>
-        const string DefaultMap = "Map_Island";
+        const string DefaultMap = "Map_IslandV2";
 
         const float ApronSize = 400f;
         const float FieldSize = 6000f;

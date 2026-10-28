@@ -68,7 +68,7 @@ namespace WingingIt.Editor
 
         public static readonly Spec IslandV2 = new()
         {
-            name = "IslandV2", displayName = "The Island (v2)", sourcePng = "Design/05-Levels/island.png", pad = true,
+            name = "IslandV2", displayName = "The Island", sourcePng = "Design/05-Levels/island.png", pad = true,
             resolution = 2049, worldSize = 7000f, baseHeight = -40f, heightRange = 1440f,
             groundMin = -40f, groundMax = 1400f, gamma = 1.6f, seaFade = true, floorMin = -40f, blurRadius = 2, blurPasses = 3,
             boundaryRadius = 3300f, ceiling = 1500f, seed = 6303,

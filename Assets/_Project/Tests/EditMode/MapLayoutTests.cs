@@ -59,7 +59,7 @@ namespace WingingIt.Tests
         }
 
         /// <summary>The new maps whose layouts are written by hand (Write Broad Reach / Shattered Archipelago Definition).</summary>
-        static readonly string[] NewMaps = { "BroadReach", "ShatteredArchipelago" };
+        static readonly string[] NewMaps = { "IslandV2", "BroadReach", "ShatteredArchipelago", "MountainRange" };
 
         [TestCaseSource(nameof(NewMaps))]
         public void NewMapLayoutIsSound(string mapName)

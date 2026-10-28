@@ -201,6 +201,53 @@ Phase 6.7 builds **three maps**. Every map supports every mode (Teams, Banner, D
 
 Each new map is built from a heightmap by the Phase 6.7 terrain tool. The Island is baked through the same tool first, to prove it matches.
 
+**Update 2026-10-27: four shipped maps, and the first Island becomes the tests' level.** The hand-built Island (`Map_Island`, definition name `Island`, now called **Test Island**) is kept as the level most PlayMode tests fly on, but it has no map select card and is out of Build Settings, so a release leaves it out (`MapSceneBuilder.TestMaps`; in the editor `MapLoader` loads it by path). The old standalone `Island.unity` is out of Build Settings too. The shipped maps, in map select order:
+
+| Map | Scene | Source |
+|---|---|---|
+| **The Island** | `Map_IslandV2` | `island.png` heightmap (replaces the hand-built Island) |
+| **Broad Reach** | `Map_BroadReach` | `Valley.png` |
+| **Shattered Archipelago** | `Map_ShatteredArchipelago` | `archipelago.png` |
+| **Mountain Range** (winter) | `Map_MountainRange` | `Mountins.png` |
+
+### The Island v2 (built 2026-10-27)
+
+Built from `island.png` (7000 m, boundary radius 3300 m, ceiling 1500 m, sea all round): one long island running north to south, split by a shallow **strait**. North of it a green **plateau** (150-300 m), south of it the **middle hills** and then sharp **south peaks** (to 1.3 km). Its definition is written by `Winging It/Map/Write Island v2 Definition` (`IslandV2Definition`); `Build Map Scene` then makes `Map_IslandV2`.
+
+The island is only ~1.5 km wide, so the line equally far from two homes can only run down its spine if the homes stand off its coasts. Like the Archipelago's, they are **strips built out of the sea** (8 m).
+
+| Piece | Where | Notes |
+|---|---|---|
+| West Home (team 0) | (-1500, -400), lands north, 8 m | Off the west coast. Open Sea straight in, Coast Run in along the island, Outer Bend from further out; banner stand 150 m past the far end |
+| East Home (team 1) | (1800, 400), lands south, 8 m | Off the east coast; the same three lanes, turned round |
+| Central | (100, 225), both ends, 8 m | Capture field on a causeway across the strait, joining the two halves |
+| North Plateau | (-350, 2150), lands north-west, ~250 m | Capture field on the plateau; one lane in over the island's shoulder |
+| South Hills | (550, -1550), both ends, ~80 m | Capture field in a meadow among the southern hills |
+| Ram Royale arena | 1 km circle round (100, 200), ceiling 800 m | Over the strait; the plateau's edge north, the hills and one 820 m peak south-west |
+| Landmarks | Spire on the strait's south shore, Summit Radar on the highest south peak, Pyramid on the plateau | Each names its region (The Strait, South Peaks, North Plateau) |
+| Clouds | 5 banks mirrored through the middle | The old Island's light; fog out to 7 km |
+
+Each capture field is within 1.5% as far from one home as the other.
+
+### Mountain Range (built 2026-10-27): the snowy map
+
+Built from `Mountins.png` (4608 m, boundary radius 2100 m, ceiling 1100 m, no sea): ridges and valleys to the edge of the map, peaks just over 1 km. Its definition is written by `Winging It/Map/Write Mountain Range Definition` (`MountainRangeDefinition`).
+
+**The winter look:** snow covers every slope under ~34°; steeper faces show bare rock (`TerrainRules` with snow from below the valley floors). `TerrainRules.winter` turns off grass and flowers and grows the snowy pines in woods with clearings instead of evenly, up to an 850 m tree line, with snowy boulders above it. The sky is a grey-blue winter sky (`Sky_Winter.mat`, `MapSkyBuilder.WinterSky`), the sun cool white and 40° up (`MapSky.sunColor`, new), and the fog pale blue-grey and close (300-3400 m), which also hides the map's edge. **Snow falls** round the camera (`MapSky.snowfall` → a `Snowfall` object in the map scene: ~1200 flakes a second in a 160 x 80 x 160 m box that follows the main camera, drifting with the wind, so a fast plane streams through them).
+
+| Piece | Where | Notes |
+|---|---|---|
+| West Home (team 0) | (-650, -1290), ~605 m | In a south-western valley; Valley Run straight in, Left and Right Shoulder lanes |
+| East Home (team 1) | (790, 1110), ~605 m | In a north-eastern valley, the same height as the west home |
+| Central Pass | (-330, 150), one way | Capture field cut into the pass in the middle |
+| Ridge | (470, -330), one way | Capture field under the Summit Ridge |
+| Frozen Valley | (-1210, 710), one way, ~285 m | Capture field on the low north-west valley floor |
+| Ram Royale arena | 700 m circle round (-1100, 300), ceiling 1050 m | A bowl over the Frozen Valley, walled by ridges up to 760 m; the Spire inside |
+| Landmarks | Spire in the Frozen Valley, Summit Radar on the Summit Ridge | |
+| Clouds | 6 banks over the valleys, placed by hand (not mirrored: a valley's mirror is a ridge) | |
+
+The capture fields are notches cut into the slopes (the pad levelling cuts up to ~130 m), each landed one way; Central Pass and Ridge are exactly as far from both homes, the Frozen Valley within 2%.
+
 ### Broad Reach (built 2026-10-27)
 
 Built from `Valley.png` (8192 m, boundary radius 3800 m, ceiling 1500 m, no sea): a long north-south valley with a rocky knoll in the middle (the **Central Spur**), the **West Ridges** and the open **West Plains** beyond them, and high **East Ridges**. Its definition is written by `Winging It/Map/Write Broad Reach Definition` (`BroadReachDefinition`, helpers in `MapLayoutWriter`); `Build Map Scene` then makes `Map_BroadReach`.
