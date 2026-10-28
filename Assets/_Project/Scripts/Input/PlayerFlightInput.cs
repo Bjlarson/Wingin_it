@@ -80,6 +80,7 @@ namespace WingingIt.Input
         public event Action NextClassPressed;
 
         public ControlMode Mode => controlMode;
+        public InputActionAsset Actions => actions;
         public bool UsingGamepad => _lastDeviceWasGamepad;
         /// <summary>Set by <c>TouchControlsUI</c> while the on-screen controls are showing.</summary>
         public bool TouchControlsActive { get; set; }

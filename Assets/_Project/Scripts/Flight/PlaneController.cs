@@ -171,6 +171,10 @@ namespace WingingIt.Flight
         public bool CarryingBanner { get; set; }
         /// <summary>No guns, rockets, missiles or bombs (Ram Royale). Set by the match when the plane spawns; cleared on respawn.</summary>
         public bool WeaponsOff { get; set; }
+        /// <summary>No Boost and no class ability (Ram Royale). Set by the match when the plane spawns; cleared on respawn.</summary>
+        public bool AbilitiesOff { get; set; }
+        /// <summary>Boost can be used at all: not towing a banner, not switched off by the match, and the engine runs.</summary>
+        public bool CanBoost => !CarryingBanner && !AbilitiesOff && Modifiers.Get(FlightStat.Thrust) > 0f;
         /// <summary>
         /// Flying into another plane damages both by the closing speed (<see cref="RamRules"/>) instead of crashing this
         /// one (Ram Royale). Set by the match when the plane spawns; cleared on respawn.
@@ -297,6 +301,7 @@ namespace WingingIt.Flight
             Modifiers.Clear();
             CarryingBanner = false;
             WeaponsOff = false;
+            AbilitiesOff = false;
             RamDamage = false;
             _ramIgnoreUntil.Clear();
             ResetState(position, rotation, throttle);
@@ -449,7 +454,7 @@ namespace WingingIt.Flight
                 Throttle = Mathf.Clamp01(Throttle + input.Throttle * stats.throttleChangeRate * dt);
 
             // Need a little meter to start a boost, so tapping on empty doesn't flicker.
-            bool wantsBoost = input.Boost && !CarryingBanner && Modifiers.Get(FlightStat.Thrust) > 0f;
+            bool wantsBoost = input.Boost && CanBoost;
             IsBoosting = wantsBoost && (IsBoosting ? BoostMeter > 0f : BoostMeter > 0.15f);
 
             if (IsBoosting)
@@ -470,6 +475,7 @@ namespace WingingIt.Flight
         void UpdateSpeed(float dt)
         {
             var m = Modifiers;
+            float startSpeed = Speed;
             float thrust = m.Get(FlightStat.Thrust) * (1f - m.Get(FlightStat.EngineSputter) * SputterDip());
             EffectiveThrust = thrust;
             float maxSpeed = m.Get(FlightStat.MaxSpeed);
@@ -504,6 +510,8 @@ namespace WingingIt.Flight
                 Speed -= stats.flareDrag * Mathf.Clamp01(aboveAngle / FlareFullAngle) * slow * dt;
             }
             Speed = Mathf.Clamp(Speed, 0f, boostMax * 1.25f);
+            if (CarryingBanner)
+                Speed = BannerDrag.CapSpeed(startSpeed, Speed, maxSpeed, stats.deceleration, dt);
         }
 
         /// <summary>0 normally, rising to 1 during short, irregular engine coughs.</summary>

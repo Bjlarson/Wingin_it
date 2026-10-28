@@ -43,7 +43,6 @@ namespace WingingIt.Editor
             map.regions = Regions();
             map.landmarks = new()
             {
-                new LandmarkAnchor { kind = LandmarkKind.Spire, xz = ValleyFloor, region = "Frozen Valley" },
                 new LandmarkAnchor { kind = LandmarkKind.SummitRadar, xz = new Vector2(1000f, -700f), searchHalfSize = new Vector2(500f, 500f), region = "Summit Ridge" },
             };
             map.sky = Sky();

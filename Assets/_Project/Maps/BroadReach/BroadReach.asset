@@ -26,12 +26,13 @@ MonoBehaviour:
     beachHeight: 6
     beachFade: 6
     rockSlope: {x: 22, y: 34}
-    rockHeight: {x: 350, y: 560}
-    snowHeight: {x: 868, y: 1008.00006}
+    rockHeight: {x: 250, y: 400}
+    snowHeight: {x: 620, y: 720}
     snowSlope: {x: 40, y: 55}
-    treeLine: 700
+    treeLine: 500
     pineHeight: 50
     treeSpacing: 24
+    winter: 0
   layout:
     airfields:
     - name: South Home Airfield
@@ -40,7 +41,7 @@ MonoBehaviour:
       twoWay: 0
       capturable: 0
       position: {x: 400, y: -2700}
-      elevation: 30
+      elevation: 22
       yaw: 180
     - name: North Home Airfield
       team: 1
@@ -48,7 +49,7 @@ MonoBehaviour:
       twoWay: 0
       capturable: 0
       position: {x: 0, y: 2300}
-      elevation: 72
+      elevation: 53
       yaw: 0
     - name: Central Airfield
       team: -1
@@ -56,7 +57,7 @@ MonoBehaviour:
       twoWay: 1
       capturable: 1
       position: {x: 800, y: -150}
-      elevation: 35.5
+      elevation: 26
       yaw: 0
     - name: Ridge Gap Airfield
       team: -1
@@ -64,7 +65,7 @@ MonoBehaviour:
       twoWay: 1
       capturable: 1
       position: {x: -600, y: -280}
-      elevation: 90
+      elevation: 66
       yaw: 0
     - name: West Plain Airfield
       team: -1
@@ -72,7 +73,7 @@ MonoBehaviour:
       twoWay: 1
       capturable: 1
       position: {x: -2400, y: -400}
-      elevation: 27.5
+      elevation: 20
       yaw: 165
     lanes:
     - airfield: South Home Airfield
@@ -316,10 +317,6 @@ MonoBehaviour:
     fallback: South Valley
     seaDepth: 1
   landmarks:
-  - kind: 0
-    xz: {x: 90, y: -620}
-    searchHalfSize: {x: 0, y: 0}
-    region: Central Spur
   - kind: 1
     xz: {x: 2800, y: 0}
     searchHalfSize: {x: 800, y: 1800}
@@ -336,6 +333,7 @@ MonoBehaviour:
     skybox: {fileID: 2100000, guid: 453db78019ab37d459d5e99adf7e5795, type: 2}
     sunAngles: {x: 48, y: -35}
     sunIntensity: 1.4
+    sunColor: {r: 1, g: 0.957, b: 0.839, a: 1}
     fogColor: {r: 0.72, g: 0.82, b: 0.92, a: 1}
     fogStart: 1200
     fogEnd: 9000
@@ -367,3 +365,4 @@ MonoBehaviour:
     mirrorClouds: 1
     cloudCoreHalfHeight: 70
     cloudClearance: 80
+    snowfall: 0

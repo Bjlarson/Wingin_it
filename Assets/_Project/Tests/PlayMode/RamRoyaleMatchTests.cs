@@ -71,7 +71,7 @@ namespace WingingIt.Tests
         }
 
         [UnityTest]
-        public IEnumerator WeaponsAreOff_AndSupportFliesARamBoost()
+        public IEnumerator WeaponsAbilitiesAndBoostAreOff()
         {
             var planes = PlaneController.All.ToList();
             foreach (var plane in planes)
@@ -83,12 +83,14 @@ namespace WingingIt.Tests
                 Assert.IsFalse(plane.GetComponent<PlaneMissiles>().IsEquipped, $"{plane.name}: no missiles");
                 Assert.IsFalse(plane.GetComponent<PlaneBombs>().IsEquipped, $"{plane.name}: no bombs");
             }
-            var supports = planes.Where(p => p.Stats.ability is RepairAuraAbility).ToList();
-            Assert.IsNotEmpty(supports, "the roster has Support bots");
-            foreach (var plane in supports)
-                Assert.IsInstanceOf<RamBoostAbility>(plane.GetComponent<PlaneAbility>().Stats, $"{plane.name}: Ram Boost in place of the aura");
-            foreach (var plane in planes.Where(p => p.Stats.ability is not RepairAuraAbility))
-                Assert.AreSame(plane.Stats.ability, plane.GetComponent<PlaneAbility>().Stats, $"{plane.name} keeps its class ability");
+            foreach (var plane in planes)
+            {
+                Assert.IsTrue(plane.AbilitiesOff, $"{plane.name} has abilities off");
+                Assert.IsFalse(plane.CanBoost, $"{plane.name}: no Boost");
+                var ability = plane.GetComponent<PlaneAbility>();
+                Assert.IsFalse(ability.IsEquipped, $"{plane.name}: no class ability");
+                Assert.IsFalse(ability.TryActivate(), $"{plane.name}: the ability won't start");
+            }
 
             // Holding every trigger fires nothing.
             var guns = _player.GetComponent<PlaneGuns>();
@@ -99,9 +101,12 @@ namespace WingingIt.Tests
             _player.GetComponent<PlayerFlightInput>().enabled = false; // so the test's input stands
             for (int i = 0; i < 30; i++)
             {
-                _player.SetInput(new FlightInput { Throttle = 1f, FireGuns = true, FireRockets = true, FireMissile = i % 2 == 0, DropBomb = true });
+                _player.SetInput(new FlightInput { Throttle = 1f, FireGuns = true, FireRockets = true, FireMissile = i % 2 == 0, DropBomb = true,
+                    Boost = true, UseAbility = i % 2 == 0 });
                 yield return new WaitForFixedUpdate();
                 Assert.IsFalse(guns.IsFiring, "the guns don't fire");
+                Assert.IsFalse(_player.IsBoosting, "no Boost");
+                Assert.IsFalse(_player.GetComponent<PlaneAbility>().IsActive, "no ability");
             }
             Assert.AreEqual(rocketAmmo, rockets.Ammo, "no rockets fired");
             Assert.AreEqual(missileAmmo, missiles.Ammo, "no missiles fired");
@@ -140,6 +145,50 @@ namespace WingingIt.Tests
             Assert.IsFalse(_match.IsSpectating, "the scoreboard ends spectating");
             Assert.AreEqual(_player, rig.Target, "and the camera is the player's again");
             Assert.IsFalse(rig.Spectating);
+        }
+
+        [UnityTest]
+        public IEnumerator Crash_NeverOpensThePauseMenu_UntilASurvivorIsOnScreen()
+        {
+            _player.Crash(_player.Position);
+            _match.OpenMenu(); // a back gesture, a mashed Start or a pad blip in the same frame as the crash
+            Assert.IsFalse(_match.MenuOpen, "no menu while going down");
+            yield return null;
+            Assert.IsTrue(_match.IsSpectating);
+            _match.OpenMenu();
+            Assert.IsFalse(_match.MenuOpen, "no menu over the player's own explosion");
+
+            yield return WaitUntil(() => _match.Spectated != null, 5f);
+            _match.OpenMenu();
+            Assert.IsTrue(_match.MenuOpen, "watching a survivor, the menu can open again (to leave)");
+        }
+
+        [UnityTest]
+        public IEnumerator OutOfLives_WatchesToTheLastPlane_ThenTheScoreboard()
+        {
+            var rig = Object.FindAnyObjectByType<FlightCameraRig>();
+            _player.Crash(_player.Position);
+            yield return null;
+            Assert.IsTrue(_match.IsSpectating);
+
+            var bots = PlaneController.All.Where(p => p != _player).ToList();
+            foreach (var bot in bots.Skip(2))
+                bot.Crash(bot.Position);
+            yield return null;
+            Assert.AreEqual(MatchPhase.Playing, _match.Phase, "two still flying: keep watching");
+            Assert.IsFalse(_match.Finishing);
+
+            bots[1].Crash(bots[1].Position);
+            yield return null;
+            Assert.AreEqual(MatchPhase.Playing, _match.Phase, "no cut straight to the results");
+            Assert.IsTrue(_match.Finishing, "decided: watching the winner");
+            Assert.AreEqual(bots[0], _match.Spectated, "the camera goes to the last plane flying");
+            Assert.AreEqual(bots[0], rig.Target);
+
+            yield return WaitUntil(() => _match.Phase == MatchPhase.Ended, 6f);
+            Assert.AreEqual(MatchPhase.Ended, _match.Phase, "then the scoreboard");
+            Assert.AreEqual(bots[0].Team, _match.Winner);
+            Assert.IsFalse(_match.Finishing);
         }
 
         [UnityTest]

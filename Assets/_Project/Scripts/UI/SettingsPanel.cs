@@ -298,12 +298,14 @@ namespace WingingIt.UI
                         rows.Add(Toggle("TOUCH GESTURES ONLY (FOLLOW)", () => D.touchGesturesOnly, v => S.Set(s => s.touchGesturesOnly = v)));
                         rows.Add(Slider("TOUCH BUTTON SIZE", () => D.touchButtonSize, v => S.Set(s => s.touchButtonSize = v),
                             GameSettings.MinTouchButtonSize, GameSettings.MaxTouchButtonSize, Notch, v => $"{v * 100f:0}%"));
+                        rows.Add(Choice("TOUCH THROTTLE", new[] { "RIGHT HAND", "LEFT HAND" }, () => D.touchThrottleLeft ? 1 : 0,
+                            i => S.Set(s => s.touchThrottleLeft = i == 1)));
                         rows.Add(Slider("TOUCH STICK SENSITIVITY", () => D.touchSensitivity, v => S.Set(s => s.touchSensitivity = v),
                             GameSettings.MinSensitivity, GameSettings.MaxSensitivity, 0.05f, v => $"{v:0.00}×"));
                     }
-                    // On a phone the touch buttons stand in for gamepad buttons, so rebinding them would break the touch controls.
-                    if (_actions != null && !mobile)
-                        rows.Add(new Row { Label = "KEY BINDINGS", Value = () => "REBIND  ›", Press = OpenBindings });
+                    // On a phone only a controller's buttons rebind (the touch buttons follow them).
+                    if (_actions != null)
+                        rows.Add(new Row { Label = mobile ? "CONTROLLER BINDINGS" : "KEY BINDINGS", Value = () => "REBIND  ›", Press = OpenBindings });
                     break;
 
                 case SettingsTab.Graphics:
@@ -347,7 +349,13 @@ namespace WingingIt.UI
                     rows.Add(Choice("TEAM COLORS", new[] { "DEFAULT", "HIGH CONTRAST" }, () => (int)D.teamColors, i => S.Set(s => s.teamColors = (TeamColorMode)i)));
                     rows.Add(Choice("MINIMAP", new[] { "NORTH UP", "HEADING UP" }, () => D.minimapHeadingUp ? 1 : 0, i => S.Set(s => s.minimapHeadingUp = i == 1)));
                     if (Debug.isDebugBuild)
+                    {
                         rows.Add(Toggle("DEVELOPER TOOLS", () => D.devTools, v => S.Set(s => s.devTools = v)));
+                        // Playtest A/B: applies from each plane's next spawn; the dev panel shows the average time to kill.
+                        rows.Add(Slider("COMBAT TEST: PLANE HP", () => D.combatHealth, v => S.Set(s => s.combatHealth = v),
+                            GameSettings.MinCombatHealth, 1f, 0.05f, v => $"{v * 100f:0}%"));
+                        rows.Add(Toggle("COMBAT TEST: BIG HITBOXES", () => D.combatBigHitboxes, v => S.Set(s => s.combatBigHitboxes = v)));
+                    }
                     break;
             }
             rows.Add(new Row { Label = "RESET TAB", Value = () => "DEFAULTS", Press = ResetTab });
@@ -457,6 +465,7 @@ namespace WingingIt.UI
 
         const float BindRowH = 44f;
         static readonly string[] BindGroupNames = { "KEYBOARD + MOUSE", "GAMEPAD" };
+        static readonly string[] MobileBindGroupNames = { "GAMEPAD" };
 
         string BindGroup => _bindGroup == 0 ? InputBindings.KeyboardGroup : InputBindings.GamepadGroup;
 
@@ -473,10 +482,14 @@ namespace WingingIt.UI
             _bindings = true;
             _bindFocus = 0;
             _bindScroll = 0;
+            if (S.IsMobile)
+                _bindGroup = 1;
         }
 
         void SetBindGroup(int group)
         {
+            if (S.IsMobile)
+                return; // a phone has no keyboard page
             _bindGroup = group;
             _bindFocus = 0;
             _bindScroll = 0;
@@ -531,8 +544,11 @@ namespace WingingIt.UI
         {
             if (FlightMap == null)
                 return;
-            DrawTabStrip(new Rect(panel.x + 36f, panel.y + 96f, panel.width - 72f, 48f), BindGroupNames, _bindGroup,
-                i => { if (_rebind == null) SetBindGroup(i); }, nav);
+            if (S.IsMobile)
+                DrawTabStrip(new Rect(panel.x + 36f, panel.y + 96f, panel.width - 72f, 48f), MobileBindGroupNames, 0, _ => { }, nav);
+            else
+                DrawTabStrip(new Rect(panel.x + 36f, panel.y + 96f, panel.width - 72f, 48f), BindGroupNames, _bindGroup,
+                    i => { if (_rebind == null) SetBindGroup(i); }, nav);
 
             var slots = BindSlots();
             int total = slots.Count + 1;

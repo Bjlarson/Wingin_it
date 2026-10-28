@@ -98,6 +98,38 @@ namespace WingingIt.Tests
             });
         }
 
+        [TestCase("IslandV2", "Tropics", "StiltHut")]
+        [TestCase("BroadReach", "Prairie", "Barn")]
+        [TestCase("ShatteredArchipelago", "Isles", "SeaArch")]
+        [TestCase("MountainRange", "Alpine", "CableStation")]
+        public void EachMapHasItsOwnPack_OffThePads(string mapName, string pack, string signature)
+        {
+            WithScene(mapName, scene =>
+            {
+                var map = InScene<MapScene>(scene)[0].Definition;
+                Transform group = null;
+                foreach (var root in scene.GetRootGameObjects())
+                    if (root.name == "World")
+                        group = root.transform.Find(pack);
+                Assert.IsNotNull(group, $"the {pack} pack under World");
+                var pieces = group.GetComponentsInChildren<MeshRenderer>();
+                Assert.Greater(pieces.Length, 30, $"{pack} pieces");
+                Assert.IsTrue(System.Array.Exists(pieces, r => r.name == signature), $"a {signature}");
+                // Nothing of the pack stands on a runway pad (the pad's flat part, in the field's frame).
+                foreach (var r in pieces)
+                foreach (var field in map.layout.airfields)
+                {
+                    var local = Quaternion.Euler(0f, -field.yaw, 0f) *
+                        new Vector3(r.transform.position.x - field.position.x, 0f, r.transform.position.z - field.position.y);
+                    Assert.IsFalse(Mathf.Abs(local.x) < 130f && Mathf.Abs(local.z) < 400f, $"{r.name} on {field.name}'s pad");
+                }
+                // Its trees and small props are drawn by the terrain, as pack prototypes.
+                var terrain = InScene<Terrain>(scene)[0].terrainData;
+                Assert.IsTrue(System.Array.Exists(terrain.treePrototypes,
+                    p => AssetDatabase.GetAssetPath(p.prefab).Contains($"/Prefabs/MapPacks/{pack}/")), $"{pack} terrain props");
+            });
+        }
+
         [Test]
         public void IslandMapKeepsItsScenery()
         {

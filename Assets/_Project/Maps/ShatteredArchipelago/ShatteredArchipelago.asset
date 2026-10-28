@@ -26,12 +26,13 @@ MonoBehaviour:
     beachHeight: 6
     beachFade: 6
     rockSlope: {x: 22, y: 34}
-    rockHeight: {x: 257.5, y: 412}
-    snowHeight: {x: 638.6, y: 741.60004}
+    rockHeight: {x: 140, y: 220}
+    snowHeight: {x: 380, y: 440}
     snowSlope: {x: 40, y: 55}
-    treeLine: 515
+    treeLine: 430
     pineHeight: 50
     treeSpacing: 24
+    winter: 0
   layout:
     airfields:
     - name: West Home Airfield
@@ -56,7 +57,7 @@ MonoBehaviour:
       twoWay: 0
       capturable: 1
       position: {x: -150, y: -100}
-      elevation: 89.5
+      elevation: 8
       yaw: 345
     - name: Western Isle Airfield
       team: -1
@@ -72,7 +73,7 @@ MonoBehaviour:
       twoWay: 0
       capturable: 1
       position: {x: 770, y: 580}
-      elevation: 34
+      elevation: 8
       yaw: 135
     lanes:
     - airfield: West Home Airfield
@@ -298,10 +299,6 @@ MonoBehaviour:
     fallback: Outer Rocks
     seaDepth: 1
   landmarks:
-  - kind: 0
-    xz: {x: 150, y: 425}
-    searchHalfSize: {x: 0, y: 0}
-    region: Northern Isles
   - kind: 1
     xz: {x: 1100, y: 1450}
     searchHalfSize: {x: 450, y: 250}
@@ -314,6 +311,7 @@ MonoBehaviour:
     skybox: {fileID: 2100000, guid: 453db78019ab37d459d5e99adf7e5795, type: 2}
     sunAngles: {x: 48, y: -35}
     sunIntensity: 1.4
+    sunColor: {r: 1, g: 0.957, b: 0.839, a: 1}
     fogColor: {r: 0.72, g: 0.82, b: 0.92, a: 1}
     fogStart: 800
     fogEnd: 6000
@@ -341,3 +339,4 @@ MonoBehaviour:
     mirrorClouds: 1
     cloudCoreHalfHeight: 70
     cloudClearance: 80
+    snowfall: 0

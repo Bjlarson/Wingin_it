@@ -1480,17 +1480,18 @@ namespace WingingIt.Editor
             onScreenStick.behaviour = OnScreenStick.Behaviour.ExactPositionWithDynamicOrigin;
             onScreenStick.dynamicOriginRange = 150f;
 
-            // Right: action buttons
+            // Right: action buttons, fanned around the fire button
             var fireButton = TouchButton("Fire", controls.transform, knob, new Vector2(-230f, 230f), 190f, new Color(1f, 0.35f, 0.25f, 0.5f), "<Gamepad>/rightTrigger");
             var missileButton = TouchButton("Missile", controls.transform, knob, new Vector2(-430f, 170f), 130f, new Color(1f, 0.75f, 0.2f, 0.5f), "<Gamepad>/leftTrigger");
-            TouchButton("Boost", controls.transform, knob, new Vector2(-190f, 450f), 130f, new Color(0.3f, 0.75f, 1f, 0.5f), "<Gamepad>/buttonEast");
-            var rocketsButton = TouchButton("Rockets", controls.transform, knob, new Vector2(-560f, 300f), 110f, new Color(1f, 0.55f, 0.15f, 0.5f), "<Gamepad>/dpad/left");
-            var bombButton = TouchButton("Bomb", controls.transform, knob, new Vector2(-610f, 130f), 110f, new Color(0.75f, 0.75f, 0.8f, 0.5f), "<Gamepad>/dpad/right");
-            TouchButton("Ability", controls.transform, knob, new Vector2(-390f, 370f), 110f, new Color(0.5f, 1f, 0.5f, 0.5f), "<Gamepad>/buttonSouth");
+            var boostButton = TouchButton("Boost", controls.transform, knob, new Vector2(-250f, 450f), 130f, new Color(0.3f, 0.75f, 1f, 0.5f), "<Gamepad>/buttonEast");
+            var rocketsButton = TouchButton("Rockets", controls.transform, knob, new Vector2(-570f, 290f), 110f, new Color(1f, 0.55f, 0.15f, 0.5f), "<Gamepad>/dpad/left");
+            var bombButton = TouchButton("Bomb", controls.transform, knob, new Vector2(-620f, 120f), 110f, new Color(0.75f, 0.75f, 0.8f, 0.5f), "<Gamepad>/dpad/right");
+            var abilityButton = TouchButton("Ability", controls.transform, knob, new Vector2(-420f, 380f), 110f, new Color(0.5f, 1f, 0.5f, 0.5f), "<Gamepad>/buttonSouth");
 
-            // Left, above the stick: throttle up / down (down also backs the plane up on the ground, to reach the repair zone)
-            TouchButton("Thr +", controls.transform, knob, new Vector2(110f, 660f), 120f, new Color(1f, 1f, 1f, 0.35f), "<Gamepad>/buttonNorth", new Vector2(0f, 0f));
-            TouchButton("Thr -", controls.transform, knob, new Vector2(110f, 520f), 120f, new Color(1f, 1f, 1f, 0.35f), "<Gamepad>/buttonWest", new Vector2(0f, 0f));
+            // Right edge, above fire: throttle up / down (down also backs the plane up on the ground, to reach the repair
+            // zone). The left-hand setting mirrors them over the stick.
+            var throttleUp = TouchButton("Thr +", controls.transform, knob, new Vector2(-80f, 640f), 110f, new Color(1f, 1f, 1f, 0.35f), "<Gamepad>/buttonNorth");
+            var throttleDown = TouchButton("Thr -", controls.transform, knob, new Vector2(-80f, 510f), 110f, new Color(1f, 1f, 1f, 0.35f), "<Gamepad>/buttonWest");
 
             // Top-right: prototype class switch
             var classBtn = UiImage("Class", controls.transform, null, new Color(0f, 0f, 0f, 0.4f),
@@ -1511,6 +1512,11 @@ namespace WingingIt.Editor
             SetField(touchUi, "missileButton", missileButton);
             SetField(touchUi, "bombs", planeGo.GetComponent<PlaneBombs>());
             SetField(touchUi, "bombButton", bombButton);
+            // Boost and the ability hide when the match switches them off (Ram Royale).
+            SetField(touchUi, "ability", planeGo.GetComponent<PlaneAbility>());
+            SetField(touchUi, "abilityButton", abilityButton);
+            SetField(touchUi, "boostButton", boostButton);
+            SetArray(touchUi, "throttleButtons", new[] { throttleUp, throttleDown });
             controls.SetActive(false);
         }
 

@@ -39,6 +39,25 @@ namespace WingingIt.UI
 
         /// <summary>The 0-1 slider position of <paramref name="value"/>.</summary>
         public static float Fraction(float value, float min, float max) => max > min ? Mathf.Clamp01((value - min) / (max - min)) : 0f;
+
+        /// <summary>The menus are laid out for a virtual screen at least this wide and tall (16:9).</summary>
+        public const float ReferenceWidth = 1920f, ReferenceHeight = 1080f;
+
+        /// <summary>
+        /// Where the menus draw: inside the screen's safe area (clear of a phone's notch and rounded corners), scaled so
+        /// a 1920 × 1080 layout always fits: by height on wide screens (a 19.5:9 phone gets a wider virtual screen), by
+        /// width on narrow ones (a 4:3 tablet gets a taller one). <paramref name="uiScale"/> above 1 is a smaller virtual
+        /// screen. <paramref name="safe"/> is in Unity screen pixels (origin bottom left); the returned origin is GUI
+        /// pixels (top left), the size is in virtual units.
+        /// </summary>
+        public static (Vector2 origin, float scale, float width, float height) Fit(float screenHeight, Rect safe, float uiScale)
+        {
+            if (safe.width <= 0f || safe.height <= 0f)
+                safe = new Rect(0f, 0f, screenHeight * ReferenceWidth / ReferenceHeight, screenHeight);
+            float scale = Mathf.Min(safe.height / ReferenceHeight, safe.width / ReferenceWidth) * Mathf.Max(0.01f, uiScale);
+            var origin = new Vector2(safe.x, screenHeight - safe.yMax);
+            return (origin, scale, safe.width / scale, safe.height / scale);
+        }
     }
 
     /// <summary>

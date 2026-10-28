@@ -36,7 +36,6 @@ namespace WingingIt.Editor
             map.regions = Regions();
             map.landmarks = new()
             {
-                new LandmarkAnchor { kind = LandmarkKind.Spire, xz = SpurPosition, region = "Central Spur" },
                 new LandmarkAnchor { kind = LandmarkKind.SummitRadar, xz = new Vector2(2800f, 0f), searchHalfSize = new Vector2(800f, 1800f), region = "East Ridges" },
                 new LandmarkAnchor { kind = LandmarkKind.Pyramid, xz = new Vector2(-2750f, 1300f), region = "West Plains" },
             };

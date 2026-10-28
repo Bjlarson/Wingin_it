@@ -8,7 +8,7 @@ namespace WingingIt.Editor
 {
     /// <summary>
     /// The Island (v2, from <c>Design/05-Levels/island.png</c>): one long island running north to south, split by a
-    /// shallow strait. North of it a green plateau, south of it hills rising to sharp peaks (1.3 km). The island is too
+    /// shallow strait. North of it a green plateau, south of it hills rising to sharp peaks (300 m). The island is too
     /// narrow for the homes, so they stand on strips built out of the sea off its west and east coasts, and the line
     /// equally far from both runs down the island's spine: the three capture fields sit on it, one on the plateau, one
     /// on a causeway across the strait, one in the southern hills. Ram Royale gets a 1 km circle over the strait.
@@ -25,9 +25,6 @@ namespace WingingIt.Editor
         static readonly Color Magenta = new(0.95f, 0.35f, 0.9f), Cyan = new(0.2f, 0.85f, 1f), Lime = new(0.6f, 1f, 0.2f);
         static readonly Color Gold = new(1f, 0.8f, 0.2f), Orange = new(1f, 0.55f, 0.2f);
 
-        /// <summary>The Spire's knoll on the south shore of the strait, inside the Ram Royale arena.</summary>
-        static readonly Vector2 SpirePosition = new(-250f, 450f);
-
         [MenuItem("Winging It/Map/Write Island v2 Definition")]
         public static void Write()
         {
@@ -42,7 +39,6 @@ namespace WingingIt.Editor
             map.regions = Regions();
             map.landmarks = new()
             {
-                new LandmarkAnchor { kind = LandmarkKind.Spire, xz = SpirePosition, region = "The Strait" },
                 new LandmarkAnchor { kind = LandmarkKind.SummitRadar, xz = new Vector2(100f, -1800f), searchHalfSize = new Vector2(700f, 700f), region = "South Peaks" },
                 new LandmarkAnchor { kind = LandmarkKind.Pyramid, xz = new Vector2(250f, 1300f), region = "North Plateau" },
             };
@@ -87,8 +83,8 @@ namespace WingingIt.Editor
             layout.bannerStands.Add(new BannerStandAnchor { airfield = west.name, distance = 150f });
             layout.bannerStands.Add(new BannerStandAnchor { airfield = east.name, distance = 150f });
 
-            // Over the strait, up to 800 m: the plateau's edge to the north, the southern hills and one peak (820 m)
-            // rising through the south-west. The air start ring (800 m out) clears everything under 480 m.
+            // Over the strait, up to 800 m: the plateau's edge to the north, the southern hills and one peak
+            // rising through the south-west. The air start ring (800 m out) is above all of it.
             layout.arenas.Add(W.RamArena(new Vector2(100f, 200f), radius: 1000f, warning: 150f, ceiling: 800f,
                 startRadius: 800f, startAltitude: 560f, patrolRadius: 500f, patrolAltitude: 450f));
 

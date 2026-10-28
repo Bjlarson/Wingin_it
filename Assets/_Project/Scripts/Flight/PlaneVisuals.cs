@@ -200,16 +200,37 @@ namespace WingingIt.Flight
                     }
                 }
 
-            var tint = TeamTint(color);
-            var block = new MaterialPropertyBlock();
+            var tinted = TeamMaterial(teamMaterial, color);
             foreach (var (r, index) in _teamSlots)
             {
                 if (r == null)
                     continue;
-                r.GetPropertyBlock(block, index);
-                block.SetVector(BaseColorId, tint);
-                r.SetPropertyBlock(block, index);
+                var mats = r.sharedMaterials;
+                if (mats[index] == tinted)
+                    continue;
+                mats[index] = tinted;
+                r.sharedMaterials = mats;
             }
+        }
+
+        static readonly Dictionary<(Material source, Color color), Material> TeamMaterials = new();
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetTeamMaterials() => TeamMaterials.Clear();
+
+        /// <summary>
+        /// <paramref name="source"/> tinted to <paramref name="color"/>, one copy per color shared by every plane and
+        /// airfield on that team. A shared material (not a property block per renderer) keeps the pieces in the SRP
+        /// Batcher, so a sky full of planes doesn't cost a full draw call per piece.
+        /// </summary>
+        public static Material TeamMaterial(Material source, Color color)
+        {
+            if (TeamMaterials.TryGetValue((source, color), out var material) && material != null)
+                return material;
+            material = new Material(source) { name = source.name, hideFlags = HideFlags.DontSave };
+            material.SetVector(BaseColorId, TeamTint(color));
+            TeamMaterials[(source, color)] = material;
+            return material;
         }
 
         /// <summary>
@@ -482,29 +503,21 @@ namespace WingingIt.Flight
             return body;
         }
 
-        /// <summary>Property blocks (class and team tints) aren't cloned with the object, so carry them over to debris.</summary>
-        void CopyTints(GameObject source, GameObject copy)
+        /// <summary>
+        /// Property blocks (the class tint) aren't cloned with the object, so carry them over to debris. The team tint
+        /// is a shared material, which the clone already has.
+        /// </summary>
+        static void CopyTints(GameObject source, GameObject copy)
         {
             var from = source.GetComponentsInChildren<Renderer>(true);
             var to = copy.GetComponentsInChildren<Renderer>(true);
             var block = new MaterialPropertyBlock();
             for (int i = 0; i < from.Length && i < to.Length; i++)
-            {
                 if (from[i].HasPropertyBlock())
                 {
                     from[i].GetPropertyBlock(block);
                     to[i].SetPropertyBlock(block);
                 }
-                if (teamMaterial == null)
-                    continue;
-                var mats = from[i].sharedMaterials;
-                for (int m = 0; m < mats.Length; m++)
-                    if (mats[m] == teamMaterial)
-                    {
-                        from[i].GetPropertyBlock(block, m);
-                        to[i].SetPropertyBlock(block, m);
-                    }
-            }
         }
     }
 }

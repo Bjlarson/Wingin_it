@@ -215,8 +215,7 @@ namespace WingingIt.Tests
             // Another plane parked on the runway, short of the repair zone.
             var other = FlightTestScene.Player;
             other.gameObject.SetActive(true);
-            Pose slot = _home.RunwaySpawnSlot(0);
-            other.SpawnOnGround(slot.position, slot.rotation);
+            other.SpawnOnGround(_home.RunwaySpawn.position, Quaternion.LookRotation(_home.RunwayDirection));
 
             DamageBody(0.3f);
             bool touchedDown = false;

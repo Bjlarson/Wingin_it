@@ -32,6 +32,7 @@ namespace WingingIt.UI
 
         const float ReferenceHeight = 1080f;
         float _height = ReferenceHeight; // the virtual screen height this frame (1080 at 100% UI scale)
+        Rect _bleed; // the whole screen in virtual units, past the safe area, for full-screen washes
         float _uiScale = 1f;             // the UI scale setting, held while its slider is dragged
         static readonly string[] DifficultyNames = { "Easy", "Normal", "Hard" };
 
@@ -427,10 +428,11 @@ namespace WingingIt.UI
             // UI scale (shared with the HUD): a bigger scale is a smaller virtual screen, so edge-anchored items stay put.
             if (!_settings.Dragging)
                 _uiScale = GameSettings.Current.Data.hudScale;
-            float scale = Screen.height / ReferenceHeight * _uiScale;
-            GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
-            _height = Screen.height / scale;
-            float width = Screen.width / scale;
+            // Inside the safe area, and never narrower than 16:9 (a tablet scales down to fit instead of clipping).
+            var (origin, scale, width, height) = MenuMath.Fit(Screen.height, Screen.safeArea, _uiScale);
+            GUI.matrix = Matrix4x4.TRS(origin, Quaternion.identity, new Vector3(scale, scale, 1f));
+            _height = height;
+            _bleed = new Rect(-origin.x / scale, -origin.y / scale, Screen.width / scale, Screen.height / scale);
             // A new screen fades in (the backdrop, score bar and menu button stay put; IMGUI can't keep the old one up).
             _g.Opacity = MenuMath.PanelFade(Time.unscaledTime - _shownAt);
 
@@ -488,7 +490,7 @@ namespace WingingIt.UI
         {
             float fade = _g.Opacity;
             _g.Opacity = 1f;
-            _g.Fill(new Rect(0f, 0f, width, _height), Dim);
+            _g.Fill(_bleed, Dim); // the whole screen, notch and all
             _g.Opacity = fade;
         }
 
@@ -588,7 +590,7 @@ namespace WingingIt.UI
 
         void DrawGameModes(float width)
         {
-            _g.Fill(new Rect(0f, 0f, width, _height), Alpha(Dim, 0.25f));
+            _g.Fill(_bleed, Alpha(Dim, 0.25f));
             _g.Shadowed(new Rect(0f, 110f, width, 60f), "GAME MODE", _g.Title, 8f, TextAnchor.MiddleCenter, Color.white);
 
             int n = _cards.Count;
@@ -713,7 +715,7 @@ namespace WingingIt.UI
         /// <summary>After the game mode: a card per map, laid out like the mode cards. PLAY goes on to class select.</summary>
         void DrawMaps(float width)
         {
-            _g.Fill(new Rect(0f, 0f, width, _height), Alpha(Dim, 0.25f));
+            _g.Fill(_bleed, Alpha(Dim, 0.25f));
             _g.Shadowed(new Rect(0f, 110f, width, 60f), "MAP", _g.Title, 8f, TextAnchor.MiddleCenter, Color.white);
             if (match.Mode?.Info != null)
                 _g.Tracked(new Rect(0f, 172f, width, 30f), match.Mode.Info.Name.ToUpperInvariant(), _g.Hint, 5f, TextAnchor.MiddleCenter, Steel);
@@ -1018,11 +1020,18 @@ namespace WingingIt.UI
         /// </summary>
         void DrawSpectating(float width)
         {
-            _g.Shadowed(new Rect(0f, 104f, width, 60f), "YOU'RE OUT", _g.Title, 8f, TextAnchor.MiddleCenter, Color.white);
-            _g.Shadowed(new Rect(0f, 166f, width, 24f), "SPECTATING UNTIL THE MATCH ENDS", _g.Hint, 3.4f, TextAnchor.MiddleCenter, Steel);
-
             var survivors = match.Survivors;
             var watched = match.Spectated;
+            if (match.Finishing)
+            {
+                // The last plane flying, a moment before the scoreboard.
+                string winner = watched != null && watched.IsAlive ? $"{match.PilotName(watched).ToUpperInvariant()} WINS" : "IT'S OVER";
+                _g.Shadowed(new Rect(0f, 104f, width, 60f), winner, _g.Title, 8f, TextAnchor.MiddleCenter, Color.white);
+                _g.Shadowed(new Rect(0f, 166f, width, 24f), "LAST PLANE FLYING", _g.Hint, 3.4f, TextAnchor.MiddleCenter, Steel);
+                return;
+            }
+            _g.Shadowed(new Rect(0f, 104f, width, 60f), "YOU'RE OUT", _g.Title, 8f, TextAnchor.MiddleCenter, Color.white);
+            _g.Shadowed(new Rect(0f, 166f, width, 24f), "SPECTATING UNTIL THE LAST PLANE", _g.Hint, 3.4f, TextAnchor.MiddleCenter, Steel);
             var bar = new Rect(width / 2f - 300f, _height - 150f, 600f, 64f);
             _g.Panel(bar, GlowRest, false);
             string name = watched != null ? match.PilotName(watched).ToUpperInvariant() : survivors.Count > 0 ? "—" : "NOBODY LEFT";
@@ -1260,7 +1269,7 @@ namespace WingingIt.UI
         /// </summary>
         void DrawInMatchMenu(float width)
         {
-            _g.Fill(new Rect(0f, 0f, width, _height), Alpha(Dim, 0.3f));
+            _g.Fill(_bleed, Alpha(Dim, 0.3f));
             // Below the minimap and score bar, above the instrument cluster.
             const float panelW = 460f, tableW = 1100f, gap = 28f;
             float total = panelW + gap + tableW;

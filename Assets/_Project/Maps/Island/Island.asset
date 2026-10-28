@@ -353,6 +353,7 @@ MonoBehaviour:
     skybox: {fileID: 2100000, guid: 453db78019ab37d459d5e99adf7e5795, type: 2}
     sunAngles: {x: 48, y: -35}
     sunIntensity: 1.4
+    sunColor: {r: 1, g: 0.957, b: 0.839, a: 1}
     fogColor: {r: 0.72, g: 0.82, b: 0.92, a: 1}
     fogStart: 900
     fogEnd: 6500

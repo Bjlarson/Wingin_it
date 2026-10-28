@@ -169,16 +169,14 @@ namespace WingingIt.Tests
             var team = Visible(model: true).SelectMany(r => r.sharedMaterials.Select((m, i) => (r, m, i)))
                 .Where(x => x.m != null && x.m.name == "Plane_Team").ToArray();
             Assert.IsNotEmpty(team, "the model has team zones");
-            var block = new MaterialPropertyBlock();
             var (renderer, _, index) = team[0];
-            renderer.GetPropertyBlock(block, index);
-            Vector4 tint = block.GetVector(BaseColorId);
+            Assert.IsFalse(renderer.HasPropertyBlock(), "tinted by a shared material, so it stays in the SRP Batcher");
+            Vector4 tint = renderer.sharedMaterials[index].GetVector(BaseColorId);
             Assert.Greater(tint.x, tint.z, "team 1 (red) tint is red");
 
             _plane.Team = 0;
             yield return null;
-            renderer.GetPropertyBlock(block, index);
-            tint = block.GetVector(BaseColorId);
+            tint = renderer.sharedMaterials[index].GetVector(BaseColorId);
             Assert.Greater(tint.z, tint.x, "team 0 (blue) tint is blue");
         }
 

@@ -49,6 +49,14 @@ namespace WingingIt.Editor
             return lamp.GetComponent<Renderer>();
         }
 
+        /// <summary>A boundary post on <paramref name="post"/> (on the ground), with the buoy's lamp. Returns its lamp.</summary>
+        public Renderer BoundaryPost(Transform post)
+        {
+            Child("BoundaryPost", post, Vector3.zero);
+            var lamp = Mounted("BuoyLamp", post, "BoundaryPost", castShadows: false);
+            return lamp.GetComponent<Renderer>();
+        }
+
         /// <summary>
         /// A flight-test ring on <paramref name="ring"/> (round its local z), solid rim from RingCol. Returns its renderer,
         /// whose team-material slot <see cref="RingGate"/> tints.

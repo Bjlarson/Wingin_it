@@ -92,6 +92,15 @@ COLORS = [
     ("water_deep", "1E6E9C"),  # open sea
     ("water_shallow", "3FC1C9"),  # teal shallows by the beaches
     ("foam", "F4FBFF"),  # wave crests and the shore band
+    # Map packs (ArtSource/MapPacks): each map's own dressing.
+    ("thatch", "B98C4A"),  # hut roofs (Tropics)
+    ("terracotta", "D9693E"),  # roof tiles (Isles, Prairie)
+    ("aegean", "2E6FC2"),  # domes, doors and shutters (Isles)
+    ("wheat", "EBC54E"),  # ripe crops, hay (Prairie)
+    ("barnred", "A8382F"),  # barns (Prairie)
+    ("timber", "7A5236"),  # logs, beams, fences (Alpine, Prairie)
+    ("ice", "B9E6F2"),  # ice shards, frozen ponds (Alpine)
+    ("crop", "86BF4A"),  # young crops (Prairie)
 ]
 FLAT = {"glint", "ember", "ink", "flame"}
 TEAM_KEYS = {"team"}

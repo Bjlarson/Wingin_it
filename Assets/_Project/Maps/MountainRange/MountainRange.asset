@@ -312,10 +312,6 @@ MonoBehaviour:
     fallback: High Country
     seaDepth: 1
   landmarks:
-  - kind: 0
-    xz: {x: -1100, y: 300}
-    searchHalfSize: {x: 0, y: 0}
-    region: Frozen Valley
   - kind: 1
     xz: {x: 1000, y: -700}
     searchHalfSize: {x: 500, y: 500}

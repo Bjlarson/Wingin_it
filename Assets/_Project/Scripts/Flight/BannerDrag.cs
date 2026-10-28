@@ -32,5 +32,17 @@ namespace WingingIt.Flight
         }
 
         public static void Remove(StatModifierStack stack) => stack.RemoveAllFromSource(Source);
+
+        /// <summary>
+        /// The carrier's speed after a step that went from <paramref name="before"/> to <paramref name="after"/>: nothing
+        /// wins the drag back (full throttle, a dive), so it never ends above <paramref name="cap"/> (the dragged top
+        /// speed) unless it was already faster, and then it only bleeds toward the cap at <paramref name="bleed"/> m/s².
+        /// </summary>
+        public static float CapSpeed(float before, float after, float cap, float bleed, float dt)
+        {
+            if (after <= cap)
+                return after;
+            return Mathf.Max(cap, Mathf.Min(after, before) - bleed * dt);
+        }
     }
 }

@@ -244,6 +244,19 @@ Nothing exists yet (`Audio/` is empty).
 | King of the Sky zone volumes (3D cylinder shader, capture rings, team tints) | |
 | Ram Royale shrinking-boundary visual (storm wall / energy dome) | |
 
+## Pack 15: Map Packs (one per shipped map)
+
+Each heightmap map gets its own pack so the four read apart, placed by rules on its built terrain (editor `MapDressing` on `MapDresser`, called from `MapSceneBuilder.Build`): nothing on an airfield pad or under an approach lane, tall pieces kept further off, nothing on the landmarks, the terrain's own trees cleared from under every footprint, deterministic from the map's seed. Buildings and rocks are static meshes with mesh colliders (bots see them); trees and small props are drawn by the terrain as trees (prefabs in `Prefabs/MapPacks/<Pack>`). Scripts: `ArtSource/MapPacks/build_<pack>.py` on the shared `pack_kit.py` → `Art/Models/<Pack>/<Pack>.fbx`. New palette swatches (appended): thatch, terracotta, aegean, wheat, barnred, timber, ice, crop.
+
+| Pack | Map | Pieces | Reused |
+|---|---|---|---|
+| **Tropics** (4.2k tris) | The Island | Fishing villages on the low coast (LongHouse, BeachHut, StiltHut in the shallows, Jetty, Outrigger canoes), Sailboat yachts offshore, StoneIdol heads on the cliff edges facing the sea, bamboo Lookout towers, jungle groves (TreeJungle, TreeBanana, BushFlower) | Nature pack palms and woods; the landmarks pack's Lighthouse (lens turning) on two headlands |
+| **Prairie** (6.1k) | Broad Reach | Farmsteads (Barn, Farmhouse, Silo, Windpump with a turning wheel, HayStack, fenced yard, cows) with crop fields round them (CropWheat/Green/Plowed tiles laid along the slope) and poplar windbreaks; hamlets (Church, WaterTower, houses); Windmills with turning sails; field patchwork, hay and herds between; HotAirBalloons drifting 180-420 m up (`Bobber`) | Nature pack woods |
+| **Isles** (5.0k) | Shattered Archipelago | Sea stacks (A/B/C) in the sounds, up to three SeaArches to fly through (80 m wide, ~55 m high), Shipwrecks in the shallows, white cliff villages (CliffHouseA/B, a domed Chapel, an IslesMill with turning sails, FishingBoats), WatchtowerRuins on headlands, olive and cypress groves | Tropics Sailboat |
+| **Alpine** (5.9k) | Mountain Range | Ski villages (Chalet, LogCabins, Signpost, Snowmen), a cable car (CableStations, CablePylons wherever the cable would pass under 15 m of ground, two tracks, ten Gondolas running the loop: `CableCar`), FrozenPonds, RangerTowers, IceShards on the high ridges, TreeFirTall and TreeBirchWinter woods | Nature pack snowy pines and rocks |
+
+Runtime: `WingingIt.World.Bobber` (moored boats rock on the swell; balloons bob and drift round a slow circle), `CableCar` (gondolas round a closed polyline), and the existing `Spinner` (windmill sails, wind pump, lighthouse lens).
+
 ---
 
 ## Suggested Order

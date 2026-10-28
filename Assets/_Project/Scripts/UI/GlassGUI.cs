@@ -133,6 +133,19 @@ namespace WingingIt.UI
             return Mathf.Max(0f, w - tracking * scale);
         }
 
+        static readonly Dictionary<char, string> Glyphs = new();
+
+        /// <summary>
+        /// <paramref name="ch"/> as a one-letter string, made once: every HUD letter is its own label, every frame, so
+        /// a fresh string each time added up to thousands of small allocations a second (and garbage collector hitches).
+        /// </summary>
+        static string Glyph(char ch)
+        {
+            if (!Glyphs.TryGetValue(ch, out var s))
+                Glyphs[ch] = s = ch.ToString();
+            return s;
+        }
+
         float Advance(GUIStyle style, int size, char ch)
         {
             if (_advance.TryGetValue((style, size, ch), out float w))
@@ -172,7 +185,7 @@ namespace WingingIt.UI
             {
                 float adv = Advance(style, size, ch);
                 if (ch != ' ')
-                    GUI.Label(new Rect(x, r.y, adv + 8f, r.height), ch.ToString(), style);
+                    GUI.Label(new Rect(x, r.y, adv + 8f, r.height), Glyph(ch), style);
                 x += adv + tracking * scale;
             }
             style.fontSize = oldSize;

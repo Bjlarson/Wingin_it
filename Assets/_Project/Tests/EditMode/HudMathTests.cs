@@ -142,6 +142,18 @@ namespace WingingIt.Tests
             Assert.AreEqual("2.4 KM", HudText.Distance(2410f));
         }
 
+        [Test]
+        public void Distance_Cached_MatchesTheFormattedText()
+        {
+            foreach (float m in new[] { 0f, 0.4f, 0.5f, 12.5f, 640.49f, 999.4f, 999.6f, 1000f, 1049f, 1050f, 2410f, 9999.4f, 12345f, 99000f })
+            {
+                string expected = m < 1000f ? $"{m:0} M" : $"{m / 1000f:0.0} KM";
+                Assert.AreEqual(expected.Replace(',', '.'), HudText.Distance(m), $"{m} m");
+                Assert.AreSame(HudText.Distance(m), HudText.Distance(m), "made once");
+            }
+            Assert.AreEqual("640 M", HudText.Metres(640.2f));
+        }
+
         static int Bit(PlanePartType t) => PartFlightEffects.Bit(t);
 
         [Test]

@@ -39,6 +39,37 @@ namespace WingingIt.Tests
         }
 
         [Test]
+        public void CapSpeed_FullThrottleAndDiveNeverPassTheCap()
+        {
+            // Every step tries to gain 5 m/s (full throttle plus a dive); the carrier stays at the cap.
+            float speed = 70f;
+            for (int i = 0; i < 500; i++)
+            {
+                speed = BannerDrag.CapSpeed(speed, speed + 5f, 75f, 14f, 0.02f);
+                Assert.LessOrEqual(speed, 75f);
+            }
+            Assert.AreEqual(75f, speed, 0.001f);
+        }
+
+        [Test]
+        public void CapSpeed_AlreadyFaster_BleedsDownWithoutGaining()
+        {
+            // Grabbed the banner at 100 m/s in a dive: no gain, eases down to the cap at the bleed rate.
+            float speed = BannerDrag.CapSpeed(100f, 103f, 75f, 14f, 0.5f);
+            Assert.AreEqual(93f, speed, 0.001f);
+            for (int i = 0; i < 10; i++)
+                speed = BannerDrag.CapSpeed(speed, speed + 3f, 75f, 14f, 0.5f);
+            Assert.AreEqual(75f, speed, 0.001f);
+        }
+
+        [Test]
+        public void CapSpeed_UnderTheCap_Untouched()
+        {
+            Assert.AreEqual(60f, BannerDrag.CapSpeed(58f, 60f, 75f, 14f, 0.02f));
+            Assert.AreEqual(50f, BannerDrag.CapSpeed(58f, 50f, 75f, 14f, 0.02f));
+        }
+
+        [Test]
         public void Drag_StacksWithOtherModifiers_AndRemovingItLeavesThemAlone()
         {
             var stack = new StatModifierStack(Base);

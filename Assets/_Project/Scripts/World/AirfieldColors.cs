@@ -12,7 +12,6 @@ namespace WingingIt.World
     [RequireComponent(typeof(Airfield))]
     public class AirfieldColors : MonoBehaviour
     {
-        static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
 
         [Tooltip("The plane team material (Plane_Team) the airfield's models use for their team zones.")]
         [SerializeField] Material teamMaterial;
@@ -55,15 +54,16 @@ namespace WingingIt.World
             _applied = color;
             _tinted = true;
 
-            var tint = PlaneVisuals.TeamTint(color);
-            var block = new MaterialPropertyBlock();
+            var tinted = PlaneVisuals.TeamMaterial(teamMaterial, color);
             foreach (var (r, index) in _slots)
             {
                 if (r == null)
                     continue;
-                r.GetPropertyBlock(block, index);
-                block.SetVector(BaseColorId, tint);
-                r.SetPropertyBlock(block, index);
+                var mats = r.sharedMaterials;
+                if (mats[index] == tinted)
+                    continue;
+                mats[index] = tinted;
+                r.sharedMaterials = mats;
             }
         }
     }

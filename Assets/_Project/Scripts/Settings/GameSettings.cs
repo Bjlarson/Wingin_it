@@ -58,6 +58,8 @@ namespace WingingIt.Settings
         /// <summary>Follow mode on touch with no on-screen buttons: hold fires guns, tap fires missile/bomb, double tap is the ability.</summary>
         public bool touchGesturesOnly;
         public float touchButtonSize = 1f;
+        /// <summary>The on-screen throttle buttons sit on the left, over the stick, instead of the right edge.</summary>
+        public bool touchThrottleLeft;
         /// <summary>How hard the on-screen stick steers: scales the stick past its small dead zone.</summary>
         public float touchSensitivity = 1f;
         /// <summary>The player's rebound keys and buttons, as the Input System's binding-overrides JSON ("" = the shipped bindings).</summary>
@@ -98,6 +100,10 @@ namespace WingingIt.Settings
         public bool minimapHeadingUp;
         /// <summary>Dev builds only: the F1 help, debug overlay and dev keys.</summary>
         public bool devTools = true;
+        /// <summary>Dev builds only, the playtest's "too hard to shoot people" A/B: every plane's part HP as a fraction of normal.</summary>
+        public float combatHealth = 1f;
+        /// <summary>Dev builds only: gun bullets hit planes from further off.</summary>
+        public bool combatBigHitboxes;
 
         /// <summary>
         /// Turns follow mode on or off. On a phone, follow flies on gestures alone with auto throttle; leaving follow
@@ -164,6 +170,8 @@ namespace WingingIt.Settings
         public const float MinRenderScale = 0.5f, MaxRenderScale = 1f;
         public const float MinFov = 50f, MaxFov = 80f;
         public const float MinHudScale = 0.75f, MaxHudScale = 1.25f;
+        /// <summary>The lowest combat-test part HP: 10% of normal.</summary>
+        public const float MinCombatHealth = 0.1f;
         public static readonly int[] DesktopFrameRates = { 30, 60, 120, 144, 0 };
         public static readonly int[] MobileFrameRates = { 30, 60, 90, 120 };
 
@@ -240,6 +248,7 @@ namespace WingingIt.Settings
                         s.autoThrottle = d.autoThrottle;
                         s.touchGesturesOnly = d.touchGesturesOnly;
                         s.touchButtonSize = d.touchButtonSize;
+                        s.touchThrottleLeft = d.touchThrottleLeft;
                         s.touchSensitivity = d.touchSensitivity;
                         s.bindingOverrides = d.bindingOverrides;
                         break;
@@ -270,6 +279,8 @@ namespace WingingIt.Settings
                         s.teamColors = d.teamColors;
                         s.minimapHeadingUp = d.minimapHeadingUp;
                         s.devTools = d.devTools;
+                        s.combatHealth = d.combatHealth;
+                        s.combatBigHitboxes = d.combatBigHitboxes;
                         break;
                 }
             });
@@ -323,6 +334,7 @@ namespace WingingIt.Settings
             s.damageEffects = Mathf.Clamp01(s.damageEffects);
             if (!Enum.IsDefined(typeof(TeamColorMode), s.teamColors))
                 s.teamColors = TeamColorMode.Default;
+            s.combatHealth = Mathf.Clamp(s.combatHealth, MinCombatHealth, 1f);
         }
 
         static int NearestFrameRate(int fps, int[] offered)

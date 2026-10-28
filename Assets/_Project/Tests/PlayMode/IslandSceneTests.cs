@@ -569,9 +569,12 @@ namespace WingingIt.Tests
 
         // ------------------------------------------------------------------ boundary (island-map.md)
 
-        /// <summary>A ring of buoys marks the edge all the way round, out on open sea, with nothing to crash into.</summary>
+        /// <summary>
+        /// A ring of markers marks the edge all the way round, with nothing to crash into: buoys on the water, posts
+        /// standing on the land (never buried in it).
+        /// </summary>
         [Test]
-        public void BoundaryBuoys_RingTheEdge_OnOpenSea()
+        public void BoundaryBuoys_RingTheEdge_OnWhatsUnderThem()
         {
             var boundary = FlightBoundary.Active;
             var ring = Object.FindAnyObjectByType<BoundaryBuoys>();
@@ -582,8 +585,7 @@ namespace WingingIt.Tests
             foreach (Transform buoy in ring.transform)
             {
                 Assert.AreEqual(boundary.radius, boundary.HorizontalDistance(buoy.position), 1f, $"{buoy.name} isn't on the edge");
-                Assert.IsTrue(Physics.Raycast(buoy.position + Vector3.up * 500f, Vector3.down, out var hit, 600f)
-                    && PlaneController.IsWater(hit.collider), $"{buoy.name} isn't on open sea");
+                AssertStandsOnSurface(buoy);
                 Vector3 d = buoy.position - boundary.transform.position;
                 bearings.Add(Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg);
             }
@@ -594,6 +596,20 @@ namespace WingingIt.Tests
             for (int i = 1; i < bearings.Count; i++)
                 widest = Mathf.Max(widest, bearings[i] - bearings[i - 1]);
             Assert.LessOrEqual(widest * Mathf.Deg2Rad * boundary.radius, 160f, "a gap in the ring");
+        }
+
+        /// <summary>
+        /// A boundary marker on what's under it: a buoy ("... Buoy ...") on the water's surface, a post on the ground, its
+        /// footing (3 m deep) sunk at most that far below the ground at its middle.
+        /// </summary>
+        public static void AssertStandsOnSurface(Transform marker)
+        {
+            Assert.IsTrue(Physics.Raycast(marker.position + Vector3.up * 500f, Vector3.down, out var hit, 600f,
+                ~0, QueryTriggerInteraction.Ignore), $"nothing under {marker.name}");
+            bool water = PlaneController.IsWater(hit.collider);
+            Assert.AreEqual(water, marker.name.Contains("Buoy"), $"{marker.name} is on {(water ? "water" : "land")}");
+            float sunk = hit.point.y - marker.position.y;
+            Assert.That(sunk, Is.InRange(-0.1f, water ? 0.1f : 3f), $"{marker.name} isn't standing on the {(water ? "water" : "ground")}");
         }
 
         /// <summary>

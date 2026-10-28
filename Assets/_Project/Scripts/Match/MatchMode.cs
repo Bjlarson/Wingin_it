@@ -528,29 +528,12 @@ namespace WingingIt.Match
         /// <summary>Planes left in place of the team scores; the kill feed and popups stay.</summary>
         public override MatchWidgets Widgets => MatchWidgets.PlanesLeft | MatchWidgets.KillFeed | MatchWidgets.ScorePopups;
 
-        static RamBoostAbility s_ramBoost;
-
-        /// <summary>The ability Support flies with here in place of the Repair Aura (no allies to heal).</summary>
-        public static RamBoostAbility RamBoost
-        {
-            get
-            {
-                if (s_ramBoost == null)
-                {
-                    s_ramBoost = ScriptableObject.CreateInstance<RamBoostAbility>();
-                    s_ramBoost.hideFlags = HideFlags.DontSave;
-                }
-                return s_ramBoost;
-            }
-        }
-
-        /// <summary>Weapons off, ram damage on; Support's aura becomes a Ram Boost. Boost and the other abilities stay.</summary>
+        /// <summary>Weapons off, ram damage on, and no Boost or class ability: it's flying and ramming only.</summary>
         public override void OnSpawned(PlaneController plane)
         {
             plane.WeaponsOff = true;
             plane.RamDamage = true;
-            if (plane.Stats != null && plane.Stats.ability is RepairAuraAbility && plane.TryGetComponent(out PlaneAbility ability))
-                ability.Override = RamBoost;
+            plane.AbilitiesOff = true;
         }
 
         /// <summary>Who's still flying out of how many; the last plane flying by name.</summary>

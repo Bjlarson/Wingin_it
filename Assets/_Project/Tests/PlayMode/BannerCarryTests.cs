@@ -74,6 +74,27 @@ namespace WingingIt.Tests
         }
 
         [UnityTest]
+        public IEnumerator ACarrier_AtFullThrottleInADive_StaysUnderTheDraggedTopSpeed()
+        {
+            _player.GetComponent<PlayerFlightInput>().enabled = false; // so the test's input stands
+            // High over the field at full throttle, nose 20° down, towing (a respawn clears the tow, so set it after).
+            _player.Respawn(_player.Position + Vector3.up * 600f, Quaternion.Euler(20f, 90f, 0f), 1f);
+            new BannerDrag().Apply(_player.Modifiers);
+            _player.CarryingBanner = true;
+            float cap = _player.Modifiers.Get(FlightStat.MaxSpeed);
+            float fastest = 0f;
+            for (float t = 0f; t < 6f && _player.IsAlive; t += Time.fixedDeltaTime)
+            {
+                _player.SetInput(new FlightInput { Throttle = 1f });
+                yield return new WaitForFixedUpdate();
+                if (t > 3f)
+                    fastest = Mathf.Max(fastest, _player.Speed);
+            }
+            Assert.IsTrue(_player.IsAlive);
+            Assert.LessOrEqual(fastest, cap + 0.01f, "full throttle and a dive can't win back the banner drag");
+        }
+
+        [UnityTest]
         public IEnumerator ACarrier_CannotBoost()
         {
             yield return GrabTheEastBanner();

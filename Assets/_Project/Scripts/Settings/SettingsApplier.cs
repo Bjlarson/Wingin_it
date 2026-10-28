@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.SceneManagement;
+using WingingIt.Flight;
 
 namespace WingingIt.Settings
 {
@@ -75,6 +76,18 @@ namespace WingingIt.Settings
             ApplyVolume();
         }
 
+        /// <summary>The playtest's combat A/B (dev builds only; a release build always plays the base tuning).</summary>
+        public static void ApplyCombatTest(float health, bool bigHitboxes)
+        {
+            bool dev = Debug.isDebugBuild;
+            float scale = dev ? Mathf.Clamp(health, GameSettings.MinCombatHealth, 1f) : 1f;
+            float pad = dev && bigHitboxes ? CombatTuning.BigHitboxPad : 0f;
+            if (scale != CombatTuning.HealthScale || pad != CombatTuning.HitboxPad)
+                CombatTuning.ResetStats(); // a new variant starts its own time-to-kill average
+            CombatTuning.HealthScale = scale;
+            CombatTuning.HitboxPad = pad;
+        }
+
         void Apply()
         {
             var s = GameSettings.Current.Data;
@@ -106,6 +119,7 @@ namespace WingingIt.Settings
             }
             ApplyShadows();
             ApplyVolume();
+            ApplyCombatTest(s.combatHealth, s.combatBigHitboxes);
         }
 
         /// <summary>The Shadows setting: the shadow map on the URP asset, and on/off and edge filtering on the sun.</summary>

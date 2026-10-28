@@ -66,6 +66,8 @@ namespace WingingIt.Match
         [SerializeField] Color[] teamColors = { new(0.35f, 0.6f, 1f), new(1f, 0.38f, 0.32f) };
         [Tooltip("Seconds a pilot who's out watches its own (or the watched plane's) explosion before the camera moves to a survivor.")]
         [SerializeField, Min(0f)] float spectateHold = 2.5f;
+        [Tooltip("Seconds a pilot who's out watches the winner once the last plane is left, before the scoreboard.")]
+        [SerializeField, Min(0f)] float winnerHold = 3f;
 
         // Kept across Play Again (a scene reload), so a rematch starts with the same picks.
         static readonly Dictionary<string, BotDifficulty> s_difficulty = new(); // per mode id, read from PlayerPrefs once
@@ -91,8 +93,12 @@ namespace WingingIt.Match
         (int count, int size)? _levelTeams; // the roster's teams while a free-for-all mode has replaced them
         PlaneController _spectated;
         float _spectateHold;
+        float _finishHold = -1f; // counting down on the winner before the scoreboard; -1 = not finishing
 
         public event Action<MatchPhase> PhaseChanged;
+
+        /// <summary>The match is decided and a spectating player is watching the winner before the scoreboard.</summary>
+        public bool Finishing => _finishHold >= 0f;
 
         public MatchPhase Phase => _clock.Phase;
         /// <summary>Seconds left on the countdown (real time) or the match clock (game time).</summary>
@@ -476,11 +482,29 @@ namespace WingingIt.Match
                 ApplyPhase();
             if (_clock.Phase != MatchPhase.Playing)
                 return;
+            if (Finishing)
+            {
+                _finishHold -= dt;
+                if (_finishHold <= 0f)
+                    EndMatch();
+                return;
+            }
             _mode.Tick(_score, dt);
             TickBanners(dt);
             TickFields(dt);
+            if (_mode.Lives > 0)
+                RegisterPilots(); // a plane that joined late counts as still flying, so the last-plane check can't end it early
             if (_mode.EarlyWinner(_score) != null)
             {
+                // Out and watching: stay on the winner a moment, then the scoreboard. The score is frozen from here.
+                if (IsSpectating && winnerHold > 0f)
+                {
+                    _finishHold = winnerHold;
+                    var survivors = Survivors;
+                    if (survivors.Count > 0)
+                        Watch(survivors[0]);
+                    return;
+                }
                 EndMatch();
                 return;
             }
@@ -529,6 +553,7 @@ namespace WingingIt.Match
             if (!IsSpectating)
             {
                 IsSpectating = true;
+                MenuOpen = false; // out of lives shows the explosion, never the pause menu
                 _spectated = null;
                 _spectateHold = spectateHold;
                 RefreshPlayOnly();
@@ -628,11 +653,15 @@ namespace WingingIt.Match
 
         /// <summary>
         /// Opens the in-match menu (countdown or play). The match keeps running: the player's controls let go of the
-        /// stick and the mouse is freed; the HUD stays up behind the menu.
+        /// stick and the mouse is freed; the HUD stays up behind the menu. Never while the player is going down: a crash
+        /// shows only the plane select, or (out of lives) the explosion and then a survivor, and only from then on can the
+        /// menu open again (to leave). That also covers a button mashed, a back gesture or a pad blip in the crash itself.
         /// </summary>
         public void OpenMenu()
         {
             if (_dismissed || MenuOpen || Picker == ClassPicker.Respawn || _clock.Phase is not (MatchPhase.Countdown or MatchPhase.Playing))
+                return;
+            if (player != null && !player.IsAlive && (!IsSpectating || _spectated == null))
                 return;
             MenuOpen = true;
             RefreshPlayOnly();
@@ -876,6 +905,7 @@ namespace WingingIt.Match
         /// <summary>Ends the match now, as if time ran out.</summary>
         public void EndMatch()
         {
+            _finishHold = -1f;
             if (_clock.End())
                 ApplyPhase();
         }
@@ -1000,7 +1030,7 @@ namespace WingingIt.Match
 
         void OnAnyKilled(KillInfo kill)
         {
-            if (_dismissed || _clock.Phase != MatchPhase.Playing || kill.Victim == null)
+            if (_dismissed || _clock.Phase != MatchPhase.Playing || Finishing || kill.Victim == null)
                 return;
             var victim = kill.Victim.Plane;
             _banners?.CarrierDown(victim);
@@ -1016,7 +1046,7 @@ namespace WingingIt.Match
 
         void OnAnyRammed(RamInfo ram)
         {
-            if (_dismissed || _clock.Phase != MatchPhase.Playing || ram.Hitter == null || ram.Victim == null)
+            if (_dismissed || _clock.Phase != MatchPhase.Playing || Finishing || ram.Hitter == null || ram.Victim == null)
                 return;
             _mode.RecordRam(_score, Ref(ram.Hitter), Ref(ram.Victim), ram.HitterDamage, ram.VictimDamage);
         }

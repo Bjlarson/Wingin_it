@@ -63,6 +63,8 @@ namespace WingingIt.UI
                 $"{(player.FireSecondaryHeld ? " [SEC]" : "")}{(player.DropBombHeld ? " [BOMB]" : "")}" +
                 $"{(player.AbilityHeld ? " [ABILITY]" : "")}";
             lines.Add($"Controls: {mode}{weapons}{(showHelp ? "" : "    F1  help")}");
+            if (CombatTuning.Label != "BASE" || CombatTuning.Kills > 0)
+                lines.Add($"Combat test {CombatTuning.Label}: avg TTK {CombatTuning.AverageTimeToKill:0.0} s over {CombatTuning.Kills} kills");
             if (RingGate.TotalCount > 0)
                 lines.Add($"Rings {RingGate.PassedCount}/{RingGate.TotalCount}");
             var landmark = Landmark.Nearest(plane.transform.position);

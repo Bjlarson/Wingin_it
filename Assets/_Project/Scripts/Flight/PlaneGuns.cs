@@ -302,6 +302,33 @@ namespace WingingIt.Flight
                     found = true;
                 }
             }
+            if (CombatTuning.HitboxPad > 0f && TryPaddedPlaneHit(origin, dir, radius + CombatTuning.HitboxPad, found ? best.distance : distance, out var padded))
+            {
+                best = padded;
+                found = true;
+            }
+            return found;
+        }
+
+        /// <summary>The Big hitbox test: a fatter cast that only counts plane parts, nearer than anything the real one hit.</summary>
+        bool TryPaddedPlaneHit(Vector3 origin, Vector3 dir, float radius, float distance, out RaycastHit best)
+        {
+            best = default;
+            int count = Physics.SphereCastNonAlloc(origin, radius, dir, HitBuffer, distance, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+            bool found = false;
+            for (int i = 0; i < count; i++)
+            {
+                var hit = HitBuffer[i];
+                if (hit.collider.transform.IsChildOf(transform) || !PlanePart.TryGetFromCollider(hit.collider, out _))
+                    continue;
+                if (hit.distance <= 0f)
+                    hit.point = origin;
+                if (!found || hit.distance < best.distance)
+                {
+                    best = hit;
+                    found = true;
+                }
+            }
             return found;
         }
 

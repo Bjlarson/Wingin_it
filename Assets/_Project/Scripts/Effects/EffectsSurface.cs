@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using WingingIt.Flight;
 using WingingIt.World;
 
@@ -66,7 +67,15 @@ namespace WingingIt.Effects
         static readonly Dictionary<TerrainData, Lookup> Lookups = new();
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        static void ResetStatics() => Lookups.Clear();
+        static void ResetStatics()
+        {
+            Lookups.Clear();
+            // A held TerrainData can't be unloaded: drop them all with each map, or every map played stays in memory.
+            SceneManager.sceneUnloaded -= OnSceneUnloaded;
+            SceneManager.sceneUnloaded += OnSceneUnloaded;
+        }
+
+        static void OnSceneUnloaded(Scene scene) => Lookups.Clear();
 
         /// <summary>The light tone of what <paramref name="surface"/> kicks up (the puff meshes shade it down on their sides).</summary>
         public static Color Color(GroundSurface surface) => surface switch

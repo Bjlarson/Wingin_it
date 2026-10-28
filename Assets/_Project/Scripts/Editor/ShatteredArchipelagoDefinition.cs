@@ -25,9 +25,6 @@ namespace WingingIt.Editor
         static readonly Color Magenta = new(0.95f, 0.35f, 0.9f), Cyan = new(0.2f, 0.85f, 1f), Lime = new(0.6f, 1f, 0.2f);
         static readonly Color Gold = new(1f, 0.8f, 0.2f), Orange = new(1f, 0.55f, 0.2f);
 
-        /// <summary>The Spire's islet, north-east of the lagoon: inside the Ram Royale arena, clear of Central's runway.</summary>
-        static readonly Vector2 SpirePosition = new(150f, 425f);
-
         [MenuItem("Winging It/Map/Write Shattered Archipelago Definition")]
         public static void Write()
         {
@@ -41,7 +38,6 @@ namespace WingingIt.Editor
             map.regions = Regions();
             map.landmarks = new()
             {
-                new LandmarkAnchor { kind = LandmarkKind.Spire, xz = SpirePosition, region = "Northern Isles" },
                 new LandmarkAnchor { kind = LandmarkKind.SummitRadar, xz = new Vector2(1100f, 1450f), searchHalfSize = new Vector2(450f, 250f), region = "Crown Island" },
             };
             map.sky = Sky();
@@ -76,7 +72,7 @@ namespace WingingIt.Editor
             layout.lanes.Add(W.Lane(east, "South Pass", Cyan, false, (536f, 861f, 70f), (474f, 31f, 60f), (262f, -849f, 55f)));
             // The capture fields land from the sea: Central and the Long Ridge only one way (hills past the far end),
             // the Western Isle from either end.
-            // Central's runway sits 90 m up in a notch between two peaks: its final comes in high over the sea.
+            // Central's runway sits in a notch between two hills: its final comes in high over the sea.
             layout.lanes.Add(W.Lane(central, "South Final", Gold, false, (134f, -1433f, 140f), (0f, -1004f, 120f)));
             layout.lanes.Add(W.Lane(western, "North Final", Orange, false, (-329f, -1369f, 60f), (0f, -1000f, 50f)));
             layout.lanes.Add(W.Lane(western, "South Final", Orange, true, (411f, -988f, 60f), (33f, -943f, 50f)));
@@ -86,7 +82,7 @@ namespace WingingIt.Editor
             layout.bannerStands.Add(new BannerStandAnchor { airfield = east.name, distance = 150f });
 
             // Over the inner islands, up to 750 m: the Long Ridge rises through its east edge, the Spire stands inside.
-            // The air start ring (550 m out) is clear of the ground below 400 m.
+            // The air start ring (550 m out) is far above the islands (100 m at most).
             layout.arenas.Add(W.RamArena(new Vector2(-100f, 300f), radius: 900f, warning: 150f, ceiling: 750f,
                 startRadius: 550f, startAltitude: 500f, patrolRadius: 450f, patrolAltitude: 450f));
 

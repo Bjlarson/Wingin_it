@@ -26,10 +26,10 @@ MonoBehaviour:
     beachHeight: 6
     beachFade: 6
     rockSlope: {x: 22, y: 34}
-    rockHeight: {x: 350, y: 560}
-    snowHeight: {x: 868, y: 1008.00006}
+    rockHeight: {x: 140, y: 220}
+    snowHeight: {x: 380, y: 440}
     snowSlope: {x: 40, y: 55}
-    treeLine: 700
+    treeLine: 430
     pineHeight: 50
     treeSpacing: 24
     winter: 0
@@ -65,7 +65,7 @@ MonoBehaviour:
       twoWay: 0
       capturable: 1
       position: {x: -350, y: 2150}
-      elevation: 250.5
+      elevation: 57.5
       yaw: 315
     - name: South Hills Airfield
       team: -1
@@ -73,7 +73,7 @@ MonoBehaviour:
       twoWay: 1
       capturable: 1
       position: {x: 550, y: -1550}
-      elevation: 82.5
+      elevation: 18.5
       yaw: 285
     lanes:
     - airfield: West Home Airfield
@@ -298,10 +298,6 @@ MonoBehaviour:
     fallback: Coast
     seaDepth: 1
   landmarks:
-  - kind: 0
-    xz: {x: -250, y: 450}
-    searchHalfSize: {x: 0, y: 0}
-    region: The Strait
   - kind: 1
     xz: {x: 100, y: -1800}
     searchHalfSize: {x: 700, y: 700}
@@ -318,6 +314,7 @@ MonoBehaviour:
     skybox: {fileID: 2100000, guid: 453db78019ab37d459d5e99adf7e5795, type: 2}
     sunAngles: {x: 48, y: -35}
     sunIntensity: 1.4
+    sunColor: {r: 1, g: 0.957, b: 0.839, a: 1}
     fogColor: {r: 0.72, g: 0.82, b: 0.92, a: 1}
     fogStart: 900
     fogEnd: 7000

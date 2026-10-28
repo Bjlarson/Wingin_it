@@ -277,6 +277,18 @@ namespace WingingIt.Tests
         }
 
         [UnityTest]
+        public IEnumerator Crash_WithTheMenuRequestedInTheSameFrame_ShowsOnlyThePlaneSelect()
+        {
+            yield return StartPlaying(0);
+            _player.Crash(_player.Position);
+            _match.OpenMenu(); // before the manager's Update has opened the picker
+            Assert.IsFalse(_match.MenuOpen, "no menu while going down");
+            yield return null;
+            Assert.AreEqual(ClassPicker.Respawn, _match.Picker);
+            Assert.IsFalse(_match.MenuOpen);
+        }
+
+        [UnityTest]
         public IEnumerator Dying_OpensTheRespawnPicker_AndTheRespawnUsesThePick()
         {
             yield return StartPlaying(0);
@@ -657,6 +669,8 @@ namespace WingingIt.Tests
 
             var buoys = Object.FindAnyObjectByType<BoundaryBuoys>();
             Assert.Greater(buoys.ArenaCount, 20, "buoys mark the arena's edge");
+            foreach (Transform marker in buoys.ArenaRing)
+                IslandSceneTests.AssertStandsOnSurface(marker);
 
             _match.Dismiss();
             Assert.IsFalse(arena.IsApplied);

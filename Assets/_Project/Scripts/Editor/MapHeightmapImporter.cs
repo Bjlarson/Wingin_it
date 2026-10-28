@@ -16,6 +16,8 @@ namespace WingingIt.Editor
     public static class MapHeightmapImporter
     {
         const string MapsFolder = B.Root + "/Maps";
+        /// <summary>A map whose peaks reach this high (m) gets rock and snow bands scaled to them.</summary>
+        const float TallPeak = 800f;
 
         public struct Spec
         {
@@ -37,6 +39,8 @@ namespace WingingIt.Editor
             public float detail;
             public int blurRadius, blurPasses;
             public float boundaryRadius, ceiling;
+            /// <summary>The highest land (m) when above 0: the ground above the sea is scaled down to it, coastlines unchanged.</summary>
+            public float peak;
             public int seed;
         }
 
@@ -45,7 +49,7 @@ namespace WingingIt.Editor
             name = "BroadReach", displayName = "Broad Reach", sourcePng = "Design/05-Levels/Valley.png",
             resolution = 2049, worldSize = 8192f, baseHeight = -40f, heightRange = 1440f,
             groundMin = 12f, groundMax = 1400f, gamma = 1.3f, floorMin = -40f, blurRadius = 2, blurPasses = 3,
-            boundaryRadius = 3800f, ceiling = 1500f, seed = 4101,
+            boundaryRadius = 3800f, ceiling = 1500f, peak = 1000f, seed = 4101,
         };
 
         // A range, not islands: black maps to just above the sea, so the valleys stay dry.
@@ -63,7 +67,7 @@ namespace WingingIt.Editor
             name = "ShatteredArchipelago", displayName = "Shattered Archipelago", sourcePng = "Design/05-Levels/archipelago.png", pad = true,
             resolution = 2049, worldSize = 4096f, baseHeight = -20f, heightRange = 1120f,
             groundMin = -260f, groundMax = 1030f, gamma = 1f, seaFade = true, floorMin = -20f, detail = 60f,
-            blurRadius = 3, blurPasses = 3, boundaryRadius = 1900f, ceiling = 1100f, seed = 7404,
+            blurRadius = 3, blurPasses = 3, boundaryRadius = 1900f, ceiling = 1100f, peak = 100f, seed = 7404,
         };
 
         public static readonly Spec IslandV2 = new()
@@ -71,7 +75,7 @@ namespace WingingIt.Editor
             name = "IslandV2", displayName = "The Island", sourcePng = "Design/05-Levels/island.png", pad = true,
             resolution = 2049, worldSize = 7000f, baseHeight = -40f, heightRange = 1440f,
             groundMin = -40f, groundMax = 1400f, gamma = 1.6f, seaFade = true, floorMin = -40f, blurRadius = 2, blurPasses = 3,
-            boundaryRadius = 3300f, ceiling = 1500f, seed = 6303,
+            boundaryRadius = 3300f, ceiling = 1500f, peak = 300f, seed = 6303,
         };
 
         [MenuItem("Winging It/Map/Import Heightmap Images (Broad Reach, Mountain Range, Archipelago, Island v2)")]
@@ -119,8 +123,7 @@ namespace WingingIt.Editor
             for (int pass = 0; pass < spec.blurPasses; pass++)
                 norm = BoxBlur(norm, res, spec.blurRadius);
 
-            var map = new Heightmap(res);
-            float half = spec.worldSize * 0.5f;
+            var ground = new float[res * res];
             float fadeStart = spec.boundaryRadius + 150f, fadeEnd = spec.boundaryRadius + 650f;
             for (int z = 0; z < res; z++)
             for (int x = 0; x < res; x++)
@@ -136,6 +139,20 @@ namespace WingingIt.Editor
                 h = Mathf.Max(h, spec.floorMin);
                 if (spec.seaFade)
                     h = Mathf.Lerp(spec.baseHeight, h, 1f - TerrainRules.Smooth(fadeStart, fadeEnd, Mathf.Sqrt(wx * wx + wz * wz)));
+                ground[z * res + x] = h;
+            }
+
+            // A capped map: the land above the sea scaled so its top is the peak; the sea floor and the shores stay put.
+            float top = Mathf.Max(ground);
+            float landScale = spec.peak > 0f && top > 0f ? spec.peak / top : 1f;
+            float peak = spec.peak > 0f ? spec.peak : spec.groundMax;
+            var map = new Heightmap(res);
+            for (int z = 0; z < res; z++)
+            for (int x = 0; x < res; x++)
+            {
+                float h = ground[z * res + x];
+                if (h > 0f)
+                    h *= landScale;
                 map.Values[z, x] = Mathf.Clamp01((h - spec.baseHeight) / spec.heightRange);
             }
 
@@ -152,12 +169,15 @@ namespace WingingIt.Editor
                 definition = ScriptableObject.CreateInstance<MapDefinition>();
                 AssetDatabase.CreateAsset(definition, defPath);
             }
-            // Tall maps: the height bands of the rules follow the peaks (rock from a quarter up, snow near the top).
+            // Tall maps: the height bands of the rules follow the peaks (rock from a quarter up, snow near the top). Low
+            // ones keep the default bands, above their hills: rock only on the steep slopes, no snow.
             var rules = TerrainRules.Default;
-            float peak = spec.groundMax;
-            rules.rockHeight = new Vector2(peak * 0.25f, peak * 0.4f);
-            rules.snowHeight = new Vector2(peak * 0.62f, peak * 0.72f);
-            rules.treeLine = peak * 0.5f;
+            if (peak >= TallPeak)
+            {
+                rules.rockHeight = new Vector2(peak * 0.25f, peak * 0.4f);
+                rules.snowHeight = new Vector2(peak * 0.62f, peak * 0.72f);
+                rules.treeLine = peak * 0.5f;
+            }
             definition.rules = rules;
             definition.displayName = spec.displayName;
             definition.heightmapRaw = AssetDatabase.LoadAssetAtPath<TextAsset>(rawPath);
@@ -170,7 +190,7 @@ namespace WingingIt.Editor
             definition.seed = spec.seed;
             EditorUtility.SetDirty(definition);
             AssetDatabase.SaveAssets();
-            Debug.Log($"[Winging It] Imported {spec.sourcePng} -> {rawPath} ({res}x{res}, {spec.worldSize / (res - 1):0.0} m a sample)");
+            Debug.Log($"[Winging It] Imported {spec.sourcePng} -> {rawPath} ({res}x{res}, {spec.worldSize / (res - 1):0.0} m a sample, peak {top * landScale:0} m)");
             return definition;
         }
 

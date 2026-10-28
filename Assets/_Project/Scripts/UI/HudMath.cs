@@ -333,7 +333,30 @@ namespace WingingIt.UI
         }
 
         /// <summary>A distance for a marker: metres up close, then kilometres to one decimal.</summary>
-        public static string Distance(float metres) => metres < 1000f ? $"{metres:0} M" : $"{metres / 1000f:0.0} KM";
+        public static string Distance(float metres) => metres < 1000f ? Metres(metres) : Kilometres(metres);
+
+        /// <summary>"640 M": whole metres. Made once per value, as the HUD labels every plane in sight every frame.</summary>
+        public static string Metres(float metres)
+        {
+            double n = System.Math.Round((double)metres, System.MidpointRounding.AwayFromZero);
+            if (n < 0 || n >= s_metres.Length)
+                return $"{metres:0} M";
+            int i = (int)n;
+            return s_metres[i] ??= $"{i} M";
+        }
+
+        /// <summary>"2.4 KM", cached like <see cref="Metres"/>.</summary>
+        static string Kilometres(float metres)
+        {
+            double tenths = System.Math.Round((double)(metres / 1000f) * 10.0, System.MidpointRounding.AwayFromZero);
+            if (tenths < 0 || tenths >= s_kilometres.Length)
+                return $"{metres / 1000f:0.0} KM";
+            int i = (int)tenths;
+            return s_kilometres[i] ??= $"{i / 10}.{i % 10} KM";
+        }
+
+        static readonly string[] s_metres = new string[10000];
+        static readonly string[] s_kilometres = new string[1000];
 
         /// <summary>Why a touchdown went wrong: "GEAR NOT DOWN", "TOO FAST".</summary>
         public static string Fault(TouchdownFault fault) => fault switch

@@ -28,12 +28,6 @@ namespace WingingIt.Maps
         /// <summary>A lane waypoint flies its height above the highest ground or building within this far of it.</summary>
         const float LaneClearanceRadius = 60f;
         const float LaneHalfWidth = 150f;
-        /// <summary>Gate pylons stand this far either side of a lane waypoint.</summary>
-        const float LaneGateHalfWidth = 40f;
-        /// <summary>The pylon top's sleeve reaches this far below the gate point; the stretched pole meets it there.</summary>
-        const float PylonSleeveLength = 16f;
-        /// <summary>How far the pole runs up inside the sleeve, so the joint never shows a gap.</summary>
-        const float PylonPoleOverlap = 0.5f;
 
         /// <summary>A bot patrol point flies its height above the highest ground or building within this far of it.</summary>
         const float FightAreaClearanceRadius = 150f;
@@ -47,7 +41,6 @@ namespace WingingIt.Maps
         readonly Dictionary<string, GameObject> _lanes = new(); // each airfield's lanes, by airfield name
         readonly Dictionary<string, BannerStand> _stands = new(); // by airfield name
         readonly Dictionary<string, ModeArena> _arenas = new(); // by mode id
-        readonly Dictionary<Color, Material> _laneMaterials = new();
         readonly List<Vector3> _fightAreas = new();
         readonly Dictionary<string, object[]> _from = new(); // the anchors each spawned piece was built from, by "kind:name"
         Transform _airfieldGroup, _laneGroup, _standGroup, _arenaGroup;
@@ -287,8 +280,8 @@ namespace WingingIt.Maps
         // ------------------------------------------------------------------ approach lanes
 
         /// <summary>
-        /// The field's lanes from the layout, each a marked route of gate pylons (coloured per lane, no collision) ending on
-        /// the field's final approach fix. The pylons are the markers pack's, or greybox poles with a sphere.
+        /// The field's lanes from the layout, each a route ending on the field's final approach fix. Unmarked for now:
+        /// the gate pylons that lined them are off (the kit still carries their meshes).
         /// </summary>
         GameObject SpawnLanes(Airfield field)
         {
@@ -311,79 +304,6 @@ namespace WingingIt.Maps
             path[^1] = field.GlidePathPoint(FinalFixDistance, lane.reverseEnd);
             root.position = path[0];
             root.gameObject.AddComponent<ApproachLane>().Configure(lane.name, field, path, LaneHalfWidth);
-
-            // A gate at every waypoint but the fix (the glide-path rings take over there): two pylons across the lane.
-            var gateMat = LaneMaterial(lane.color);
-            for (int i = 0; i < points.Length; i++)
-            {
-                Vector3 inDir = i > 0 ? path[i] - path[i - 1] : path[i + 1] - path[i];
-                Vector3 dir = inDir.normalized + (path[i + 1] - path[i]).normalized;
-                dir.y = 0f;
-                Vector3 across = Vector3.Cross(Vector3.up, dir.normalized);
-                foreach (float side in new[] { -1f, 1f })
-                {
-                    Vector3 top = path[i] + across * (side * LaneGateHalfWidth);
-                    float ground = Mathf.Max(0f, HighestPointNear(new Vector2(top.x, top.z), 0f));
-                    float height = Mathf.Max(1f, top.y - ground);
-                    var gate = new GameObject(i == 0 ? "Entry Gate" : $"Gate {i}").transform;
-                    gate.SetParent(root, false);
-                    gate.position = new Vector3(top.x, ground, top.z);
-                    if (kit.HasPylon)
-                        Pylon(gate, height, gateMat);
-                    else
-                    {
-                        Primitive(PrimitiveType.Cube, "Pole", gate, new Vector3(0f, height * 0.5f, 0f), new Vector3(1.5f, height, 1.5f), kit.greyboxPole);
-                        Primitive(PrimitiveType.Sphere, "Marker", gate, new Vector3(0f, height, 0f), Vector3.one * 8f, gateMat);
-                    }
-                }
-            }
-        }
-
-        /// <summary>One of the markers pack's pylon meshes as a child of <paramref name="gate"/>.</summary>
-        static void PylonPart(string partName, Transform gate, Vector3 localPosition, KitMesh part, out MeshRenderer renderer)
-        {
-            var go = new GameObject(partName);
-            go.transform.SetParent(gate, false);
-            go.transform.localPosition = localPosition;
-            go.AddComponent<MeshFilter>().sharedMesh = part.mesh;
-            renderer = go.AddComponent<MeshRenderer>();
-            renderer.sharedMaterials = part.materials;
-        }
-
-        /// <summary>
-        /// A gate pylon standing on <paramref name="gate"/> with its marker <paramref name="height"/> up: footing, a white
-        /// pole stretched to the sleeve, and the marker in the lane's glow. A pylon too short for the sleeve shrinks its top.
-        /// </summary>
-        void Pylon(Transform gate, float height, Material laneMaterial)
-        {
-            PylonPart("PylonBase", gate, Vector3.zero, kit.pylonBase, out _);
-            PylonPart("PylonTop", gate, new Vector3(0f, height, 0f), kit.pylonTop, out var top);
-            var mats = top.sharedMaterials;
-            for (int i = 0; i < mats.Length; i++)
-                if (mats[i] != null && mats[i].name == "Weapon_Glow")
-                    mats[i] = laneMaterial;
-            top.sharedMaterials = mats;
-
-            float pole = height - PylonSleeveLength + PylonPoleOverlap;
-            if (pole > 1f)
-            {
-                PylonPart("PylonPole", gate, Vector3.zero, kit.pylonPole, out var poleRenderer);
-                poleRenderer.transform.localScale = new Vector3(1f, pole, 1f);
-            }
-            else
-                top.transform.localScale = Vector3.one * Mathf.Max(0.1f, height / (PylonSleeveLength + 1f));
-        }
-
-        /// <summary>One material per lane colour: the pylon glow (or greybox marker) tinted to it.</summary>
-        Material LaneMaterial(Color color)
-        {
-            if (_laneMaterials.TryGetValue(color, out var mat))
-                return mat;
-            var source = kit.HasPylon ? kit.laneGlow : kit.greyboxLane;
-            mat = source != null ? new Material(source) : null;
-            if (mat != null)
-                mat.SetColor("_BaseColor", kit.HasPylon ? PlaneVisuals.TeamTint(color) : color);
-            return _laneMaterials[color] = mat;
         }
 
         // ------------------------------------------------------------------ banner stands

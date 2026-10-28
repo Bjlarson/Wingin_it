@@ -337,6 +337,7 @@ namespace WingingIt.UI
             UpdateApproach();
             DrawLandingAssist(scale, width);
             DrawApproachLane(scale);
+            DrawTeamMarkers(scale);
             DrawTargets(scale, width);
             DrawMissileLock(scale);
             DrawBombImpact(scale);
@@ -444,7 +445,8 @@ namespace WingingIt.UI
             if (gear != null)
                 DrawGearLight(new Rect(right - 64f, y, 64f, 20f));
             y += 28f;
-            Meter(new Rect(x, y, 196f, 20f), "BST", plane.BoostMeter, plane.IsBoosting ? new Color(1f, 0.55f, 0.1f) : new Color(0.3f, 0.75f, 1f));
+            if (!plane.AbilitiesOff)
+                Meter(new Rect(x, y, 196f, 20f), "BST", plane.BoostMeter, plane.IsBoosting ? new Color(1f, 0.55f, 0.1f) : new Color(0.3f, 0.75f, 1f));
             // Beside it: vertical speed while the gear is out, the ground state on the runway.
             string vs = null;
             Color vsColor = Steel;
@@ -591,7 +593,7 @@ namespace WingingIt.UI
                     continue;
                 if (PlaneAbility.IsRevealedTo(other, plane.Team) && ToScreen(other.transform.position, scale, out Vector2 contact))
                 {
-                    Diamond(contact, 11f, new Color(0.4f, 1f, 0.5f, 0.9f));
+                    Triangle(contact, 11f, new Color(0.4f, 1f, 0.5f, 0.9f)); // radar only reveals enemies
                     _g.Shadowed(new Rect(contact.x - 60f, contact.y + 12f, 120f, 18f), HudText.Distance(Vector3.Distance(plane.Position, other.Position)),
                         _g.Hint, 1f, TextAnchor.MiddleCenter, new Color(0.4f, 1f, 0.5f, 0.9f), 0.8f);
                 }
@@ -614,7 +616,7 @@ namespace WingingIt.UI
                     Circle(pip, 9f, 2f, Alpha(Red, 0.95f));
                     _g.Fill(new Rect(pip.x - 1.5f, pip.y - 1.5f, 3f, 3f), Red);
                 }
-                _g.Shadowed(new Rect(body.x + 18f, body.y - 24f, 120f, 18f), $"{distance:0} M", _g.Hint, 1f, TextAnchor.MiddleLeft, Alpha(White, 0.85f), 0.8f);
+                _g.Shadowed(new Rect(body.x + 18f, body.y - 24f, 120f, 18f), HudText.Metres(distance), _g.Hint, 1f, TextAnchor.MiddleLeft, Alpha(White, 0.85f), 0.8f);
 
                 float angle = Vector3.Angle(nose, lead - plane.transform.position);
                 if (enemy && angle < bestAngle)
@@ -637,6 +639,33 @@ namespace WingingIt.UI
         }
 
         static readonly (float, float)[] Corners = { (-1f, -1f), (1f, -1f), (-1f, 1f), (1f, 1f) };
+
+        const float TeamMarkerRange = 2000f, TeamMarkerLift = 26f;
+        static readonly Color FriendGrey = new(0.72f, 0.74f, 0.76f, 0.85f);
+
+        /// <summary>
+        /// Friend or foe at a glance, over every plane in sight within <see cref="TeamMarkerRange"/>: a red triangle
+        /// (point down) over an enemy, a grey square over a teammate. In a free for all everyone is an enemy.
+        /// </summary>
+        void DrawTeamMarkers(float scale)
+        {
+            if (viewCamera == null || !plane.IsAlive)
+                return;
+            foreach (var other in PlaneController.All)
+            {
+                if (other == plane || !other.IsAlive)
+                    continue;
+                if ((other.Position - plane.Position).sqrMagnitude > TeamMarkerRange * TeamMarkerRange)
+                    continue;
+                if (CloudCover.Blocks(plane.transform.position, other.transform.position) || !ToScreen(other.Position, scale, out Vector2 p))
+                    continue;
+                var at = p + new Vector2(0f, -TeamMarkerLift);
+                if (other.Team != plane.Team)
+                    Triangle(at, 7f, Alpha(Red, 0.9f), solid: true);
+                else
+                    Square(at, 6f, FriendGrey);
+            }
+        }
 
         static readonly (PlanePartType type, string label)[] PartLabels =
         {
@@ -1073,6 +1102,36 @@ namespace WingingIt.UI
             DottedLine(right, bottom, color, 2.5f, 3f);
             DottedLine(bottom, left, color, 2.5f, 3f);
             DottedLine(left, top, color, 2.5f, 3f);
+        }
+
+        /// <summary>A triangle pointing down at <paramref name="p"/>'s plane: the enemy marker. Solid, or a dotted outline.</summary>
+        void Triangle(Vector2 p, float size, Color color, bool solid = false)
+        {
+            var left = p + new Vector2(-size, -size * 0.6f);
+            var right = p + new Vector2(size, -size * 0.6f);
+            var tip = p + new Vector2(0f, size * 0.9f);
+            if (solid)
+            {
+                // Rows of fill, narrowing to the tip.
+                for (float y = left.y; y <= tip.y; y += 1f)
+                {
+                    float half = size * (tip.y - y) / (tip.y - left.y);
+                    _g.Fill(new Rect(p.x - half, y, half * 2f, 1f), color);
+                }
+                return;
+            }
+            DottedLine(left, right, color, 2.5f, 3f);
+            DottedLine(right, tip, color, 2.5f, 3f);
+            DottedLine(tip, left, color, 2.5f, 3f);
+        }
+
+        /// <summary>A hollow square centred on <paramref name="p"/>: the teammate marker.</summary>
+        void Square(Vector2 p, float half, Color color, float t = 2.5f)
+        {
+            _g.Fill(new Rect(p.x - half, p.y - half, half * 2f, t), color);
+            _g.Fill(new Rect(p.x - half, p.y + half - t, half * 2f, t), color);
+            _g.Fill(new Rect(p.x - half, p.y - half, t, half * 2f), color);
+            _g.Fill(new Rect(p.x + half - t, p.y - half, t, half * 2f), color);
         }
 
         /// <summary>IMGUI has no line primitive, so this draws dots.</summary>
