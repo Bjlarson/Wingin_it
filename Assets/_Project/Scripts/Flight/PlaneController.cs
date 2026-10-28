@@ -54,6 +54,15 @@ namespace WingingIt.Flight
     [RequireComponent(typeof(Rigidbody))]
     public class PlaneController : MonoBehaviour
     {
+        /// <summary>Flare drag fades out by this × the stall speed.</summary>
+        const float FlareSpeedFactor = 1.6f;
+        /// <summary>The nose this far (deg) above the flight path gets the full flare drag.</summary>
+        const float FlareFullAngle = 10f;
+        /// <summary>At idle, full climb comes back by this × the stall speed; at the stall there's none.</summary>
+        const float ClimbSpeedFactor = 1.8f;
+        /// <summary>Stalled down to this lift, back stick does nothing.</summary>
+        const float StalledPullCutoff = 0.5f;
+
         [SerializeField] FlightStats stats;
         [Tooltip("Planes on the same team are allies (repair aura, radar). Placeholder until Teams mode.")]
         [SerializeField] int team;
@@ -116,6 +125,7 @@ namespace WingingIt.Flight
         Vector3 _position;
         Quaternion _rotation;
         Vector3 _velocity;
+        Vector3 _path; // the last airborne move, climb limits and sink included
         float _sinkSpeed;
         float _stallLift = 1f;
         float _damageLift = 1f;
@@ -309,8 +319,9 @@ namespace WingingIt.Flight
             _position = position;
             _rotation = rotation;
             Throttle = throttle;
-            Speed = stats != null ? Mathf.Lerp(stats.minSpeed, stats.maxSpeed, throttle) : 0f;
+            Speed = stats != null ? ThrottleCurve.AirSpeed(throttle, stats.IdleSpeed, stats.minSpeed, stats.maxSpeed) : 0f;
             _velocity = rotation * Vector3.forward * Speed;
+            _path = _velocity;
             _sinkSpeed = 0f;
             _angularRates = Vector3.zero;
             _boundaryOverride = 0f;
@@ -430,7 +441,8 @@ namespace WingingIt.Flight
                     _takeoffRun = false;
                 else if (IsGrounded && IsBoosting)
                     _takeoffRun = true;
-                float auto = _gear != null && _gear.IsLocked && !_takeoffRun ? 0f : stats.cruiseThrottle;
+                // The approach holds the lowest flying power, not idle: touchdown cuts the engine.
+                float auto = _gear != null && _gear.IsLocked && !_takeoffRun ? ThrottleCurve.IdleBand : stats.cruiseThrottle;
                 Throttle = Mathf.MoveTowards(Throttle, auto, stats.throttleChangeRate * dt);
             }
             else
@@ -463,10 +475,12 @@ namespace WingingIt.Flight
             float maxSpeed = m.Get(FlightStat.MaxSpeed);
             float boostMax = maxSpeed * m.Get(FlightStat.BoostMultiplier);
 
-            float target = Mathf.Lerp(m.Get(FlightStat.MinSpeed), maxSpeed, Throttle) * thrust;
-            // A dead engine only has drag to fight, so the plane glides instead of stopping.
-            float drag = Mathf.Lerp(stats.glideDeceleration, stats.deceleration, Mathf.Clamp01(thrust));
-            float accel = Speed < target ? m.Get(FlightStat.Acceleration) : drag;
+            float target = ThrottleCurve.AirSpeed(Throttle, stats.IdleSpeed, m.Get(FlightStat.MinSpeed), maxSpeed) * thrust;
+            // At idle the engine only just turns: a weak pull and little drag, so the plane glides down to just under
+            // the stall. A dead engine only has drag to fight, so it glides instead of stopping.
+            float power = ThrottleCurve.Power(Throttle);
+            float drag = Mathf.Lerp(stats.glideDeceleration, Mathf.Lerp(stats.idleDeceleration, stats.deceleration, power), Mathf.Clamp01(thrust));
+            float accel = Speed < target ? Mathf.Lerp(stats.idleAcceleration, m.Get(FlightStat.Acceleration), power) : drag;
             if (IsBoosting)
             {
                 target = boostMax * thrust;
@@ -478,6 +492,17 @@ namespace WingingIt.Flight
             // Climbing bleeds speed, diving builds it.
             float noseY = (_rotation * Vector3.forward).y;
             Speed -= noseY * stats.gravityInfluence * dt;
+
+            // The nose held above the flight path near the stall (a flare) costs speed: the wing works hard for lift it
+            // barely has. Down at idle speed the stall takes over (its sink would read as a steep flare and feed itself).
+            float slow = Mathf.InverseLerp(stats.IdleSpeed, stats.stallSpeed, Speed)
+                * (1f - Mathf.InverseLerp(stats.stallSpeed, stats.stallSpeed * FlareSpeedFactor, Speed));
+            if (slow > 0f && _path.sqrMagnitude > 1f)
+            {
+                float pathY = Mathf.Clamp(_path.normalized.y, -1f, 1f);
+                float aboveAngle = (Mathf.Asin(Mathf.Clamp(noseY, -1f, 1f)) - Mathf.Asin(pathY)) * Mathf.Rad2Deg;
+                Speed -= stats.flareDrag * Mathf.Clamp01(aboveAngle / FlareFullAngle) * slow * dt;
+            }
             Speed = Mathf.Clamp(Speed, 0f, boostMax * 1.25f);
         }
 
@@ -544,6 +569,10 @@ namespace WingingIt.Flight
             if (yawWobble > 0f)
                 target.y += (Mathf.PerlinNoise(t, _wobbleSeed) * 2f - 1f) * yawWobble;
 
+            // Stalled, the wing can't hold the nose up: back stick fades out and the nose drops until there's speed again.
+            if (target.x > 0f)
+                target.x *= Mathf.InverseLerp(StalledPullCutoff, 1f, _stallLift);
+
             target *= authority;
             float k = 1f - Mathf.Exp(-m.Get(FlightStat.Responsiveness) * ResponsivenessScale * dt);
             _angularRates = Vector3.Lerp(_angularRates, target, k);
@@ -574,6 +603,7 @@ namespace WingingIt.Flight
 
             // Not enough lift (too slow, or lost wings): the nose sags toward the ground.
             _stallLift = Mathf.Clamp01(Speed / Mathf.Max(1f, stats.stallSpeed));
+            _stallLift *= _stallLift; // lift grows with the square of speed
             _damageLift = Mathf.Clamp01(m.Get(FlightStat.Lift));
             LiftFactor = _stallLift * _damageLift;
             if (LiftFactor < 1f)
@@ -603,8 +633,15 @@ namespace WingingIt.Flight
                 _sinkSpeed = Mathf.MoveTowards(_sinkSpeed, (1f - _damageLift) * stats.damageSinkSpeed, 15f * dt);
 
             Vector3 move = _velocity + Vector3.down * _sinkSpeed;
+            // Slow and without power there's no spare lift to climb with: pulling up (a flare) trades speed, not height.
             if (move.y > 0f)
-                move.y *= m.Get(FlightStat.Climb);
+            {
+                float power = ThrottleCurve.Power(Throttle) * Mathf.Clamp01(EffectiveThrust);
+                float margin = Mathf.InverseLerp(stats.stallSpeed, stats.stallSpeed * ClimbSpeedFactor, Speed);
+                margin *= margin; // lift grows with the square of speed
+                move.y *= m.Get(FlightStat.Climb) * Mathf.Lerp(margin, 1f, power);
+            }
+            _path = move;
             return move;
         }
 
@@ -741,6 +778,7 @@ namespace WingingIt.Flight
 
             _rotation = Quaternion.Euler(-_groundPitch, heading, 0f);
             _velocity = Quaternion.Euler(0f, heading, 0f) * Vector3.forward * (_reversing ? -Speed : Speed);
+            _path = _velocity;
             _sinkSpeed = 0f;
             _angularRates = Vector3.zero;
             _stallLift = _damageLift = LiftFactor = 1f;

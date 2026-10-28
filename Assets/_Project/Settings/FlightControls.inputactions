@@ -364,7 +364,7 @@
                     "isPartOfComposite": true
                 },
                 {
-                    "name": "DPad",
+                    "name": "Buttons",
                     "id": "498318e4-54cb-419e-9473-ca49b4b6c3ed",
                     "path": "1DAxis",
                     "interactions": "",
@@ -377,7 +377,7 @@
                 {
                     "name": "negative",
                     "id": "7acb8cd3-ea33-46f4-8060-22e6edb36be6",
-                    "path": "<Gamepad>/dpad/down",
+                    "path": "<Gamepad>/buttonWest",
                     "interactions": "",
                     "processors": "",
                     "groups": "Gamepad",
@@ -388,6 +388,39 @@
                 {
                     "name": "positive",
                     "id": "b8f906f9-ee54-4e14-96ee-8d4242012f04",
+                    "path": "<Gamepad>/buttonNorth",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "Throttle",
+                    "isComposite": false,
+                    "isPartOfComposite": true
+                },
+                {
+                    "name": "DPad",
+                    "id": "9173466a-7827-4081-9a3c-26a045a7db41",
+                    "path": "1DAxis",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Throttle",
+                    "isComposite": true,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "negative",
+                    "id": "e965ea1d-966e-4590-b7d6-8204766b692a",
+                    "path": "<Gamepad>/dpad/down",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "Throttle",
+                    "isComposite": false,
+                    "isPartOfComposite": true
+                },
+                {
+                    "name": "positive",
+                    "id": "051f2e7f-33c6-4875-ad3f-6b0e738b00b7",
                     "path": "<Gamepad>/dpad/up",
                     "interactions": "",
                     "processors": "",
@@ -498,7 +531,7 @@
                 {
                     "name": "",
                     "id": "7502b8cd-5825-4ce1-85ed-fc2d9edcb8e1",
-                    "path": "<Gamepad>/buttonWest",
+                    "path": "<Gamepad>/dpad/left",
                     "interactions": "",
                     "processors": "",
                     "groups": "Gamepad",
@@ -520,7 +553,7 @@
                 {
                     "name": "",
                     "id": "ef1bacce-104f-4ee9-8970-405d7b3e5939",
-                    "path": "<Gamepad>/buttonNorth",
+                    "path": "<Gamepad>/dpad/right",
                     "interactions": "",
                     "processors": "",
                     "groups": "Gamepad",

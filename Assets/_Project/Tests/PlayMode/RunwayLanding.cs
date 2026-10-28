@@ -49,7 +49,7 @@ namespace WingingIt.Tests
         }
 
         /// <summary>
-        /// A by-the-book landing, like dev key L: 500 m before the threshold on a 3° glide slope at idle (class min
+        /// A by-the-book landing, like dev key L: 500 m before the threshold on a 3° glide slope at the lowest flying power (class min
         /// speed), gear locked, touching down near the start of the runway.
         /// </summary>
         public static IEnumerator FinalApproachAndLand(PlaneController plane, Airfield home)
@@ -57,9 +57,9 @@ namespace WingingIt.Tests
             const float distance = 500f, slope = 3f;
             Vector3 start = home.transform.TransformPoint(
                 new Vector3(0f, distance * Mathf.Tan(slope * Mathf.Deg2Rad), -home.RunwaySize.y * 0.5f - distance));
-            plane.Respawn(start, Quaternion.LookRotation(home.RunwayDirection) * Quaternion.Euler(slope, 0f, 0f), throttle: 0f);
+            plane.Respawn(start, Quaternion.LookRotation(home.RunwayDirection) * Quaternion.Euler(slope, 0f, 0f), throttle: ThrottleCurve.IdleBand);
             plane.GetComponent<LandingGear>().Snap(true);
-            yield return FlyToTouchdown(plane, -plane.Speed * Mathf.Sin(slope * Mathf.Deg2Rad), throttle: -1f, timeout: 20f);
+            yield return FlyToTouchdown(plane, -plane.Speed * Mathf.Sin(slope * Mathf.Deg2Rad), throttle: 0f, timeout: 20f); // hold the lowest flying power down the slope
             Assert.AreEqual(TouchdownResult.Landed, plane.LastTouchdown.Result, $"fault {plane.LastTouchdown.Fault}");
             Assert.Less(home.transform.InverseTransformPoint(plane.Position).z, -100f, "touched down on the near half");
         }

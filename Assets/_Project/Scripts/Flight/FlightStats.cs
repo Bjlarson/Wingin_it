@@ -65,7 +65,7 @@ namespace WingingIt.Flight
         public AbilityStats ability;
 
         [Header("Speed (m/s)")]
-        [Tooltip("Speed at zero throttle.")]
+        [Tooltip("Speed at the lowest throttle that still flies; below it the engine eases to idle (see ThrottleCurve).")]
         public float minSpeed = 40f;
         [Tooltip("Speed at full throttle, without boost.")]
         public float maxSpeed = 110f;
@@ -100,6 +100,17 @@ namespace WingingIt.Flight
         [Tooltip("Below this speed the plane loses lift and gently noses down.")]
         public float stallSpeed = 32f;
         public float noseDropRate = 30f;
+        [Tooltip("Idle speed as a fraction of the stall speed: throttle held all the way down settles just below the stall.")]
+        [Range(0.5f, 1f)] public float idleSpeedFactor = 0.92f;
+        [Tooltip("Pull (m/s²) of the idling engine below idle speed: keeps it turning, not enough to fly on.")]
+        public float idleAcceleration = 3f;
+        [Tooltip("Speed lost per second at idle in level flight. Lower = a longer glide.")]
+        public float idleDeceleration = 3f;
+        [Tooltip("Speed lost per second while pulling the nose up hard near the stall (a flare).")]
+        public float flareDrag = 10f;
+
+        /// <summary>The speed an idling engine pulls toward, just under the stall.</summary>
+        public float IdleSpeed => stallSpeed * idleSpeedFactor;
 
         [Header("Damage")]
         [Tooltip("Speed lost per second in level flight with a dead engine. Diving gently holds speed (a glide).")]
