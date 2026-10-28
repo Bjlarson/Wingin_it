@@ -30,10 +30,10 @@ namespace WingingIt.Tests
         /// Puts the plane <paramref name="height"/> m over the start of the home runway, heading down it, with the
         /// gear already locked (unless <paramref name="gearDown"/> is false).
         /// </summary>
-        void StartApproach(float height, float noseDown = 2f, float bank = 0f, bool gearDown = true)
+        void StartApproach(float height, float noseDown = 2f, float bank = 0f, bool gearDown = true, float? throttle = null, float ahead = 0f)
         {
-            Vector3 start = _home.transform.TransformPoint(new Vector3(0f, height, -_home.RunwaySize.y * 0.45f));
-            _plane.Respawn(start, Quaternion.LookRotation(_home.RunwayDirection) * Quaternion.Euler(noseDown, 0f, bank));
+            Vector3 start = _home.transform.TransformPoint(new Vector3(0f, height, -_home.RunwaySize.y * 0.45f + ahead));
+            _plane.Respawn(start, Quaternion.LookRotation(_home.RunwayDirection) * Quaternion.Euler(noseDown, 0f, bank), throttle);
             if (gearDown)
                 _gear.Snap(true);
         }
@@ -45,10 +45,11 @@ namespace WingingIt.Tests
 
         IEnumerator Fly(FlightInput input, float seconds) => RunwayLanding.Fly(_plane, input, seconds);
 
-        IEnumerator Land()
+        /// <summary>A clean landing, the approach starting <paramref name="ahead"/> m further down the runway.</summary>
+        IEnumerator Land(float ahead = 0f)
         {
-            StartApproach(20f);
-            yield return FlyToTouchdown(-3f, throttle: -1f);
+            StartApproach(20f, throttle: ThrottleCurve.IdleBand, ahead: ahead); // the lowest flying power, held down to the runway
+            yield return FlyToTouchdown(-3f, throttle: 0f);
             Assert.AreEqual(TouchdownResult.Landed, _plane.LastTouchdown.Result,
                 $"fault {_plane.LastTouchdown.Fault}: speed {_plane.LastTouchdown.Speed:0.0}, sink {_plane.LastTouchdown.SinkRate:0.0}");
         }
@@ -79,7 +80,7 @@ namespace WingingIt.Tests
         {
             Vector3 start = _home.GlidePathPoint(800f);
             float slope = _home.GlideSlope.angle;
-            _plane.Respawn(start, Quaternion.LookRotation(_home.RunwayDirection) * Quaternion.Euler(slope, 0f, 0f), throttle: 0f);
+            _plane.Respawn(start, Quaternion.LookRotation(_home.RunwayDirection) * Quaternion.Euler(slope, 0f, 0f), throttle: ThrottleCurve.IdleBand);
             yield return new WaitForFixedUpdate();
             float sink = -_plane.Speed * Mathf.Sin(slope * Mathf.Deg2Rad);
             int checks = 0;
@@ -90,7 +91,7 @@ namespace WingingIt.Tests
                 Assert.IsTrue(guide.OnPath, $"off the path {guide.Distance:0} m out: {guide.HeightError:0.0} m high, {guide.Lateral:0.0} m right");
                 checks++;
                 float pathAngle = Mathf.Asin(Mathf.Clamp(sink / Mathf.Max(1f, _plane.Speed), -1f, 1f)) * Mathf.Rad2Deg;
-                _plane.SetInput(new FlightInput { Pitch = Mathf.Clamp((pathAngle - Pitch) * 0.08f, -1f, 1f), Throttle = -1f });
+                _plane.SetInput(new FlightInput { Pitch = Mathf.Clamp((pathAngle - Pitch) * 0.08f, -1f, 1f), Throttle = 0f });
                 yield return new WaitForFixedUpdate();
             }
             Assert.Greater(checks, 100);
@@ -126,7 +127,7 @@ namespace WingingIt.Tests
         [UnityTest]
         public IEnumerator LandedLong_StillStopsInTheRepairZone()
         {
-            yield return Land(); // floats a long way: touches down around the middle of the zone
+            yield return Land(ahead: 110f); // starts late: touches down around the middle of the zone
             Assert.Greater(_home.RepairZone.transform.InverseTransformPoint(_plane.Position).z, -60f, "landed long");
             yield return RollToAStop();
             Assert.IsTrue(_home.RepairZone.Contains(_plane.Position), "brakes hard enough to stay in the zone");

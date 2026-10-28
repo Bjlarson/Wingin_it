@@ -74,7 +74,7 @@ namespace WingingIt.Dev
             float slope = home.GlideSlope.angle;
             if (TryGetComponent(out PlaneRespawner respawner))
                 respawner.CancelPendingRespawn();
-            me.Respawn(start, Quaternion.LookRotation(home.RunwayDirection) * Quaternion.Euler(slope, 0f, 0f), throttle: 0f);
+            me.Respawn(start, Quaternion.LookRotation(home.RunwayDirection) * Quaternion.Euler(slope, 0f, 0f), throttle: ThrottleCurve.IdleBand);
             if (TryGetComponent(out LandingGear gear))
                 gear.Snap(true);
         }

@@ -1,4 +1,5 @@
 using UnityEngine;
+using WingingIt.Flight;
 
 namespace WingingIt.Bots
 {
@@ -23,7 +24,7 @@ namespace WingingIt.Bots
             float speed = targetSpeed / thrust;
             float wanted = grounded
                 ? Mathf.Clamp01(speed / Mathf.Max(1f, maxSpeed))
-                : Mathf.InverseLerp(minSpeed, maxSpeed, speed);
+                : Mathf.Max(ThrottleCurve.IdleBand, Mathf.InverseLerp(minSpeed, maxSpeed, speed)); // bots never idle in the air
             return Mathf.Clamp((wanted - currentThrottle) * gain, -1f, 1f);
         }
 

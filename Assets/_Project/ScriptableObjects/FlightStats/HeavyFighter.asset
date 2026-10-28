@@ -38,6 +38,10 @@ MonoBehaviour:
   grip: 3
   stallSpeed: 28
   noseDropRate: 30
+  idleSpeedFactor: 0.92
+  idleAcceleration: 3
+  idleDeceleration: 3
+  flareDrag: 10
   glideDeceleration: 3
   damageSinkSpeed: 25
   boostMultiplier: 1.35
