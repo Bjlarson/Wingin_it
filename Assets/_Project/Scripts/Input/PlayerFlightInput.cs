@@ -63,7 +63,7 @@ namespace WingingIt.Input
         PlaneController _plane;
         InputActionMap _map;
         InputAction _pitch, _roll, _yaw, _throttle, _boost, _mouseLook, _stickLook, _freeLook;
-        InputAction _fireGuns, _fireMissile, _fireSecondary, _dropBomb, _ability, _toggleMode, _nextClass;
+        InputAction _fireGuns, _fireMissile, _fireSecondary, _dropBomb, _ability, _eject, _toggleMode, _nextClass;
         bool _lastDeviceWasGamepad;
         bool _autoThrottle;
         float _touchSensitivity = 1f;
@@ -72,6 +72,7 @@ namespace WingingIt.Input
         readonly TouchGestures _gestures = new TouchGestures();
         bool _gesturesOnly;
         float _missilePulse, _bombPulse, _rocketPulse, _abilityPulse; // gesture presses, held long enough for a fixed step to see them
+        float _ejectPulse; // the eject hold just completed
         PlaneMissiles _missiles;
         PlaneBombs _bombs;
         PlaneRockets _rockets;
@@ -102,6 +103,10 @@ namespace WingingIt.Input
         public bool DropBombHeld => _dropBomb != null && _dropBomb.IsPressed();
         public bool AbilityHeld => _ability != null && _ability.IsPressed();
 
+        /// <summary>The eject control for the device in use ("X", "LS"): what the HUD's eject hint names.</summary>
+        public string EjectBindingName => _eject == null ? ""
+            : _eject.GetBindingDisplayString(InputBinding.MaskByGroup(_lastDeviceWasGamepad ? InputBindings.GamepadGroup : InputBindings.KeyboardGroup));
+
         void Awake()
         {
             _plane = GetComponent<PlaneController>();
@@ -130,6 +135,7 @@ namespace WingingIt.Input
             _fireSecondary = _map.FindAction("FireSecondary", true);
             _dropBomb = _map.FindAction("DropBomb", true);
             _ability = _map.FindAction("Ability", true);
+            _eject = _map.FindAction("Eject", true);
             _toggleMode = _map.FindAction("ToggleControlMode", true);
             _nextClass = _map.FindAction("NextClass", true);
         }
@@ -144,6 +150,7 @@ namespace WingingIt.Input
             _plane.Respawned += OnRespawned;
             _toggleMode.performed += OnToggleMode;
             _nextClass.performed += OnNextClass;
+            _eject.performed += OnEject;
             _map.Enable();
         }
 
@@ -161,6 +168,7 @@ namespace WingingIt.Input
             _plane.Respawned -= OnRespawned;
             _toggleMode.performed -= OnToggleMode;
             _nextClass.performed -= OnNextClass;
+            _eject.performed -= OnEject;
             _map.Disable();
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
@@ -218,6 +226,9 @@ namespace WingingIt.Input
 
         void OnNextClass(InputAction.CallbackContext _) => NextClassPressed?.Invoke();
 
+        // Eject is a hold (so a stray press can't throw the pilot out): it fires once, when the hold completes.
+        void OnEject(InputAction.CallbackContext _) => _ejectPulse = 0.12f;
+
         void Update()
         {
             bool cursorLocked = UpdateCursorLock();
@@ -265,6 +276,7 @@ namespace WingingIt.Input
             _bombPulse -= Time.deltaTime;
             _rocketPulse -= Time.deltaTime;
             _abilityPulse -= Time.deltaTime;
+            _ejectPulse -= Time.deltaTime;
 
             var input = new FlightInput
             {
@@ -276,6 +288,7 @@ namespace WingingIt.Input
                 FireMissile = (_fireMissile.IsPressed() && (mouseCanFire || _fireMissile.activeControl?.device is not Mouse)) || _missilePulse > 0f,
                 DropBomb = _dropBomb.IsPressed() || _bombPulse > 0f,
                 UseAbility = _ability.IsPressed() || _abilityPulse > 0f,
+                Eject = _ejectPulse > 0f,
                 AutoThrottle = TouchControlsActive && (autoThrottleOnTouch || gestures) && (!_manualThrottle || gestures),
                 Style = ControlStyle.AutoLevel,
             };

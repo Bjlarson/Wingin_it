@@ -197,5 +197,39 @@ namespace WingingIt.Tests
             });
             WithScene("BroadReach", scene => Assert.IsEmpty(InScene<Snowfall>(scene), "only the winter map snows"));
         }
+
+        [TestCase("IslandV2")]
+        [TestCase("BroadReach")]
+        [TestCase("MountainRange")]
+        public void Outskirts_CarryTheGroundOn_IntoAHazeTheSkyMatches(string mapName)
+        {
+            WithScene(mapName, scene =>
+            {
+                var map = InScene<MapScene>(scene)[0].Definition;
+                var terrains = InScene<Terrain>(scene);
+                var main = terrains[0];
+                var outskirts = System.Array.Find(terrains, t => t.name == "Outskirts");
+                Assert.IsNotNull(outskirts, "an Outskirts terrain");
+                Assert.IsNull(outskirts.GetComponent<TerrainCollider>(), "render only: the boundary keeps planes inside");
+                var data = outskirts.terrainData;
+                Assert.LessOrEqual(data.terrainLayers.Length, 4, "one terrain pass");
+                Assert.Greater(data.size.x, map.worldSize + 6000f, "reaches well past the edge");
+                int n = data.holesResolution;
+                Assert.IsFalse(data.GetHoles(n / 2, n / 2, 1, 1)[0, 0], "the map's own square is cut out");
+
+                // Just past the middle of each edge, the outskirts' ground carries on from the map's.
+                float half = map.worldSize * 0.5f;
+                foreach (var dir in new[] { Vector3.right, Vector3.left, Vector3.forward, Vector3.back })
+                {
+                    float inside = main.SampleHeight(dir * (half - 10f)) + main.transform.position.y;
+                    float past = outskirts.SampleHeight(dir * (half + 30f)) + outskirts.transform.position.y;
+                    Assert.AreEqual(inside, past, 30f, $"{mapName} edge toward {dir}");
+                }
+
+                var sky = map.sky.skybox;
+                Assert.AreEqual("Winging It/Sky", sky.shader.name);
+                Assert.AreEqual(map.sky.fogColor, sky.GetColor("_HorizonColor"), "the horizon is the fog colour, so the far ground melts into it");
+            });
+        }
     }
 }

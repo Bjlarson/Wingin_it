@@ -27,6 +27,10 @@ namespace WingingIt.UI
         Font _din, _inter;
         readonly Dictionary<int, Texture2D> _glass = new();
         readonly Dictionary<(GUIStyle, int, char), float> _advance = new();
+        readonly HashSet<(Font, int, FontStyle)> _warmed = new();
+
+        /// <summary>Every glyph the HUD and menus draw, put in the font atlas together (see <see cref="Warm"/>).</summary>
+        const string Charset = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~·–—°×";
 
         public void Dispose()
         {
@@ -146,10 +150,23 @@ namespace WingingIt.UI
             return s;
         }
 
+        /// <summary>
+        /// Puts the whole <see cref="Charset"/> in the dynamic font's atlas the first time a size is used. Asking for
+        /// glyphs one at a time made Unity rebuild the atlas partway through drawing, and letters already laid out that
+        /// frame then sampled the wrong spot ("COMBAT AREA" drew as "COMBCT CREC").
+        /// </summary>
+        void Warm(GUIStyle style, int size)
+        {
+            var font = style.font;
+            if (font != null && font.dynamic && _warmed.Add((font, size, style.fontStyle)))
+                font.RequestCharactersInTexture(Charset, size, style.fontStyle);
+        }
+
         float Advance(GUIStyle style, int size, char ch)
         {
             if (_advance.TryGetValue((style, size, ch), out float w))
                 return w;
+            Warm(style, size);
             if (ch == ' ')
                 w = size * 0.3f;
             else
@@ -170,6 +187,7 @@ namespace WingingIt.UI
         public void Tracked(Rect r, string text, GUIStyle style, float tracking, TextAnchor anchor, Color color, float scale = 1f)
         {
             int size = Mathf.RoundToInt(style.fontSize * scale);
+            Warm(style, size);
             float total = TrackedWidth(text, style, tracking, scale);
             float x = anchor switch
             {
@@ -255,6 +273,8 @@ namespace WingingIt.UI
             BodyText = Style(_inter, 17, FontStyle.Normal);
             BodyText.alignment = TextAnchor.UpperLeft;
             BodyText.wordWrap = true;
+            foreach (var style in new[] { Title, Item, Hint, Numeral, Huge, BodyText })
+                Warm(style, style.fontSize);
         }
 
         /// <summary>

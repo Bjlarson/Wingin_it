@@ -514,6 +514,10 @@ namespace WingingIt.Editor
             var ability = root.AddComponent<PlaneAbility>();
             SetField(ability, "shieldMaterial", m.Shield);
             SetField(ability, "flameMaterial", m.Ember);
+            // Bailing out of a crippled plane: the pilot prefabs come from Winging It/Build Pilot Prefabs.
+            root.AddComponent<PlaneEjection>().SetPrefabs(
+                AssetDatabase.LoadAssetAtPath<GameObject>(PilotModels.PilotPrefabPath)?.GetComponent<PilotFigure>(),
+                AssetDatabase.LoadAssetAtPath<GameObject>(PilotModels.ParachutePrefabPath)?.GetComponent<PilotParachute>());
 
             var prefab = PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
             Object.DestroyImmediate(root);
@@ -555,6 +559,15 @@ namespace WingingIt.Editor
                 SetVectors(element.FindPropertyRelative("muzzlePositions"), models[i].muzzlePositions);
                 SetVectors(element.FindPropertyRelative("railPositions"), models[i].railPositions);
                 SetVectors(element.FindPropertyRelative("wingHitboxPositions"), models[i].wingHitboxPositions);
+                var surfaces = element.FindPropertyRelative("surfaces");
+                surfaces.arraySize = models[i].surfaces.Length;
+                for (int s = 0; s < models[i].surfaces.Length; s++)
+                {
+                    var surface = surfaces.GetArrayElementAtIndex(s);
+                    surface.FindPropertyRelative("pivot").objectReferenceValue = models[i].surfaces[s].pivot;
+                    surface.FindPropertyRelative("kind").enumValueIndex = (int)models[i].surfaces[s].kind;
+                    surface.FindPropertyRelative("axis").vector3Value = models[i].surfaces[s].axis;
+                }
             }
             so.ApplyModifiedPropertiesWithoutUndo();
 
@@ -1487,6 +1500,8 @@ namespace WingingIt.Editor
             var rocketsButton = TouchButton("Rockets", controls.transform, knob, new Vector2(-570f, 290f), 110f, new Color(1f, 0.55f, 0.15f, 0.5f), "<Gamepad>/dpad/left");
             var bombButton = TouchButton("Bomb", controls.transform, knob, new Vector2(-620f, 120f), 110f, new Color(0.75f, 0.75f, 0.8f, 0.5f), "<Gamepad>/dpad/right");
             var abilityButton = TouchButton("Ability", controls.transform, knob, new Vector2(-420f, 380f), 110f, new Color(0.5f, 1f, 0.5f, 0.5f), "<Gamepad>/buttonSouth");
+            // Top-left of the fan, away from fire: only up while the plane is crippled, and a hold (the action's).
+            var ejectButton = TouchButton("Eject", controls.transform, knob, new Vector2(-600f, 520f), 110f, new Color(1f, 0.2f, 0.2f, 0.6f), "<Gamepad>/leftStickPress");
 
             // Right edge, above fire: throttle up / down (down also backs the plane up on the ground, to reach the repair
             // zone). The left-hand setting mirrors them over the stick.
@@ -1516,6 +1531,8 @@ namespace WingingIt.Editor
             SetField(touchUi, "ability", planeGo.GetComponent<PlaneAbility>());
             SetField(touchUi, "abilityButton", abilityButton);
             SetField(touchUi, "boostButton", boostButton);
+            SetField(touchUi, "ejection", planeGo.GetComponent<PlaneEjection>());
+            SetField(touchUi, "ejectButton", ejectButton);
             SetArray(touchUi, "throttleButtons", new[] { throttleUp, throttleDown });
             controls.SetActive(false);
         }

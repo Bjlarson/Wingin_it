@@ -29,7 +29,7 @@ Hard requirements that apply to every pack:
 | Landing gear (animated deploy/retract) | 4 | One per class, with wheel meshes |
 | Propeller / jet exhaust meshes + blur | 4 | Spinning prop, motion-blur disc or afterburner cone |
 | Cockpit canopy glass | 4 | Needs glass shader with tint |
-| Pilot figure (visible in canopy) | 1 | Optional, ties into helmet cosmetics |
+| Pilot figure (visible in canopy) | 1 | **Pilot and parachute done 2026-10-28** (playtest G1): `ArtSource/Pilot/build_pilot.py` → `Art/Models/Pilot/Pilot.fbx`, a 1.8 m figure of jointed pieces (`PilotTorso` on the hips carrying `PilotHead` and `PilotArm*`, `PilotLeg*` on the root), leather flying helmet with goggles up, fleece collar, harness and back pack; 16-gore `Parachute` with lines and risers, origin on the harness point. Suit, helmet and coloured gores are on the team material so each tints on its own (G4). Editor `PilotModels` → `Prefabs/Pilot/Pilot.prefab` (`PilotFigure`) and `Parachute.prefab` (`PilotParachute`); ~1.6k tris with ink, canopy ~540. Not yet seated in the cockpits |
 | Armor Shield bubble mesh/shader | 1 | Repair invulnerability + Heavy ability |
 | Plane materials: base paint, trim, glass, team-color mask | 1 set | Replaces `Placeholder_PlaneBody/Dark/Glass` |
 | Base skin texture sets / UV templates | 4 | Atlas layout so cosmetics can be swapped |
@@ -226,7 +226,7 @@ Nothing exists yet (`Audio/` is empty).
 | Asset | Notes |
 |---|---|
 | Landing gear deploy/retract (x4 classes) | |
-| Control surface motion (ailerons, rudder, elevators) | If modeled separately |
+| Control surface motion (ailerons, rudder, elevators) | **Done** (2026-10-28): modelled separately on all four classes; `PlaneVisuals` deflects them with the turn rates |
 | AA turret rotate/fire/destroyed | |
 | Radar dish spin, lighthouse lamp rotate, windsock, beacons | |
 | Part detachment tumble (or physics only) | |

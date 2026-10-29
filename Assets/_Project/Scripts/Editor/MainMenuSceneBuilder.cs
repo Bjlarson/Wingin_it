@@ -22,6 +22,11 @@ namespace WingingIt.Editor
 
         const float ApronSize = 400f;
         const float FieldSize = 6000f;
+        /// <summary>
+        /// Where the pilot stands, in the hangar spot's space: just off the wingtip (the Support's reaches 5.9 m), a
+        /// little behind the wing, inside the menu camera's 12 m orbit.
+        /// </summary>
+        internal static readonly Vector3 PilotSpot = new Vector3(7.2f, 0f, -1f);
 
         [MenuItem("Winging It/Build Main Menu Scene")]
         static void BuildFromMenu()
@@ -80,7 +85,41 @@ namespace WingingIt.Editor
                 RenderSettings.sun.transform.SetParent(root.transform, true);
             foreach (var t in root.GetComponentsInChildren<Transform>())
                 t.gameObject.isStatic = true;
+            AddPilot(root.transform, spot);
             return stage;
+        }
+
+        /// <summary>
+        /// The pilot standing beside the parked plane, facing its cockpit, with an idle motion, dressed in the player's look
+        /// (<see cref="MenuPilot"/>). Skipped until the pilot
+        /// prefab exists (<see cref="PilotModels.BuildPrefabs"/>). It moves, so it's not static.
+        /// </summary>
+        static void AddPilot(Transform stage, Transform spot)
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PilotModels.PilotPrefabPath);
+            if (prefab == null)
+                return;
+            var pilot = (GameObject)PrefabUtility.InstantiatePrefab(prefab, stage.gameObject.scene);
+            pilot.transform.SetParent(stage, false);
+            pilot.transform.position = spot.TransformPoint(PilotSpot);
+            pilot.transform.rotation = Quaternion.LookRotation(
+                Vector3.ProjectOnPlane(spot.position - pilot.transform.position, Vector3.up), Vector3.up);
+            pilot.AddComponent<PilotIdle>();
+            // The PILOT screen opens a canopy over it: a parachute hung from the harness, hidden until then.
+            var chutePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PilotModels.ParachutePrefabPath);
+            PilotParachute chute = null;
+            if (chutePrefab != null)
+            {
+                var chuteGo = (GameObject)PrefabUtility.InstantiatePrefab(chutePrefab, stage.gameObject.scene);
+                chuteGo.transform.SetParent(pilot.transform, false);
+                var attach = pilot.GetComponent<PilotFigure>().RiserAttach;
+                chuteGo.transform.localPosition = attach != null ? pilot.transform.InverseTransformPoint(attach.position) : Vector3.up * 1.5f;
+                chute = chuteGo.GetComponent<PilotParachute>();
+                chuteGo.SetActive(false);
+            }
+            pilot.AddComponent<MenuPilot>().Configure(chute);
+            foreach (var t in pilot.GetComponentsInChildren<Transform>(true))
+                t.gameObject.isStatic = false;
         }
     }
 }

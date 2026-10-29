@@ -16,6 +16,8 @@ namespace WingingIt.Flight
         OutOfBounds,
         /// <summary>Body HP reached 0 from ramming or being rammed (<see cref="PlaneController.RamDamage"/>).</summary>
         Rammed,
+        /// <summary>The pilot bailed out of a crippled plane (<see cref="PlaneEjection"/>): credited like a crash.</summary>
+        Ejected,
     }
 
     /// <summary>One plane-on-plane contact with ram damage on: who flew into whom, and what each took.</summary>
@@ -156,6 +158,8 @@ namespace WingingIt.Flight
         }
         public StatModifierStack Modifiers => _modifiers ??= new StatModifierStack(BaseStat);
         public FlightInput CurrentInput => _input;
+        /// <summary>Current turn rates, deg/s: x = pitch (+ nose up), y = yaw (+ right), z = roll (+ right).</summary>
+        public Vector3 AngularRates => _angularRates;
         public bool IsAlive { get; private set; } = true;
         /// <summary>How the plane was last destroyed (read it from <see cref="Crashed"/> handlers).</summary>
         public DeathCause LastDeathCause { get; private set; }

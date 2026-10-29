@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using WingingIt.Flight;
+using WingingIt.World;
 
 namespace WingingIt.Settings
 {
@@ -104,6 +105,43 @@ namespace WingingIt.Settings
         public float combatHealth = 1f;
         /// <summary>Dev builds only: gun bullets hit planes from further off.</summary>
         public bool combatBigHitboxes;
+
+        // Pilot (the main menu's PILOT screen): swatch ids from PilotColors and the canopy pattern. No settings tab resets them.
+        public string pilotSuit = PilotColors.Team;
+        public string pilotHelmet = PilotColors.Team;
+        public string canopyColor = PilotColors.Team;
+        public string canopyTrim = "white";
+        public CanopyPattern canopyPattern = CanopyPattern.Stripes;
+        // The gear the pilot wears, one PilotGear variant id per slot (empty in a save from before gear: the defaults).
+        public string gearSuit = PilotGear.Default(PilotGearSlot.Suit);
+        public string gearHelmet = PilotGear.Default(PilotGearSlot.Helmet);
+        public string gearBackpack = PilotGear.Default(PilotGearSlot.Backpack);
+        public string gearGloves = PilotGear.Default(PilotGearSlot.Gloves);
+        public string gearBoots = PilotGear.Default(PilotGearSlot.Boots);
+
+        /// <summary>The pilot's suit, helmet, canopy and gear as one look.</summary>
+        public PilotLook PilotLook
+        {
+            get => new()
+            {
+                suit = pilotSuit, helmet = pilotHelmet, canopy = canopyColor, trim = canopyTrim, pattern = canopyPattern,
+                gearSuit = gearSuit, gearHelmet = gearHelmet, gearBackpack = gearBackpack, gearGloves = gearGloves,
+                gearBoots = gearBoots,
+            };
+            set
+            {
+                pilotSuit = value.suit;
+                pilotHelmet = value.helmet;
+                canopyColor = value.canopy;
+                canopyTrim = value.trim;
+                canopyPattern = value.pattern;
+                gearSuit = value.gearSuit;
+                gearHelmet = value.gearHelmet;
+                gearBackpack = value.gearBackpack;
+                gearGloves = value.gearGloves;
+                gearBoots = value.gearBoots;
+            }
+        }
 
         /// <summary>
         /// Turns follow mode on or off. On a phone, follow flies on gestures alone with auto throttle; leaving follow
@@ -286,6 +324,9 @@ namespace WingingIt.Settings
             });
         }
 
+        /// <summary>Puts the pilot's suit, helmet and canopy back to the default (all team colour, white-striped canopy).</summary>
+        public void ResetPilotLook() => Set(s => s.PilotLook = PilotLook.Default);
+
         void Save() => _store?.Save(JsonUtility.ToJson(_data));
 
         /// <summary>The out-of-the-box values for a phone or a PC.</summary>
@@ -335,6 +376,7 @@ namespace WingingIt.Settings
             if (!Enum.IsDefined(typeof(TeamColorMode), s.teamColors))
                 s.teamColors = TeamColorMode.Default;
             s.combatHealth = Mathf.Clamp(s.combatHealth, MinCombatHealth, 1f);
+            s.PilotLook = s.PilotLook.Clamped();
         }
 
         static int NearestFrameRate(int fps, int[] offered)

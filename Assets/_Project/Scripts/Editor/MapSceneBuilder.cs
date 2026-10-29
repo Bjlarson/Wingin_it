@@ -9,7 +9,8 @@ namespace WingingIt.Editor
 {
     /// <summary>
     /// Builds each map as its own scene, <c>Scenes/Maps/Map_&lt;name&gt;.unity</c>, holding only what every mode needs:
-    /// sun, fog and sky, the terrain, the sea and flight boundary, and the clouds, under a <see cref="MapScene"/> that
+    /// sun, fog and sky, the terrain and the land past its edge (<see cref="MapOutskirtsBuilder"/>), the sea and flight
+    /// boundary, and the clouds, under a <see cref="MapScene"/> that
     /// names the definition. No runways, banner stands, AA, arenas, player or match: those come from the map's layout
     /// for the chosen mode. The Island adds its city, canal, bridges, mesas and landmarks
     /// (<see cref="IslandSceneBuilder.BuildMapScene"/>); a heightmap map is its terrain, landmarks and its own pack's
@@ -86,6 +87,8 @@ namespace WingingIt.Editor
             var terrain = MapTerrainBuilder.Build(map, world, NatureModels.Load());
             map = AssetDatabase.LoadAssetAtPath<MapDefinition>(path); // the terrain's asset saves can unload it
             MapTerrainBuilder.BuildSeaAndBoundary(map, world);
+            if (MapOutskirtsBuilder.Build(map, world, NatureModels.Load()) != null)
+                map = AssetDatabase.LoadAssetAtPath<MapDefinition>(path);
             BuildLandmarks(map, world, terrain);
             MapDressing.Dress(map, world, terrain);
             Physics.SyncTransforms();

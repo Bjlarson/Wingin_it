@@ -46,6 +46,7 @@ namespace WingingIt.Editor
                 new LandmarkAnchor { kind = LandmarkKind.SummitRadar, xz = new Vector2(1000f, -700f), searchHalfSize = new Vector2(500f, 500f), region = "Summit Ridge" },
             };
             map.sky = Sky();
+            map.outskirts = Outskirts();
             map.minimap = new MapMinimap { sea = new Color(0.78f, 0.82f, 0.88f) }; // snow runs to the edge
             W.Save(map);
         }
@@ -156,5 +157,12 @@ namespace WingingIt.Editor
                 sky.clouds.Add(new CloudBankAnchor(xz, radius, altitude, seed));
             return sky;
         }
+
+        /// <summary>Ridge after snowy ridge into the snow haze; the fog ends 3.4 km out, so the outskirts needn't reach far.</summary>
+        internal static MapOutskirts Outskirts() => new()
+        {
+            enabled = true, reach = 4500f, blend = 1400f, height = new Vector2(380f, 1000f), featureSize = 1800f, ridged = 0.85f,
+            treeBand = 1200f, treeDensity = 0.45f,
+        };
     }
 }

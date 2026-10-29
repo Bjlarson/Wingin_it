@@ -117,9 +117,11 @@ namespace WingingIt.Tests
 
             var health = _plane.GetComponent<PlaneHealth>();
             var wing = health.GetPart(PlanePartType.WingRight);
-            // The wing carries its engine: the prop and its blur disc (the prop-blur material) sit off the wing's pivot.
+            // The wing carries its engine: the prop and its blur disc (the prop-blur material) sit off the wing's pivot,
+            // and so does the aileron.
+            var surfaces = _plane.GetComponent<PlaneVisuals>().ControlSurfaces.Select(s => s.pivot).ToArray();
             var prop = wing.GetComponentsInChildren<MeshRenderer>()
-                .Single(r => IsModel(r) && r.transform.localPosition != Vector3.zero
+                .Single(r => IsModel(r) && r.transform.localPosition != Vector3.zero && !surfaces.Contains(r.transform)
                              && r.sharedMaterials.All(m => m.name != "Plane_PropBlur")).transform;
             Quaternion before = prop.localRotation;
             yield return new WaitForSeconds(0.2f);
@@ -178,6 +180,73 @@ namespace WingingIt.Tests
             yield return null;
             tint = renderer.sharedMaterials[index].GetVector(BaseColorId);
             Assert.Greater(tint.z, tint.x, "team 0 (blue) tint is blue");
+        }
+
+        /// <summary>Holds <paramref name="input"/> for half a second (the turn rates ease in).</summary>
+        IEnumerator Hold(FlightInput input)
+        {
+            for (int i = 0; i < 25; i++)
+            {
+                _plane.SetInput(input);
+                yield return new WaitForFixedUpdate();
+            }
+            yield return null; // PlaneVisuals turns the surfaces in Update
+        }
+
+        PlaneVisuals.ControlSurface[] Surfaces(PlaneVisuals.ControlSurfaceKind kind) =>
+            _plane.GetComponent<PlaneVisuals>().ControlSurfaces.Where(s => s.kind == kind).ToArray();
+
+        /// <summary>How far a surface's trailing edge (behind the hinge) points along <paramref name="direction"/>.</summary>
+        float TrailingEdge(PlaneVisuals.ControlSurface s, Vector3 direction) =>
+            Vector3.Dot(s.pivot.TransformDirection(Vector3.back), direction);
+
+        [UnityTest]
+        public IEnumerator EveryClass_HasAileronsElevatorsAndRudder([Values("Fighter", "Interceptor", "Heavy Fighter", "Support")] string name)
+        {
+            _plane.SetStats(Class(name));
+            yield return null;
+            Assert.AreEqual(1, Surfaces(PlaneVisuals.ControlSurfaceKind.AileronLeft).Length, "left aileron");
+            Assert.AreEqual(1, Surfaces(PlaneVisuals.ControlSurfaceKind.AileronRight).Length, "right aileron");
+            Assert.AreEqual(2, Surfaces(PlaneVisuals.ControlSurfaceKind.Elevator).Length, "split elevators");
+            Assert.AreEqual(1, Surfaces(PlaneVisuals.ControlSurfaceKind.Rudder).Length, "rudder");
+            var health = _plane.GetComponent<PlaneHealth>();
+            Assert.IsTrue(Surfaces(PlaneVisuals.ControlSurfaceKind.AileronLeft)[0].pivot.IsChildOf(health.GetPart(PlanePartType.WingLeft).transform));
+            Assert.IsTrue(Surfaces(PlaneVisuals.ControlSurfaceKind.Rudder)[0].pivot.IsChildOf(health.GetPart(PlanePartType.VerticalStabilizer).transform));
+        }
+
+        [UnityTest]
+        public IEnumerator ControlSurfaces_DeflectWithTheStick()
+        {
+            yield return Hold(default);
+            foreach (var s in _plane.GetComponent<PlaneVisuals>().ControlSurfaces)
+                Assert.Less(Quaternion.Angle(Quaternion.identity, s.pivot.localRotation), 3f, $"{s.kind} near neutral, level flight");
+
+            yield return Hold(new FlightInput { Roll = 1f });
+            Vector3 up = _plane.transform.up;
+            Assert.Greater(TrailingEdge(Surfaces(PlaneVisuals.ControlSurfaceKind.AileronRight)[0], up), 0.2f, "roll right: right aileron up");
+            Assert.Less(TrailingEdge(Surfaces(PlaneVisuals.ControlSurfaceKind.AileronLeft)[0], up), -0.2f, "left aileron down");
+
+            _plane.Respawn(new Vector3(0f, 600f, -1500f), Quaternion.identity);
+            yield return Hold(new FlightInput { Pitch = 1f });
+            foreach (var s in Surfaces(PlaneVisuals.ControlSurfaceKind.Elevator))
+                Assert.Greater(TrailingEdge(s, _plane.transform.up), 0.2f, "pull up: elevators up");
+
+            _plane.Respawn(new Vector3(0f, 600f, -1500f), Quaternion.identity);
+            yield return Hold(new FlightInput { Yaw = 1f });
+            Assert.Greater(TrailingEdge(Surfaces(PlaneVisuals.ControlSurfaceKind.Rudder)[0], _plane.transform.right), 0.2f,
+                "yaw right: rudder swings right");
+        }
+
+        [UnityTest]
+        public IEnumerator LostTail_TakesItsElevatorsAlong()
+        {
+            var health = _plane.GetComponent<PlaneHealth>();
+            var tail = health.GetPart(PlanePartType.HorizontalStabilizer);
+            health.ApplyDamage(tail, tail.MaxHealth, tail.transform.position);
+            yield return null;
+            Assert.That(Surfaces(PlaneVisuals.ControlSurfaceKind.Elevator).Select(s => s.pivot.gameObject.activeInHierarchy),
+                Has.All.False, "the elevators leave with the tailplane");
+            Assert.IsTrue(Surfaces(PlaneVisuals.ControlSurfaceKind.Rudder)[0].pivot.gameObject.activeInHierarchy, "the rudder stays");
         }
 
         [UnityTest]

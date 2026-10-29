@@ -42,16 +42,19 @@ namespace WingingIt.UI
             Main,
             GameMode,
             Map,
+            /// <summary>The PILOT screen: suit, helmet and canopy, previewed on the menu pilot.</summary>
+            Pilot,
         }
 
-        // Main menu rows (keyboard / gamepad focus): PLAY, then the gear and QUIT in the corner.
-        const int MainPlay = 0, MainSettings = 1, MainQuit = 2;
+        // Main menu rows (keyboard / gamepad focus): PLAY, PILOT, then the gear and QUIT in the corner.
+        const int MainPlay = 0, MainPilot = 1, MainSettings = 2, MainQuit = 3;
         // In-match menu rows.
         const int MenuResume = 0, MenuSettings = 1, MenuLeave = 2;
 
         readonly GlassGUI _g = new();
         readonly MenuNav _nav = new();
         SettingsPanel _settings;
+        PilotPanel _pilot;
         bool _settingsOpen;
         Front _front;
         int _focus;
@@ -70,6 +73,7 @@ namespace WingingIt.UI
         {
             useGUILayout = false; // no GUILayout here: skips IMGUI's layout pass
             _settings = new SettingsPanel(_g, actions);
+            _pilot = new PilotPanel(_g);
             _cards = GameModeInfo.MenuCards(Debug.isDebugBuild);
         }
 
@@ -126,9 +130,15 @@ namespace WingingIt.UI
                 menuCamera.Skip(); // the pull-back is skippable
                 return;
             }
+            if (_front == Front.Pilot)
+            {
+                if (_pilot.HandleInput(_nav))
+                    ClosePilot();
+                return;
+            }
             if (_front == Front.Main)
             {
-                int rows = CanQuit ? 3 : 2;
+                int rows = CanQuit ? 4 : 3;
                 if (_nav.Up) _focus = MenuMath.Step(_focus, -1, rows);
                 if (_nav.Down) _focus = MenuMath.Step(_focus, 1, rows);
                 if (_nav.Confirm)
@@ -179,6 +189,9 @@ namespace WingingIt.UI
                     if (menuCamera != null)
                         menuCamera.PullBack();
                     break;
+                case MainPilot:
+                    OpenPilot();
+                    break;
                 case MainSettings:
                     OpenSettings();
                     break;
@@ -194,6 +207,27 @@ namespace WingingIt.UI
             _focus = MainPlay;
             if (menuCamera != null)
                 menuCamera.ReturnToHangar();
+        }
+
+        /// <summary>PILOT: the camera swings round to the menu pilot, who turns to face it under an open canopy.</summary>
+        void OpenPilot()
+        {
+            _front = Front.Pilot;
+            _pilot.Open();
+            if (menuCamera != null)
+                menuCamera.ShowPilot(true);
+            if (MenuPilot.Current != null)
+                MenuPilot.Current.Showcase = true;
+        }
+
+        void ClosePilot()
+        {
+            _front = Front.Main;
+            _focus = MainPilot;
+            if (menuCamera != null)
+                menuCamera.ShowPilot(false);
+            if (MenuPilot.Current != null)
+                MenuPilot.Current.Showcase = false;
         }
 
         void ConfirmMode()
@@ -443,6 +477,8 @@ namespace WingingIt.UI
                         DrawSettings(width, true);
                     else if (_front == Front.Main)
                         DrawMainMenu(width);
+                    else if (_front == Front.Pilot)
+                        DrawPilot(width);
                     else if (_front == Front.Map)
                         DrawMaps(width);
                     else
@@ -534,12 +570,16 @@ namespace WingingIt.UI
             _g.Shadowed(new Rect(x, 300f, 700f, 90f), "WINGING IT", _g.Huge, 8f, TextAnchor.MiddleLeft, Color.white, 0.55f);
             _g.Shadowed(new Rect(x + 4f, 392f, 700f, 30f), "ARCADE DOGFIGHTS", _g.Hint, 6f, TextAnchor.MiddleLeft, Alpha(White, 0.8f));
 
-            var panel = new Rect(x, 460f, 420f, 56f + 40f);
+            var panel = new Rect(x, 460f, 420f, 2f * 56f + 40f);
             _g.Panel(panel, OpenGlow());
             var play = new Rect(panel.x, panel.y + 20f, panel.width, 56f);
             HoverFocus(play, MainPlay, ref _focus);
             if (_g.Button(play, "PLAY", _nav.Glyph("ENTER", "A"), _focus == MainPlay, false, false))
                 ActivateMain(MainPlay);
+            var pilot = new Rect(panel.x, play.yMax, panel.width, 56f);
+            HoverFocus(pilot, MainPilot, ref _focus);
+            if (_g.Button(pilot, "PILOT", null, _focus == MainPilot, false, true))
+                ActivateMain(MainPilot);
 
             // Corner: the gear (Settings) and, on PC, QUIT. The build version bottom left.
             var gear = new Rect(width - 92f, _height - 92f, 56f, 56f);
@@ -559,6 +599,14 @@ namespace WingingIt.UI
             }
             _g.Shadowed(new Rect(28f, _height - 52f, 400f, 28f), $"V{Application.version}", _g.Hint, 2f, TextAnchor.MiddleLeft, Alpha(White, 0.5f));
             HintStrip(width, "ARROWS  MOVE    ENTER  SELECT", "D-PAD  MOVE    A  SELECT");
+        }
+
+        void DrawPilot(float width)
+        {
+            var player = match.Player;
+            var visuals = player != null ? player.GetComponent<PlaneVisuals>() : null;
+            if (_pilot.Draw(width, _height, _nav, OpenGlow(), visuals != null ? visuals.TeamColor : Color.white))
+                ClosePilot();
         }
 
         /// <summary>A small round glass button holding an icon. True when clicked.</summary>

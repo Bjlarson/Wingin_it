@@ -41,6 +41,8 @@ namespace WingingIt.Maps
         public MapMinimap minimap = new();
         [Tooltip("Sun, fog, skybox and cloud banks.")]
         public MapSky sky = new();
+        [Tooltip("The coarse land or sea round the map, past its edge, so the world seems to go on.")]
+        public MapOutskirts outskirts = new();
 
         /// <summary>The heightmap to build from (RAW first), or null when neither is set.</summary>
         public Heightmap LoadHeightmap()

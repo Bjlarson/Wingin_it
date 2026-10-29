@@ -356,6 +356,7 @@ namespace WingingIt.UI
                 DrawKillFeed(width);
             DrawCluster(width);
             DrawCenterWarning(width);
+            DrawEjectHint(width);
             DrawStatusToast(width);
             DrawCloudStatus(width);
             DrawMouseCaptureHint(width);

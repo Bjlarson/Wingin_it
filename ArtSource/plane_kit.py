@@ -101,9 +101,18 @@ COLORS = [
     ("timber", "7A5236"),  # logs, beams, fences (Alpine, Prairie)
     ("ice", "B9E6F2"),  # ice shards, frozen ponds (Alpine)
     ("crop", "86BF4A"),  # young crops (Prairie)
+    # Pilot (ArtSource/Pilot): face and the leather of the helmet trim, gloves, boots and harness.
+    ("skin", "F0B48A"),
+    ("leather", "6B4630"),
+    # The second tintable colour (G4's parachute trim): the team ramp again, on its own Plane_Trim material slot.
+    ("trim", "D7D7D7"),
+    # Jet-age pilot (ArtSource/Pilot): the gold visor, the grey-green of the mask and kit, the dark webbing and boots.
+    ("visor", "F2B627"),
+    ("sage", "8E9A86"),
+    ("webbing", "4D5546"),
 ]
 FLAT = {"glint", "ember", "ink", "flame"}
-TEAM_KEYS = {"team"}
+TEAM_KEYS = {"team", "trim"}  # the neutral ramps a material tint colours in Unity
 CELL = 32  # pixels per cell
 CELLS = 16  # cells per side: 16 x 16, four colours per row, each taking 3 cells (light, base, shadow) and a spare
 
@@ -120,7 +129,7 @@ def tones(name, h):
     c = hx(h)
     if name in FLAT:
         return [c, c, c]
-    if name == "team":
+    if name in TEAM_KEYS:
         return [[250, 250, 250], c, mix(c, SHADOW_TARGET, 0.30)]
     if name == "cloud":
         return [[255, 255, 255], c, hx("D5E6F7")]  # style guide: bellies go soft blue, not violet
@@ -280,12 +289,15 @@ class Part:
         # Palette UVs: every face sits on one swatch cell, tone picked from its normal (Blender z = Unity up).
         uv = bm.loops.layers.uv.new("Palette")
         names = [n for n, _ in COLORS]
+        # "trim" goes on a Plane_Trim slot when the model has one (only the pilot's, which has no glow faces), else on team.
+        trim_slot = next((i for i, m in enumerate(materials) if m.name == "Plane_Trim"), 1)
         for f in bm.faces:
             name = names[f[self.col]]
             up = f.normal.z
             tone = 0 if up > 0.7 else 2 if up < -0.5 else 1
             u = swatch_uv(name, tone)
-            f.material_index = 3 if f[self.glow] else 2 if name == "ink" else 1 if name in TEAM_KEYS else 0
+            f.material_index = (3 if f[self.glow] else 2 if name == "ink" else trim_slot if name == "trim"
+                                else 1 if name == "team" else 0)
             f.smooth = bool(f[self.smooth])
             for loop in f.loops:
                 loop[uv].uv = u
@@ -361,6 +373,123 @@ def lerp_section(sections, x):
             k = (x - a[0]) / (b[0] - a[0])
             return tuple(a[i] + (b[i] - a[i]) * k for i in range(4))
     raise ValueError(f"{x} is outside the planform")
+
+
+# ---------------------------------------------------------------------------------------------- control surfaces
+#
+# Ailerons, elevators and rudders are their own objects, origin on the hinge line, so Unity can turn them with the
+# stick: ``split_planform`` cuts the aft part of the chord out of a surface over a span range, the surface's own sections
+# end in a blunt face there (``cut_section``), and ``control_surface`` lofts the moving wedge behind it, with a
+# ``<name>Hinge`` marker at the far end of the hinge so Unity knows the axis.
+
+HINGE_FRAC = 0.30  # control surfaces take the aft 30% of the chord
+SURFACE_GAP = 0.04  # spanwise gap between a control surface and the fixed surface at each end
+
+
+def _upper(le, te, t, z):
+    """The 6-point airfoil's upper surface offset at chord position ``z`` aft of its (te + 0.38c) point."""
+    k = (z - te) / (0.38 * (le - te))
+    return 0.04 * t + (0.45 - 0.04) * t * k
+
+
+def _lower(le, te, t, z):
+    k = (z - te) / (0.35 * (le - te))
+    return 0.04 * t + (-0.38 - 0.04) * t * k
+
+
+def airfoil_cut(le, te, t, hinge=None):
+    """
+    ``airfoil`` with two more points on its surfaces at the hinge line, so cut and whole sections loft together. With
+    ``hinge`` the section ends there in a blunt face (the control surface sits behind it).
+    """
+    c = le - te
+    h = te + HINGE_FRAC * c if hinge is None else min(max(hinge, te + 0.1 * c), te + 0.34 * c)
+    up, lo = _upper(le, te, t, h), _lower(le, te, t, h)
+    tail = (te, 0.04 * t) if hinge is None else (h, (up + lo) * 0.5)
+    return [(le, 0.0), (le - 0.12 * c, 0.5 * t), (te + 0.38 * c, 0.45 * t), (h, up), tail, (h, lo),
+            (te + 0.35 * c, -0.38 * t), (le - 0.12 * c, -0.42 * t)]
+
+
+def cut_section(place, s, le, te, t, hinge=None):
+    """A section of a surface for the 8-point loft: ``place(s, z, off)`` -> Unity point (span, chord, thickness)."""
+    return [place(s, z, off) for z, off in airfoil_cut(le, te, t, hinge)]
+
+
+def wing_place(side, y_of):
+    """``place`` for a wing half: span along x (mirrored by ``side``), thickness up from ``y_of(span)``."""
+    return lambda s, z, off: (side * s, y_of(s) + off, z)
+
+
+def tail_place(y):
+    """``place`` for a tailplane drawn tip to tip (signed span along x) at height ``y``."""
+    return lambda s, z, off: (s, y + off, z)
+
+
+def fin_place(s, z, off):
+    """``place`` for a fin: span up y, thickness along x."""
+    return (off, s, z)
+
+
+def split_planform(sections, ranges, gap=SURFACE_GAP):
+    """
+    The planform table (span, le, te, thickness; span ascending) with control surfaces cut out over ``ranges``
+    ((s0, s1) span pairs, ascending). Returns (stations, surfaces): stations are (s, le, te, t, hinge or None, band),
+    band being the original table's band each one starts, for colouring; each surface is its (s, le, te, t, hinge)
+    stations, on a straight hinge line at HINGE_FRAC of the chord at its ends.
+    """
+    spans = {round(s[0], 5) for s in sections}
+    for s0, s1 in ranges:
+        spans |= {round(s0, 5), round(s0 + gap, 5), round(s1 - gap, 5), round(s1, 5)}
+    spans = sorted(spans)
+
+    def hinge_line(s0, s1):
+        a, b = lerp_section(sections, s0 + gap), lerp_section(sections, s1 - gap)
+        ha, hb = (x[2] + HINGE_FRAC * (x[1] - x[2]) for x in (a, b))
+        return lambda s: ha + (hb - ha) * (s - a[0]) / (b[0] - a[0])
+
+    lines = [(s0 + gap, s1 - gap, hinge_line(s0, s1)) for s0, s1 in ranges]
+    stations, surfaces = [], [[] for _ in ranges]
+    for s in spans:
+        _, le, te, t = lerp_section(sections, s)
+        band = max(i for i, row in enumerate(sections[:-1]) if row[0] <= s + 1e-6) if s < sections[-1][0] else len(sections) - 2
+        hinge = None
+        for i, (a, b, line) in enumerate(lines):
+            if a - 1e-6 <= s <= b + 1e-6:
+                hinge = line(s)
+                surfaces[i].append((s, le, te, t, hinge))
+        stations.append((s, le, te, t, hinge, band))
+    return stations, surfaces
+
+
+def loft_planform(p, place, stations, color, cap_start, cap_end):
+    """Lofts ``split_planform`` stations; ``color(band, side)`` as for ``Part.loft``, with the original table's band."""
+    return p.loft([cut_section(place, s, le, te, t, h) for s, le, te, t, h, _ in stations],
+                  lambda b, side: color(stations[b][5], side) if callable(color) else color,
+                  cap_start=cap_start, cap_end=cap_end)
+
+
+def control_surface(model, name, place, stations, color):
+    """
+    The moving wedge behind a cut: hinge (mid-thickness of the blunt face) to trailing edge, its origin on the hinge
+    at the first station, and a ``<name>Hinge`` marker at the last one. ``color`` is a name or f(span) -> name (for a
+    surface that runs into a team-coloured tip). Returns the Part (add it to the model).
+    """
+    def hinge_point(s, le, te, t, h):
+        return place(s, h, (_upper(le, te, t, h) + _lower(le, te, t, h)) * 0.5)
+
+    p = Part(name, hinge_point(*stations[0]))
+    rings = []
+    for s, le, te, t, h in stations:
+        front = h - 0.015  # a sliver back from the fixed surface's blunt face
+        rings.append([place(s, front, _upper(le, te, t, h) * 0.92), place(s, te, 0.04 * t),
+                      place(s, front, _lower(le, te, t, h) * 0.92)])
+    if callable(color):
+        p.loft(rings, lambda b, side: color(stations[b][0]), cap_start=color(stations[0][0]),
+               cap_end=color(stations[-1][0]), outline=OUTLINE * 0.6)
+    else:
+        p.loft(rings, color, cap_start=color, cap_end=color, outline=OUTLINE * 0.6)
+    model.mark(name + "Hinge", hinge_point(*stations[-1]))
+    return p
 
 
 # ---------------------------------------------------------------------------------------------- shared parts

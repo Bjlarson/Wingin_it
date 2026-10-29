@@ -6,7 +6,7 @@ namespace WingingIt.Flight
 {
     /// <summary>
     /// Presentation for the modular plane: the class's finished model (or the tinted placeholder boxes) and team colors,
-    /// class scale, spinning propeller, landing gear folding,
+    /// class scale, spinning propeller, control surfaces deflecting with the turn rates, landing gear folding,
     /// parts breaking off as tumbling, smoking debris, damage smoke and fire from the body state
     /// (and a dead engine), a cheap break-apart when the plane crashes (a ground blast, or a splash on the sea),
     /// and a mid-air "BOOM!" with a burning, falling wreck when it's shot down. Effects come from the VFX pack (<see cref="Vfx"/>).
@@ -24,6 +24,8 @@ namespace WingingIt.Flight
         [SerializeField] float propellerMaxRpm = 1800f;
         [Tooltip("How fast a class model's radar dome turns.")]
         [SerializeField] float radarRpm = 12f;
+        [Tooltip("Control surface throw at a full-rate roll, pitch and yaw, degrees.")]
+        [SerializeField] float aileronThrow = 20f, elevatorThrow = 20f, rudderThrow = 25f;
         [SerializeField] float debrisLifetime = 6f;
         [Tooltip("Wreckage of a plane shot down in mid-air; long enough to fall to the ground.")]
         [SerializeField] float wreckLifetime = 12f;
@@ -72,6 +74,22 @@ namespace WingingIt.Flight
             public Vector3[] wingHitboxPositions;
             [Tooltip("Radar domes that turn slowly about their vertical axis while the plane flies.")]
             public Transform[] radars;
+            [Tooltip("Ailerons, elevators and rudder: each turns about its hinge with the plane's turn rates.")]
+            public ControlSurface[] surfaces;
+        }
+
+        public enum ControlSurfaceKind { AileronLeft, AileronRight, Elevator, Rudder }
+
+        /// <summary>
+        /// A moving control surface, its pivot on the hinge line. Riding on its wing or tail part, it leaves with that part.
+        /// </summary>
+        [System.Serializable]
+        public struct ControlSurface
+        {
+            public Transform pivot;
+            public ControlSurfaceKind kind;
+            [Tooltip("Hinge axis in the pivot's parent space: toward +x for ailerons and elevators, +y for a rudder.")]
+            public Vector3 axis;
         }
 
         /// <summary>One landing gear leg: a pivot posed fully extended in the prefab, and its fold when stowed.</summary>
@@ -95,6 +113,7 @@ namespace WingingIt.Flight
         readonly List<(Renderer renderer, int index)> _teamSlots = new();
         Vector3[] _muzzleDefaults, _railDefaults, _hitboxDefaults;
         Transform[] _extraPropellers, _radars;
+        ControlSurface[] _surfaces;
         List<Renderer> _discs;
         Color _teamColor;
         bool _teamTinted;
@@ -146,7 +165,45 @@ namespace WingingIt.Flight
                 foreach (var r in _radars)
                     if (r != null)
                         r.Rotate(0f, radarRpm * 6f * Time.deltaTime, 0f, Space.Self);
+            UpdateControlSurfaces();
         }
+
+        /// <summary>The colour the team zones are painted (white until first tinted).</summary>
+        public Color TeamColor => _teamTinted ? _teamColor : Color.white;
+
+        /// <summary>The flown class's control surfaces (empty for the placeholder boxes).</summary>
+        public IReadOnlyList<ControlSurface> ControlSurfaces => _surfaces ?? System.Array.Empty<ControlSurface>();
+
+        /// <summary>
+        /// Deflects the surfaces with the plane's turn rates (stick input plus auto-level and damage, already eased by the
+        /// flight model), each as a share of the class's full rate.
+        /// </summary>
+        void UpdateControlSurfaces()
+        {
+            if (_surfaces == null || _surfaces.Length == 0 || plane.Stats == null)
+                return;
+            var stats = plane.Stats;
+            Vector3 rates = plane.AngularRates;
+            var share = new Vector3(Share(rates.x, stats.pitchRate), Share(rates.y, stats.yawRate), Share(rates.z, stats.rollRate));
+            foreach (var s in _surfaces)
+                if (s.pivot != null)
+                    s.pivot.localRotation = Quaternion.AngleAxis(SurfaceAngle(s.kind, share), s.axis);
+        }
+
+        static float Share(float rate, float fullRate) => fullRate > 0f ? Mathf.Clamp(rate / fullRate, -1f, 1f) : 0f;
+
+        /// <summary>
+        /// A surface's turn about its hinge axis for turn rates given as shares of full rate (x pitch, y yaw, z roll).
+        /// About +x a positive angle lifts the trailing edge; about +y it swings it left. So rolling right lifts the
+        /// right aileron and drops the left, pulling up lifts the elevators, and yawing right swings the rudder right.
+        /// </summary>
+        public float SurfaceAngle(ControlSurfaceKind kind, Vector3 share) => kind switch
+        {
+            ControlSurfaceKind.AileronLeft => -share.z * aileronThrow,
+            ControlSurfaceKind.AileronRight => share.z * aileronThrow,
+            ControlSurfaceKind.Elevator => share.x * elevatorThrow,
+            _ => -share.y * rudderThrow,
+        };
 
         /// <summary>The blur discs only show while the prop turns; a stopped prop is just its blades.</summary>
         void UpdatePropDiscs(bool spinning)
@@ -258,6 +315,7 @@ namespace WingingIt.Flight
             bool hasModel = false;
             Vector3[] muzzlePositions = null, railPositions = null, hitboxPositions = null;
             _extraPropellers = _radars = null;
+            _surfaces = null;
             foreach (var model in classModels)
                 if (model.stats != null && model.stats == stats)
                 {
@@ -267,6 +325,7 @@ namespace WingingIt.Flight
                     hitboxPositions = model.wingHitboxPositions;
                     _extraPropellers = model.propellers;
                     _radars = model.radars;
+                    _surfaces = model.surfaces;
                 }
             foreach (var model in classModels)
             foreach (var piece in model.pieces)
@@ -408,16 +467,28 @@ namespace WingingIt.Flight
         {
             Vector3 velocity = plane.Velocity;
             bool shotDown = plane.LastDeathCause is DeathCause.ShotDown or DeathCause.OutOfBounds or DeathCause.Rammed; // all break up in mid-air
+            bool ejected = plane.LastDeathCause == DeathCause.Ejected; // the empty plane flies on, smoking, in one piece
             _hidden.Clear();
+            var wreck = ejected ? new List<Collider>() : null;
 
             // Throw a copy of every part still attached, then hide the real plane until respawn.
             // Shot down in the air, the wreck keeps flying along its path, burning, until it hits the ground;
-            // a crash into terrain bounces the pieces back off the impact.
+            // a crash into terrain bounces the pieces back off the impact. Ejected, the pieces all keep the plane's
+            // velocity, so the empty plane falls on whole until it hits something.
             foreach (var part in GetComponentsInChildren<PlanePart>())
             {
-                var debris = SpawnDebris(part.gameObject, part.transform.position, shotDown ? wreckLifetime : debrisLifetime);
+                var debris = SpawnDebris(part.gameObject, part.transform.position, shotDown || ejected ? wreckLifetime : debrisLifetime);
                 Vector3 away = (debris.position - point).normalized;
-                if (shotDown)
+                if (ejected)
+                {
+                    debris.linearVelocity = velocity;
+                    debris.angularVelocity = Vector3.zero;
+                    debris.linearDamping = 0.05f;
+                    wreck.AddRange(debris.GetComponentsInChildren<Collider>());
+                    if (part.partType is PlanePartType.Body or PlanePartType.Engine)
+                        Vfx.Attach(VfxKind.DebrisSmoke, debris.transform, Vector3.zero, 1.3f);
+                }
+                else if (shotDown)
                 {
                     debris.linearVelocity = velocity * 0.7f + away * Random.Range(6f, 14f) + Vector3.up * Random.Range(2f, 8f);
                     debris.angularVelocity = Random.insideUnitSphere * 4f;
@@ -433,6 +504,11 @@ namespace WingingIt.Flight
                 }
             }
 
+            if (wreck != null) // the pieces start touching: keep them from shoving each other apart in the air
+                for (int i = 0; i < wreck.Count; i++)
+                    for (int j = i + 1; j < wreck.Count; j++)
+                        Physics.IgnoreCollision(wreck[i], wreck[j]);
+
             UpdateDamageSmoke(); // the plane is down: stop the damage smoke now, so it drifts off instead of hiding
             foreach (var r in GetComponentsInChildren<Renderer>())
             {
@@ -442,6 +518,8 @@ namespace WingingIt.Flight
                 _hidden.Add(r);
             }
 
+            if (ejected)
+                return; // no blast: the plane is still flying
             if (shotDown)
                 Vfx.Play(VfxKind.ExplosionPlane, point, ClassScale);
             else if (Physics.CheckSphere(point, 2f, 1 << PlaneController.WaterLayer, QueryTriggerInteraction.Ignore))

@@ -12,9 +12,6 @@ EditorBuildSettings:
     path: Assets/_Project/Scenes/SampleScene.unity
     guid: 99c9720ab356a0642a771bea13969a05
   - enabled: 1
-    path: Assets/_Project/Scenes/FlightTest.unity
-    guid: 0a17bc7ec65c70b4fb185ddd6c99d4e5
-  - enabled: 1
     path: Assets/_Project/Scenes/Maps/Map_IslandV2.unity
     guid: d343e5923b011ad45aa8e58f746809e9
   - enabled: 1
@@ -26,5 +23,8 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/_Project/Scenes/Maps/Map_MountainRange.unity
     guid: 1bcd57a33d504104dab59a6b2cdee4d4
+  - enabled: 1
+    path: Assets/_Project/Scenes/FlightTest.unity
+    guid: 0a17bc7ec65c70b4fb185ddd6c99d4e5
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}

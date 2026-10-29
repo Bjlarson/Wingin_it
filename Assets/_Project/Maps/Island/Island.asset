@@ -386,3 +386,14 @@ MonoBehaviour:
     cloudCoreHalfHeight: 70
     cloudClearance: 80
     snowfall: 0
+  outskirts:
+    enabled: 0
+    reach: 6000
+    blend: 1500
+    height: {x: 40, y: 600}
+    featureSize: 2500
+    ridged: 0.5
+    land: 1
+    landClearance: 0
+    treeBand: 1500
+    treeDensity: 0.6

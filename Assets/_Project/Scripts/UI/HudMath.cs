@@ -417,6 +417,12 @@ namespace WingingIt.UI
         /// <summary>The death line after a ram: "RAMMED BY BOT 5", or "RAMMED" with nobody to credit.</summary>
         public static string Rammed(string killer) => killer != null ? $"RAMMED BY {killer}" : "RAMMED";
 
+        /// <summary>"EJECTED  (RED 3 GETS THE KILL)": bailing out of a crippled plane still gives whoever crippled it the kill.</summary>
+        public static string Ejected(string killer) => killer != null ? $"EJECTED  ({killer} GETS THE KILL)" : "EJECTED";
+
+        /// <summary>"HOLD X TO EJECT", or just "HOLD TO EJECT" with no key to name.</summary>
+        public static string EjectHint(string key) => string.IsNullOrEmpty(key) ? "HOLD TO EJECT" : $"HOLD {key.ToUpperInvariant()} TO EJECT";
+
         /// <summary>What to do on the glide path: "ON GLIDE PATH", "HIGH 12 M", "LOW 8 M  FLY LEFT".</summary>
         public static string ApproachHint(ApproachGuide guide)
         {

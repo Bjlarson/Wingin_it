@@ -6,7 +6,8 @@ using WingingIt.World;
 namespace WingingIt.Flight
 {
     /// <summary>
-    /// After any death (crash or shot down), waits <see cref="RespawnDelay"/> and puts the plane back at the spawn
+    /// After any death (crash or shot down), waits <see cref="RespawnDelay"/> (<see cref="EjectRespawnDelay"/> after an
+    /// ejection) and puts the plane back at the spawn
     /// point, or at the nearest friendly airfield if no spawn point is set. The level's
     /// <see cref="LevelSettings.CurrentSpawnMode"/> picks how: in the air on the approach, or parked on the runway in
     /// the first free takeoff slot. Air spawns also take the first free slot, so a team respawning together doesn't
@@ -36,6 +37,8 @@ namespace WingingIt.Flight
         [SerializeField] Transform spawnPoint;
         [Tooltip("Seconds between dying and reappearing. Covers the explosion and the falling wreck.")]
         [SerializeField] float respawnDelay = 5f;
+        [Tooltip("Seconds after an ejection instead: the reward for bailing out of a plane that's going down.")]
+        [SerializeField] float ejectRespawnDelay = 3f;
 
         /// <summary>A takeoff slot with another live plane closer than this (m, ignoring height) is taken.</summary>
         const float SlotClearance = 10f;
@@ -51,6 +54,7 @@ namespace WingingIt.Flight
         static void ResetStatics() => Rules = null;
 
         public float RespawnDelay => respawnDelay;
+        public float EjectRespawnDelay => ejectRespawnDelay;
         public float RespawnTimeLeft { get; private set; }
 
         /// <summary>Raised just before the plane is put back, so a pending class change can apply first.</summary>
@@ -79,7 +83,7 @@ namespace WingingIt.Flight
 
         IEnumerator RespawnAfterDelay()
         {
-            RespawnTimeLeft = respawnDelay;
+            RespawnTimeLeft = _plane.LastDeathCause == DeathCause.Ejected ? ejectRespawnDelay : respawnDelay;
             while (RespawnTimeLeft > 0f)
             {
                 RespawnTimeLeft -= Time.deltaTime;

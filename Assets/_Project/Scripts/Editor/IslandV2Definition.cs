@@ -43,6 +43,7 @@ namespace WingingIt.Editor
                 new LandmarkAnchor { kind = LandmarkKind.Pyramid, xz = new Vector2(250f, 1300f), region = "North Plateau" },
             };
             map.sky = Sky();
+            map.outskirts = Outskirts();
             map.minimap = new MapMinimap();
             W.Save(map);
         }
@@ -123,7 +124,7 @@ namespace WingingIt.Editor
         /// </summary>
         static MapSky Sky()
         {
-            var sky = new MapSky { skybox = MapSkyBuilder.GreyboxSky(), fogStart = 900f, fogEnd = 7000f, mirrorClouds = true };
+            var sky = new MapSky { skybox = MapSkyBuilder.DaySky(new MapSky().fogColor), fogStart = 900f, fogEnd = 7000f, mirrorClouds = true };
             foreach (var (xz, radius, altitude, seed) in new[]
             {
                 (new Vector2(-700f, 500f), 240f, 520f, 11),    // the strait's west mouth
@@ -135,5 +136,12 @@ namespace WingingIt.Editor
                 sky.clouds.Add(new CloudBankAnchor(xz, radius, altitude, seed));
             return sky;
         }
+
+        /// <summary>Open sea all round, with far islands from 1.5 km past the edge on the haze line.</summary>
+        internal static MapOutskirts Outskirts() => new()
+        {
+            enabled = true, reach = 7000f, blend = 1000f, height = new Vector2(15f, 300f), featureSize = 1600f, ridged = 0.25f,
+            land = 0.3f, landClearance = 1500f, treeBand = 0f,
+        };
     }
 }

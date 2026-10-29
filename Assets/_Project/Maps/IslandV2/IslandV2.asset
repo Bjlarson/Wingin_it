@@ -311,7 +311,7 @@ MonoBehaviour:
     sea: {r: 0.12, g: 0.3, b: 0.42, a: 1}
     margin: 1.06
   sky:
-    skybox: {fileID: 2100000, guid: 453db78019ab37d459d5e99adf7e5795, type: 2}
+    skybox: {fileID: 2100000, guid: b184f3d451c3e2645adbb95e5e7b657b, type: 2}
     sunAngles: {x: 48, y: -35}
     sunIntensity: 1.4
     sunColor: {r: 1, g: 0.957, b: 0.839, a: 1}
@@ -343,3 +343,14 @@ MonoBehaviour:
     cloudCoreHalfHeight: 70
     cloudClearance: 80
     snowfall: 0
+  outskirts:
+    enabled: 1
+    reach: 7000
+    blend: 1000
+    height: {x: 15, y: 300}
+    featureSize: 1600
+    ridged: 0.25
+    land: 0.3
+    landClearance: 1500
+    treeBand: 0
+    treeDensity: 0.6

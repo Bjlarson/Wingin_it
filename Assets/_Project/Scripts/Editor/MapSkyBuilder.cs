@@ -41,23 +41,38 @@ namespace WingingIt.Editor
         }
 
         /// <summary>
-        /// A pale, hazy winter sky: a washed-out grey-blue atmosphere, a small soft sun and the lower half the snow fog's
-        /// colour, so the far peaks melt into it. Made or updated in place.
+        /// A clear day on the heightmap maps (<c>Winging It/Sky</c>): blue overhead, fading to exactly the fog colour at
+        /// the horizon and below, so the outskirts and the sea far out dissolve into haze instead of meeting the sky at a
+        /// line. Made or updated in place.
         /// </summary>
-        internal static Material WinterSky(Color fog)
+        internal static Material DaySky(Color fog) =>
+            GradientSky("Sky_Day", new Color(0.36f, 0.56f, 0.86f), fog, new Color(1f, 0.96f, 0.85f), haze: 0.5f, sunGlow: 0.4f);
+
+        /// <summary>
+        /// A pale, hazy winter sky: overcast grey-blue overhead, a small dim sun and the snow fog's colour from well above
+        /// the horizon down, so the far peaks melt into it. Made or updated in place.
+        /// </summary>
+        internal static Material WinterSky(Color fog) =>
+            GradientSky("Sky_Winter", new Color(0.6f, 0.66f, 0.75f), fog, new Color(1f, 0.98f, 0.93f), haze: 0.7f, sunGlow: 0.25f);
+
+        static Material GradientSky(string name, Color zenith, Color fog, Color sun, float haze, float sunGlow)
         {
-            string path = B.MaterialsFolder + "/Sky_Winter.mat";
+            string path = $"{B.MaterialsFolder}/{name}.mat";
+            var shader = Shader.Find("Winging It/Sky");
             var sky = AssetDatabase.LoadAssetAtPath<Material>(path);
             if (sky == null)
             {
-                sky = new Material(Shader.Find("Skybox/Procedural"));
+                sky = new Material(shader);
                 AssetDatabase.CreateAsset(sky, path);
             }
-            sky.SetColor("_SkyTint", new Color(0.56f, 0.59f, 0.64f)); // grey: an overcast, snowy sky rather than a deep blue one
-            sky.SetColor("_GroundColor", fog);
-            sky.SetFloat("_AtmosphereThickness", 0.7f); // thin enough for no orange at the horizon
-            sky.SetFloat("_Exposure", 1.5f);
-            sky.SetFloat("_SunSize", 0.03f);
+            sky.shader = shader;
+            sky.SetColor("_ZenithColor", zenith);
+            sky.SetColor("_HorizonColor", fog);
+            sky.SetColor("_SunColor", sun);
+            sky.SetFloat("_HazeHeight", haze);
+            sky.SetFloat("_HazeCurve", 1.5f);
+            sky.SetFloat("_SunSize", 0.0005f);
+            sky.SetFloat("_SunGlow", sunGlow);
             EditorUtility.SetDirty(sky);
             return sky;
         }

@@ -149,6 +149,28 @@ namespace WingingIt.Tests
         }
 
         [UnityTest]
+        public IEnumerator PilotScreen_CameraStaysInTheHangar_InSightOfThePilotAndCanopy()
+        {
+            var menuCamera = Object.FindAnyObjectByType<CameraSystem.MenuCamera>();
+            var pilot = MenuPilot.Current;
+            Assert.IsNotNull(menuCamera);
+            Assert.IsNotNull(pilot, "the menu pilot");
+            menuCamera.ShowPilot(true);
+            pilot.Showcase = true;
+            menuCamera.Skip();
+            yield return null;
+            yield return null;
+
+            var eye = Camera.main.transform.position;
+            foreach (float up in new[] { 1.5f, 8f }) // the pilot's chest, the canopy
+            {
+                var from = pilot.Position + Vector3.up * up;
+                Assert.IsFalse(Physics.Linecast(from, eye, out var hit),
+                    $"the view {up} m up the pilot is blocked by {(hit.collider != null ? hit.collider.name : "")} (camera at {eye})");
+            }
+        }
+
+        [UnityTest]
         public IEnumerator RamRoyaleGetsItsArenaFromTheLoadedMap()
         {
             _match.SetMode(new RamRoyaleMode());

@@ -40,6 +40,7 @@ namespace WingingIt.Editor
                 new LandmarkAnchor { kind = LandmarkKind.Pyramid, xz = new Vector2(-2750f, 1300f), region = "West Plains" },
             };
             map.sky = Sky();
+            map.outskirts = Outskirts();
             map.minimap = new MapMinimap { sea = new Color(0.22f, 0.32f, 0.2f) }; // land runs to the edge
             W.Save(map);
         }
@@ -114,7 +115,7 @@ namespace WingingIt.Editor
         /// </summary>
         static MapSky Sky()
         {
-            var sky = new MapSky { skybox = MapSkyBuilder.GreyboxSky(), fogStart = 1200f, fogEnd = 9000f, mirrorClouds = true };
+            var sky = new MapSky { skybox = MapSkyBuilder.DaySky(new MapSky().fogColor), fogStart = 1200f, fogEnd = 7500f, mirrorClouds = true };
             foreach (var (xz, radius, altitude, seed) in new[]
             {
                 (new Vector2(600f, -1100f), 260f, 520f, 11),   // over the south valley, between Central and the spur
@@ -127,5 +128,12 @@ namespace WingingIt.Editor
                 sky.clouds.Add(new CloudBankAnchor(xz, radius, altitude, seed));
             return sky;
         }
+
+        /// <summary>The country runs on: the edge's own ground mirrored past it, fading into rolling hills and ridges.</summary>
+        internal static MapOutskirts Outskirts() => new()
+        {
+            enabled = true, reach = 7000f, blend = 1800f, height = new Vector2(10f, 480f), featureSize = 2600f, ridged = 0.45f,
+            treeBand = 1200f, treeDensity = 0.45f,
+        };
     }
 }

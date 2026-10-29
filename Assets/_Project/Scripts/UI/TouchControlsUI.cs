@@ -35,6 +35,9 @@ namespace WingingIt.UI
         [SerializeField] GameObject abilityButton;
         [Tooltip("Hidden while the plane can't boost (Ram Royale, towing a banner, a dead engine).")]
         [SerializeField] GameObject boostButton;
+        [Tooltip("Shows only while the plane can bail out (crippled, in the air). Hold it to eject.")]
+        [SerializeField] PlaneEjection ejection;
+        [SerializeField] GameObject ejectButton;
         [Tooltip("Throttle up / down: on the right edge, mirrored to the left with the left-hand throttle setting.")]
         [SerializeField] GameObject[] throttleButtons;
 
@@ -165,6 +168,7 @@ namespace WingingIt.UI
                 ShowIf(bombButton, bombs != null && bombs.IsEquipped);
                 ShowIf(abilityButton, ability == null || ability.IsEquipped);
                 ShowIf(boostButton, ability == null || ability.Plane == null || ability.Plane.CanBoost);
+                ShowIf(ejectButton, ejection != null && ejection.CanEject);
             }
         }
 

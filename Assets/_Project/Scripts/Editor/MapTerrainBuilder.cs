@@ -277,7 +277,7 @@ namespace WingingIt.Editor
             return false;
         }
 
-        static float Noise(float x, float z, float scale, float seed) =>
+        internal static float Noise(float x, float z, float scale, float seed) =>
             Mathf.PerlinNoise(x / scale + seed, z / scale - seed) * 0.65f + Mathf.PerlinNoise(x * 2f / scale + seed + 17.3f, z * 2f / scale - seed + 31.7f) * 0.35f;
 
         /// <summary>A heightmap map's ground: painted and grown by its <see cref="TerrainRules"/> alone, edge to edge.</summary>
