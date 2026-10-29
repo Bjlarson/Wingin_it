@@ -12,12 +12,12 @@ namespace WingingIt.World
     public class Airfield : MonoBehaviour
     {
         public const int Neutral = -1;
-        /// <summary>Planes that can wait on the runway at once: rows of three, side by side (see <see cref="RunwaySpawnSlot"/>).</summary>
+        /// <summary>Planes that can wait for takeoff at once, in a file beside the runway (see <see cref="RunwaySpawnSlot"/>).</summary>
         public const int RunwaySpawnSlots = 9;
-        /// <summary>Gap between runway spawn lanes (m): a Heavy's wingspan plus room to spare.</summary>
-        public const float RunwayLaneSpacing = 13f;
-        /// <summary>Gap between runway spawn rows (m), further down the runway.</summary>
-        public const float RunwayRowSpacing = 50f;
+        /// <summary>How far (m) off the runway's left edge the takeoff file's centreline is: a Heavy's half span and room to spare.</summary>
+        public const float RunwayHoldOffset = 16f;
+        /// <summary>Gap (m) between planes in the takeoff file, further down the runway.</summary>
+        public const float RunwaySlotSpacing = 30f;
         /// <summary>Planes that can appear over the field at once: rows of three in the air (see <see cref="AirSpawnSlot"/>).</summary>
         public const int AirSpawnSlots = 9;
         /// <summary>Gap between air spawn lanes (m), wide enough that nobody spawns in a neighbor's wake.</summary>
@@ -86,6 +86,14 @@ namespace WingingIt.World
             repairZone = zone;
         }
 
+        /// <summary>Names a field spawned from a map layout and gives it its owner (before it's enabled).</summary>
+        public void SetIdentity(string name, int owner, bool home)
+        {
+            displayName = name;
+            team = owner;
+            isHome = home;
+        }
+
         public void SetTwoWay(bool value) => twoWay = value;
 
         public void SetHangarSpot(Transform spot) => hangarSpot = spot;
@@ -133,17 +141,18 @@ namespace WingingIt.World
         }
 
         /// <summary>
-        /// Where the <paramref name="slot"/>th plane waiting to take off is parked: the runway spawn, then side by side
-        /// across the runway (center, left, right), then the next row further down it. All face down the runway. Slots
-        /// past <see cref="RunwaySpawnSlots"/> wrap around.
+        /// Where the <paramref name="slot"/>th plane waiting to take off is parked: on the flat ground just off the
+        /// runway's left edge (the side without buildings), level with the runway spawn, then one after another further
+        /// down. All face down the runway, so a plane rolls out and turns onto it (or lifts off beside it), and nobody
+        /// waits on the strip planes are landing on. Slots past <see cref="RunwaySpawnSlots"/> wrap around.
         /// </summary>
         public Pose RunwaySpawnSlot(int slot)
         {
             Transform spawn = runwaySpawn != null ? runwaySpawn : transform;
             slot = ((slot % RunwaySpawnSlots) + RunwaySpawnSlots) % RunwaySpawnSlots;
-            int lane = slot % 3, row = slot / 3;
-            float x = lane == 0 ? 0f : lane == 1 ? -RunwayLaneSpacing : RunwayLaneSpacing;
-            Vector3 offset = transform.right * x + RunwayDirection * (row * RunwayRowSpacing);
+            Vector3 local = transform.InverseTransformPoint(spawn.position);
+            float x = -(runwaySize.x * 0.5f + RunwayHoldOffset) - local.x;
+            Vector3 offset = transform.right * x + RunwayDirection * (slot * RunwaySlotSpacing);
             return new Pose(spawn.position + offset, Quaternion.LookRotation(RunwayDirection));
         }
 

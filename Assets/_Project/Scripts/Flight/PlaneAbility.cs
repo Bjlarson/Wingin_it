@@ -47,7 +47,8 @@ namespace WingingIt.Flight
         public AbilityStats Stats => Override != null ? Override : _plane.Stats != null ? _plane.Stats.ability : null;
         /// <summary>The ability whose effect is running, or null.</summary>
         public AbilityStats ActiveStats => _active;
-        public bool IsEquipped => Stats != null;
+        /// <summary>Has an ability it may use: one is set, and the match hasn't switched abilities off (<see cref="PlaneController.AbilitiesOff"/>).</summary>
+        public bool IsEquipped => Stats != null && !_plane.AbilitiesOff;
         public bool IsActive => _active != null;
         public float ActiveTimeLeft { get; private set; }
         public float CooldownLeft { get; private set; }

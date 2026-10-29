@@ -2,7 +2,6 @@ using System.Collections;
 using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using WingingIt.Flight;
 using WingingIt.Input;
@@ -25,8 +24,7 @@ namespace WingingIt.Tests
         public IEnumerator LoadScene()
         {
             GameSettings.UseForTests(new GameSettings(false, null));
-            yield return SceneManager.LoadSceneAsync("Island", LoadSceneMode.Single);
-            yield return null;
+            yield return MapTestScene.Load();
             _match = Object.FindAnyObjectByType<MatchManager>();
             _player = GameObject.Find("Player Plane").GetComponent<PlaneController>();
             _mode = new DominationMode();

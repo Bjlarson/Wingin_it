@@ -2,7 +2,6 @@ using System.Collections;
 using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using WingingIt.Bots;
 using WingingIt.Match;
@@ -16,8 +15,7 @@ namespace WingingIt.Tests
         [UnitySetUp]
         public IEnumerator LoadScene()
         {
-            yield return SceneManager.LoadSceneAsync("Island", LoadSceneMode.Single);
-            yield return null;
+            yield return MapTestScene.Load();
             Object.FindAnyObjectByType<MatchManager>()?.Dismiss();
             Object.FindAnyObjectByType<BotRoster>()?.Clear();
             yield return null;

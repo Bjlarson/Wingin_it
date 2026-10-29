@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using WingingIt.Flight;
+using WingingIt.World;
 
 namespace WingingIt.Settings
 {
@@ -58,6 +59,8 @@ namespace WingingIt.Settings
         /// <summary>Follow mode on touch with no on-screen buttons: hold fires guns, tap fires missile/bomb, double tap is the ability.</summary>
         public bool touchGesturesOnly;
         public float touchButtonSize = 1f;
+        /// <summary>The on-screen throttle buttons sit on the left, over the stick, instead of the right edge.</summary>
+        public bool touchThrottleLeft;
         /// <summary>How hard the on-screen stick steers: scales the stick past its small dead zone.</summary>
         public float touchSensitivity = 1f;
         /// <summary>The player's rebound keys and buttons, as the Input System's binding-overrides JSON ("" = the shipped bindings).</summary>
@@ -75,6 +78,10 @@ namespace WingingIt.Settings
         public float renderScale = 1f;
         /// <summary>How much shadow detail: distance, map size and edge filtering. Lower on phones.</summary>
         public ShadowDetail shadows = ShadowDetail.High;
+        /// <summary>How many of each map's trees are drawn (<see cref="TreeDensity"/>). Lower on phones.</summary>
+        public TreeDetail trees = TreeDetail.High;
+        /// <summary>How far trees, grass and LOD models reach (<see cref="RenderDistanceProfile"/>). Lower on phones.</summary>
+        public RenderDistance renderDistance = RenderDistance.High;
         public float fieldOfView = 60f;
         public bool speedFov = true;
         /// <summary>High dynamic range rendering. Off by default on phones, where it costs bandwidth for little gain.</summary>
@@ -98,6 +105,47 @@ namespace WingingIt.Settings
         public bool minimapHeadingUp;
         /// <summary>Dev builds only: the F1 help, debug overlay and dev keys.</summary>
         public bool devTools = true;
+        /// <summary>Dev builds only, the playtest's "too hard to shoot people" A/B: every plane's part HP as a fraction of normal.</summary>
+        public float combatHealth = 1f;
+        /// <summary>Dev builds only: gun bullets hit planes from further off.</summary>
+        public bool combatBigHitboxes;
+
+        // Pilot (the main menu's PILOT screen): swatch ids from PilotColors and the canopy pattern. No settings tab resets them.
+        public string pilotSuit = PilotColors.Team;
+        public string pilotHelmet = PilotColors.Team;
+        public string canopyColor = PilotColors.Team;
+        public string canopyTrim = "white";
+        public CanopyPattern canopyPattern = CanopyPattern.Stripes;
+        // The gear the pilot wears, one PilotGear variant id per slot (empty in a save from before gear: the defaults).
+        public string gearSuit = PilotGear.Default(PilotGearSlot.Suit);
+        public string gearHelmet = PilotGear.Default(PilotGearSlot.Helmet);
+        public string gearBackpack = PilotGear.Default(PilotGearSlot.Backpack);
+        public string gearGloves = PilotGear.Default(PilotGearSlot.Gloves);
+        public string gearBoots = PilotGear.Default(PilotGearSlot.Boots);
+
+        /// <summary>The pilot's suit, helmet, canopy and gear as one look.</summary>
+        public PilotLook PilotLook
+        {
+            get => new()
+            {
+                suit = pilotSuit, helmet = pilotHelmet, canopy = canopyColor, trim = canopyTrim, pattern = canopyPattern,
+                gearSuit = gearSuit, gearHelmet = gearHelmet, gearBackpack = gearBackpack, gearGloves = gearGloves,
+                gearBoots = gearBoots,
+            };
+            set
+            {
+                pilotSuit = value.suit;
+                pilotHelmet = value.helmet;
+                canopyColor = value.canopy;
+                canopyTrim = value.trim;
+                canopyPattern = value.pattern;
+                gearSuit = value.gearSuit;
+                gearHelmet = value.gearHelmet;
+                gearBackpack = value.gearBackpack;
+                gearGloves = value.gearGloves;
+                gearBoots = value.gearBoots;
+            }
+        }
 
         /// <summary>
         /// Turns follow mode on or off. On a phone, follow flies on gestures alone with auto throttle; leaving follow
@@ -164,6 +212,8 @@ namespace WingingIt.Settings
         public const float MinRenderScale = 0.5f, MaxRenderScale = 1f;
         public const float MinFov = 50f, MaxFov = 80f;
         public const float MinHudScale = 0.75f, MaxHudScale = 1.25f;
+        /// <summary>The lowest combat-test part HP: 10% of normal.</summary>
+        public const float MinCombatHealth = 0.1f;
         public static readonly int[] DesktopFrameRates = { 30, 60, 120, 144, 0 };
         public static readonly int[] MobileFrameRates = { 30, 60, 90, 120 };
 
@@ -240,6 +290,7 @@ namespace WingingIt.Settings
                         s.autoThrottle = d.autoThrottle;
                         s.touchGesturesOnly = d.touchGesturesOnly;
                         s.touchButtonSize = d.touchButtonSize;
+                        s.touchThrottleLeft = d.touchThrottleLeft;
                         s.touchSensitivity = d.touchSensitivity;
                         s.bindingOverrides = d.bindingOverrides;
                         break;
@@ -251,6 +302,8 @@ namespace WingingIt.Settings
                         s.frameRateCap = d.frameRateCap;
                         s.renderScale = d.renderScale;
                         s.shadows = d.shadows;
+                        s.trees = d.trees;
+                        s.renderDistance = d.renderDistance;
                         s.fieldOfView = d.fieldOfView;
                         s.speedFov = d.speedFov;
                         s.hdr = d.hdr;
@@ -270,10 +323,15 @@ namespace WingingIt.Settings
                         s.teamColors = d.teamColors;
                         s.minimapHeadingUp = d.minimapHeadingUp;
                         s.devTools = d.devTools;
+                        s.combatHealth = d.combatHealth;
+                        s.combatBigHitboxes = d.combatBigHitboxes;
                         break;
                 }
             });
         }
+
+        /// <summary>Puts the pilot's suit, helmet and canopy back to the default (all team colour, white-striped canopy).</summary>
+        public void ResetPilotLook() => Set(s => s.PilotLook = PilotLook.Default);
 
         void Save() => _store?.Save(JsonUtility.ToJson(_data));
 
@@ -287,6 +345,8 @@ namespace WingingIt.Settings
                 d.renderScale = 0.8f;
                 d.hdr = false;
                 d.shadows = ShadowDetail.Medium;
+                d.trees = TreeDetail.Medium;
+                d.renderDistance = RenderDistance.Medium;
             }
             return d;
         }
@@ -312,6 +372,10 @@ namespace WingingIt.Settings
             s.renderScale = Mathf.Clamp(s.renderScale, MinRenderScale, MaxRenderScale);
             if (!Enum.IsDefined(typeof(ShadowDetail), s.shadows))
                 s.shadows = ShadowDetail.High;
+            if (!Enum.IsDefined(typeof(TreeDetail), s.trees))
+                s.trees = TreeDetail.High;
+            if (!Enum.IsDefined(typeof(RenderDistance), s.renderDistance))
+                s.renderDistance = RenderDistance.High;
             s.fieldOfView = Mathf.Clamp(s.fieldOfView, MinFov, MaxFov);
 
             s.masterVolume = Mathf.Clamp01(s.masterVolume);
@@ -323,6 +387,8 @@ namespace WingingIt.Settings
             s.damageEffects = Mathf.Clamp01(s.damageEffects);
             if (!Enum.IsDefined(typeof(TeamColorMode), s.teamColors))
                 s.teamColors = TeamColorMode.Default;
+            s.combatHealth = Mathf.Clamp(s.combatHealth, MinCombatHealth, 1f);
+            s.PilotLook = s.PilotLook.Clamped();
         }
 
         static int NearestFrameRate(int fps, int[] offered)

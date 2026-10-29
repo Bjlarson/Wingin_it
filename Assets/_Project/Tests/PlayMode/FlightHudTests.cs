@@ -2,7 +2,6 @@ using System.Collections;
 using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using WingingIt.Flight;
 using WingingIt.Match;
@@ -20,8 +19,7 @@ namespace WingingIt.Tests
         [UnitySetUp]
         public IEnumerator LoadScene()
         {
-            yield return SceneManager.LoadSceneAsync("Island", LoadSceneMode.Single);
-            yield return null;
+            yield return MapTestScene.Load();
             _match = Object.FindAnyObjectByType<MatchManager>();
             _player = GameObject.Find("Player Plane").GetComponent<PlaneController>();
         }
@@ -53,6 +51,20 @@ namespace WingingIt.Tests
             foreach (var cloud in Object.FindObjectsByType<CloudBank>(FindObjectsSortMode.None))
                 Assert.IsTrue(cloud.GetComponentsInChildren<Renderer>().All(r => r.enabled), "clouds shown again");
             Assert.IsTrue(_player.GetComponentsInChildren<Renderer>().Any(r => r.enabled), "planes shown again");
+        }
+
+        [UnityTest]
+        public IEnumerator Minimap_IsPhotographedAgain_WhenTheModesPiecesChange()
+        {
+            yield return StartPlaying();
+            var hud = Object.FindAnyObjectByType<FlightHUD>();
+            var before = hud.Minimap;
+            yield return null;
+            Assert.AreSame(before, hud.Minimap, "nothing changed: the same photo");
+            _match.Dismiss(); // free flight spawns every piece
+            yield return null;
+            Assert.IsNotNull(hud.Minimap);
+            Assert.AreNotSame(before, hud.Minimap, "the new pieces are on a new photo");
         }
 
         [UnityTest]

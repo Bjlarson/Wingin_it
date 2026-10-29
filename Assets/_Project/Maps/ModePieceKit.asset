@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 817b7765705912c41808d329e8f19ebd, type: 3}
+  m_Name: ModePieceKit
+  m_EditorClassIdentifier: WingingIt.Runtime::WingingIt.Maps.ModePieceKit
+  airfieldPrefab: {fileID: 8222965363358938082, guid: 8a7ce5fe21c3f9944957510f6ab676cc, type: 3}
+  lightAA: {fileID: 11400000, guid: 490f013cc84f19144a21a35aacb3ab5f, type: 2}
+  pylonBase:
+    mesh: {fileID: 7304452207855316463, guid: 1312d4c848c186c45959685bd7b7ca70, type: 3}
+    materials:
+    - {fileID: 2100000, guid: 5694fa81744710d41b1a205c61605d37, type: 2}
+    - {fileID: 2100000, guid: 922ef7590de620a42bab9640db5cd33c, type: 2}
+  pylonTop:
+    mesh: {fileID: 3702471223786221794, guid: 1312d4c848c186c45959685bd7b7ca70, type: 3}
+    materials:
+    - {fileID: 2100000, guid: 5694fa81744710d41b1a205c61605d37, type: 2}
+    - {fileID: 2100000, guid: 778426062a3ff484ba881cb0ab733688, type: 2}
+    - {fileID: 2100000, guid: 922ef7590de620a42bab9640db5cd33c, type: 2}
+  pylonPole:
+    mesh: {fileID: -1776255357712254294, guid: 1312d4c848c186c45959685bd7b7ca70, type: 3}
+    materials:
+    - {fileID: 2100000, guid: 5694fa81744710d41b1a205c61605d37, type: 2}
+    - {fileID: 2100000, guid: 922ef7590de620a42bab9640db5cd33c, type: 2}
+  laneGlow: {fileID: 2100000, guid: 5f176c756baa92747a8b6f307b35ba97, type: 2}
+  greyboxPole: {fileID: 2100000, guid: 21c7095be4dbf344283863a7a5bd14f2, type: 2}
+  greyboxLane: {fileID: 2100000, guid: 4c72691650d304343a8f0670623f2de5, type: 2}
+  bannerPole: {fileID: 2100000, guid: 7afec0f8a8b534b4aae40e2d62505e03, type: 2}
+  bannerCloth:
+  - {fileID: 2100000, guid: 560d945b00a635540a35b38b6fae92d0, type: 2}
+  - {fileID: 2100000, guid: 55ef65e9b9739bc41ab0022a5dcd653e, type: 2}

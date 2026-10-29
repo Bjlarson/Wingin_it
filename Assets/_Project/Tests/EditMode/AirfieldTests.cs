@@ -59,28 +59,23 @@ namespace WingingIt.Tests
         }
 
         [Test]
-        public void RunwaySpawnSlots_StartAtTheRunwaySpawn_SideBySideThenFurtherDown()
+        public void RunwaySpawnSlots_FileUpBesideTheRunway_FromTheRunwaySpawn()
         {
             var spawn = new GameObject("Runway Spawn").transform;
             spawn.SetParent(_root.transform, false);
             spawn.localPosition = new Vector3(0f, 3f, -270f);
             _airfield.Configure("Test Field", 1, true, new Vector2(40f, 600f), null, spawn, _zone);
 
-            Assert.That(Vector3.Distance(_airfield.RunwaySpawnSlot(0).position, spawn.position), Is.LessThan(0.01f));
             for (int slot = 0; slot < Airfield.RunwaySpawnSlots; slot++)
             {
                 Pose pose = _airfield.RunwaySpawnSlot(slot);
-                Assert.IsTrue(_airfield.IsOverRunway(pose.position), $"slot {slot} is on the runway");
+                Vector3 local = _root.transform.InverseTransformPoint(pose.position);
+                Assert.IsFalse(_airfield.IsOverRunway(pose.position), $"slot {slot} is off the runway");
+                Assert.That(local.x, Is.EqualTo(-20f - Airfield.RunwayHoldOffset).Within(0.01f), $"slot {slot} is just off the left edge");
+                Assert.That(local.z, Is.EqualTo(-270f + slot * Airfield.RunwaySlotSpacing).Within(0.01f), $"slot {slot} is further down");
                 Assert.That(Vector3.Angle(pose.forward, _airfield.RunwayDirection), Is.LessThan(0.01f), $"slot {slot} faces down it");
-                for (int other = 0; other < slot; other++)
-                    Assert.That(Vector3.Distance(pose.position, _airfield.RunwaySpawnSlot(other).position),
-                        Is.GreaterThanOrEqualTo(Airfield.RunwayLaneSpacing - 0.01f), $"slots {other} and {slot} are apart");
             }
-            Vector3 local1 = _root.transform.InverseTransformPoint(_airfield.RunwaySpawnSlot(1).position);
-            Vector3 local3 = _root.transform.InverseTransformPoint(_airfield.RunwaySpawnSlot(3).position);
-            Assert.That(local1.z, Is.EqualTo(-270f).Within(0.01f), "slot 1 is beside slot 0");
-            Assert.That(local3.z, Is.EqualTo(-270f + Airfield.RunwayRowSpacing).Within(0.01f), "slot 3 starts the next row");
-            Assert.That(Vector3.Distance(_airfield.RunwaySpawnSlot(Airfield.RunwaySpawnSlots).position, spawn.position),
+            Assert.That(Vector3.Distance(_airfield.RunwaySpawnSlot(Airfield.RunwaySpawnSlots).position, _airfield.RunwaySpawnSlot(0).position),
                 Is.LessThan(0.01f), "wraps around");
         }
 

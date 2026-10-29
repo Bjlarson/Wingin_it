@@ -29,7 +29,7 @@ Hard requirements that apply to every pack:
 | Landing gear (animated deploy/retract) | 4 | One per class, with wheel meshes |
 | Propeller / jet exhaust meshes + blur | 4 | Spinning prop, motion-blur disc or afterburner cone |
 | Cockpit canopy glass | 4 | Needs glass shader with tint |
-| Pilot figure (visible in canopy) | 1 | Optional, ties into helmet cosmetics |
+| Pilot figure (visible in canopy) | 1 | **Pilot and parachute done 2026-10-28** (playtest G1): `ArtSource/Pilot/build_pilot.py` → `Art/Models/Pilot/Pilot.fbx`, a 1.8 m figure of jointed pieces (`PilotTorso` on the hips carrying `PilotHead` and `PilotArm*`, `PilotLeg*` on the root), leather flying helmet with goggles up, fleece collar, harness and back pack; 16-gore `Parachute` with lines and risers, origin on the harness point. Suit, helmet and coloured gores are on the team material so each tints on its own (G4). Editor `PilotModels` → `Prefabs/Pilot/Pilot.prefab` (`PilotFigure`) and `Parachute.prefab` (`PilotParachute`); ~1.6k tris with ink, canopy ~540. Not yet seated in the cockpits |
 | Armor Shield bubble mesh/shader | 1 | Repair invulnerability + Heavy ability |
 | Plane materials: base paint, trim, glass, team-color mask | 1 set | Replaces `Placeholder_PlaneBody/Dark/Glass` |
 | Base skin texture sets / UV templates | 4 | Atlas layout so cosmetics can be swapped |
@@ -226,7 +226,7 @@ Nothing exists yet (`Audio/` is empty).
 | Asset | Notes |
 |---|---|
 | Landing gear deploy/retract (x4 classes) | |
-| Control surface motion (ailerons, rudder, elevators) | If modeled separately |
+| Control surface motion (ailerons, rudder, elevators) | **Done** (2026-10-28): modelled separately on all four classes; `PlaneVisuals` deflects them with the turn rates |
 | AA turret rotate/fire/destroyed | |
 | Radar dish spin, lighthouse lamp rotate, windsock, beacons | |
 | Part detachment tumble (or physics only) | |
@@ -243,6 +243,19 @@ Nothing exists yet (`Audio/` is empty).
 | Ocean wake / bow spray VFX | |
 | King of the Sky zone volumes (3D cylinder shader, capture rings, team tints) | |
 | Ram Royale shrinking-boundary visual (storm wall / energy dome) | |
+
+## Pack 15: Map Packs (one per shipped map)
+
+Each heightmap map gets its own pack so the four read apart, placed by rules on its built terrain (editor `MapDressing` on `MapDresser`, called from `MapSceneBuilder.Build`): nothing on an airfield pad or under an approach lane, tall pieces kept further off, nothing on the landmarks, the terrain's own trees cleared from under every footprint, deterministic from the map's seed. Buildings and rocks are static meshes with mesh colliders (bots see them); trees and small props are drawn by the terrain as trees (prefabs in `Prefabs/MapPacks/<Pack>`). Scripts: `ArtSource/MapPacks/build_<pack>.py` on the shared `pack_kit.py` → `Art/Models/<Pack>/<Pack>.fbx`. New palette swatches (appended): thatch, terracotta, aegean, wheat, barnred, timber, ice, crop.
+
+| Pack | Map | Pieces | Reused |
+|---|---|---|---|
+| **Tropics** (4.2k tris) | The Island | Fishing villages on the low coast (LongHouse, BeachHut, StiltHut in the shallows, Jetty, Outrigger canoes), Sailboat yachts offshore, StoneIdol heads on the cliff edges facing the sea, bamboo Lookout towers, jungle groves (TreeJungle, TreeBanana, BushFlower) | Nature pack palms and woods; the landmarks pack's Lighthouse (lens turning) on two headlands |
+| **Prairie** (6.1k) | Broad Reach | Farmsteads (Barn, Farmhouse, Silo, Windpump with a turning wheel, HayStack, fenced yard, cows) with crop fields round them (CropWheat/Green/Plowed tiles laid along the slope) and poplar windbreaks; hamlets (Church, WaterTower, houses); Windmills with turning sails; field patchwork, hay and herds between; HotAirBalloons drifting 180-420 m up (`Bobber`) | Nature pack woods |
+| **Isles** (5.0k) | Shattered Archipelago | Sea stacks (A/B/C) in the sounds, up to three SeaArches to fly through (80 m wide, ~55 m high), Shipwrecks in the shallows, white cliff villages (CliffHouseA/B, a domed Chapel, an IslesMill with turning sails, FishingBoats), WatchtowerRuins on headlands, olive and cypress groves | Tropics Sailboat |
+| **Alpine** (5.9k) | Mountain Range | Ski villages (Chalet, LogCabins, Signpost, Snowmen), a cable car (CableStations, CablePylons wherever the cable would pass under 15 m of ground, two tracks, ten Gondolas running the loop: `CableCar`), FrozenPonds, RangerTowers, IceShards on the high ridges, TreeFirTall and TreeBirchWinter woods | Nature pack snowy pines and rocks |
+
+Runtime: `WingingIt.World.Bobber` (moored boats rock on the swell; balloons bob and drift round a slow circle), `CableCar` (gondolas round a closed polyline), and the existing `Spinner` (windmill sails, wind pump, lighthouse lens).
 
 ---
 

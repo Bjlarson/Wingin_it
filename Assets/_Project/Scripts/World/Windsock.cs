@@ -13,6 +13,8 @@ namespace WingingIt.World
         [Tooltip("How far (degrees) the sock droops in a lull and lifts in a gust.")]
         [SerializeField] float droop = 12f;
         [SerializeField] float flutter = 3f;
+        [Tooltip("Swings on unscaled time, so it keeps going while the game is frozen (the main menu's backdrop).")]
+        [SerializeField] bool unscaledTime;
 
         Quaternion _rest;
         float _seed;
@@ -25,7 +27,7 @@ namespace WingingIt.World
 
         void Update()
         {
-            float t = Time.time + _seed;
+            float t = (unscaledTime ? Time.unscaledTime : Time.time) + _seed;
             float yaw = (Mathf.PerlinNoise(t * 0.05f, 0.3f) - 0.5f) * 2f * swing;
             float gust = Mathf.PerlinNoise(t * 0.2f, 1.7f);
             float pitch = (1f - gust) * droop + Mathf.Sin(t * 9f) * flutter * gust;

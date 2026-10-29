@@ -38,7 +38,7 @@ namespace WingingIt.Tests
         }
 
         [UnityTest]
-        public IEnumerator RunwayLevel_RespawnsParkedOnTheRunway_GearLocked()
+        public IEnumerator RunwayLevel_RespawnsParkedBesideTheRunway_GearLocked()
         {
             UseRunwaySpawns();
             _plane.Crash(_plane.Position);
@@ -48,8 +48,8 @@ namespace WingingIt.Tests
             Assert.IsTrue(_plane.IsGrounded, "on its wheels");
             Assert.IsTrue(_gear.IsLocked, "gear down and locked");
             Assert.Less(_plane.Speed, 0.01f, "parked");
-            Assert.IsTrue(_home.IsOverRunway(_plane.Position), "on the home runway");
-            Vector3 flat = Vector3.ProjectOnPlane(_home.RunwaySpawn.position - _plane.Position, Vector3.up);
+            Assert.IsFalse(_home.IsOverRunway(_plane.Position), "beside the home runway, not on it");
+            Vector3 flat = Vector3.ProjectOnPlane(_home.RunwaySpawnSlot(0).position - _plane.Position, Vector3.up);
             Assert.Less(flat.magnitude, 1f, "in the first takeoff slot");
             Assert.Less(Vector3.Angle(_plane.Rotation * Vector3.forward, _home.RunwayDirection), 1f, "facing down the runway");
         }
@@ -115,7 +115,7 @@ namespace WingingIt.Tests
             Assert.IsTrue(_plane.IsGrounded);
             Vector3 second = _home.RunwaySpawnSlot(1).position;
             Assert.Less(Vector3.ProjectOnPlane(second - _plane.Position, Vector3.up).magnitude, 1f, "in slot 1");
-            Assert.Greater(Vector3.Distance(_plane.Position, otherPlane.Position), Airfield.RunwayLaneSpacing - 1f);
+            Assert.Greater(Vector3.Distance(_plane.Position, otherPlane.Position), Airfield.RunwaySlotSpacing - 1f);
         }
 
         [UnityTest]

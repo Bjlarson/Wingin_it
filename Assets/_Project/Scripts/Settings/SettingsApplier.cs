@@ -2,12 +2,14 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.SceneManagement;
+using WingingIt.Flight;
 
 namespace WingingIt.Settings
 {
     /// <summary>
     /// Applies the game-wide <see cref="GameSettings"/> (quality, resolution, frame rate cap, render scale, HDR, shadows,
-    /// master volume, mute in background) at startup, on every change, and (shadows) on every scene load. Created on its own before the first scene loads and
+    /// trees, render distance, master volume, mute in background) at startup, on every change, and (shadows, trees,
+    /// render distance) on every scene load. Created on its own before the first scene loads and
     /// kept across scenes. Per-object settings (controls, FOV, HUD) are read by the objects themselves.
     /// </summary>
     public sealed class SettingsApplier : MonoBehaviour
@@ -16,6 +18,9 @@ namespace WingingIt.Settings
         bool _focused = true;
         UniversalRenderPipelineAsset _shadowAsset;
         ShadowSnapshot _originalShadows;
+        // The quality level whose LOD bias Render Distance scales, and that bias as shipped (put back on leaving it).
+        int _biasLevel = -1;
+        float _baseLodBias;
 
         /// <summary>The URP asset's shadow fields as the project ships them, put back when play mode ends in the Editor.</summary>
         struct ShadowSnapshot
@@ -65,9 +70,14 @@ namespace WingingIt.Settings
             // The URP asset is a project file: the Editor would keep the player's shadow choice after play mode.
             if (Application.isEditor && _shadowAsset != null)
                 _originalShadows.ApplyTo(_shadowAsset);
+            RestoreLodBias();
         }
 
-        void OnSceneLoaded(Scene scene, LoadSceneMode mode) => ApplyShadows();
+        void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+            ApplyShadows();
+            ApplyScenery();
+        }
 
         void OnApplicationFocus(bool focus)
         {
@@ -75,12 +85,27 @@ namespace WingingIt.Settings
             ApplyVolume();
         }
 
+        /// <summary>The playtest's combat A/B (dev builds only; a release build always plays the base tuning).</summary>
+        public static void ApplyCombatTest(float health, bool bigHitboxes)
+        {
+            bool dev = Debug.isDebugBuild;
+            float scale = dev ? Mathf.Clamp(health, GameSettings.MinCombatHealth, 1f) : 1f;
+            float pad = dev && bigHitboxes ? CombatTuning.BigHitboxPad : 0f;
+            if (scale != CombatTuning.HealthScale || pad != CombatTuning.HitboxPad)
+                CombatTuning.ResetStats(); // a new variant starts its own time-to-kill average
+            CombatTuning.HealthScale = scale;
+            CombatTuning.HitboxPad = pad;
+        }
+
         void Apply()
         {
             var s = GameSettings.Current.Data;
             // Left alone until the player picks one, so the Editor keeps its own level.
             if (s.quality >= 0 && s.quality < QualitySettings.names.Length && QualitySettings.GetQualityLevel() != s.quality)
+            {
+                RestoreLodBias();
                 QualitySettings.SetQualityLevel(s.quality, true);
+            }
 
             if (!Application.isMobilePlatform && !Application.isEditor)
             {
@@ -105,7 +130,9 @@ namespace WingingIt.Settings
                 urp.supportsHDR = s.hdr;
             }
             ApplyShadows();
+            ApplyScenery();
             ApplyVolume();
+            ApplyCombatTest(s.combatHealth, s.combatBigHitboxes);
         }
 
         /// <summary>The Shadows setting: the shadow map on the URP asset, and on/off and edge filtering on the sun.</summary>
@@ -136,6 +163,31 @@ namespace WingingIt.Settings
                 return;
             sun.shadows = profile.Enabled ? LightShadows.Soft : LightShadows.None;
             sun.GetUniversalAdditionalLightData().softShadowQuality = (SoftShadowQuality)profile.SoftQuality;
+        }
+
+        /// <summary>Trees and Render Distance: every terrain's trees and grass, and the LOD bias.</summary>
+        void ApplyScenery()
+        {
+            var s = GameSettings.Current.Data;
+            int level = QualitySettings.GetQualityLevel();
+            if (level != _biasLevel)
+            {
+                _biasLevel = level;
+                _baseLodBias = QualitySettings.lodBias;
+            }
+            QualitySettings.lodBias = _baseLodBias * RenderDistanceProfile.For(s.renderDistance).LodBias;
+            TerrainScenery.ApplyAll(s.trees, s.renderDistance);
+        }
+
+        /// <summary>
+        /// Puts the current quality level's LOD bias back as shipped: before switching level (only one level is ever
+        /// scaled) and when play mode ends in the Editor, where the quality settings are a project file.
+        /// </summary>
+        void RestoreLodBias()
+        {
+            if (_biasLevel == QualitySettings.GetQualityLevel())
+                QualitySettings.lodBias = _baseLodBias;
+            _biasLevel = -1;
         }
 
         static Light Sun()

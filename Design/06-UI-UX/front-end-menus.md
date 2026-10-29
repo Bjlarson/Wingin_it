@@ -41,7 +41,7 @@ Before: 6 screens, no settings, no way to leave a match except quitting. After: 
 ## Screen Flow
 
 ```
-Launch ─▶ MAIN MENU ──PLAY──▶ GAME MODE ─▶ CLASS SELECT ─▶ 3-2-1 ─▶ MATCH ─▶ SCOREBOARD ─┬─PLAY AGAIN─▶ CLASS SELECT
+Launch ─▶ MAIN MENU ──PLAY──▶ GAME MODE ─▶ MAP ─▶ CLASS SELECT ─▶ 3-2-1 ─▶ MATCH ─▶ SCOREBOARD ─┬─PLAY AGAIN─▶ CLASS SELECT
              │  (gear: SETTINGS)                                       │ Esc               └─MAIN MENU──▶ MAIN MENU
              │       ▲                                           IN-MATCH MENU ─LEAVE MATCH─▶ MAIN MENU
              └───────┴── SETTINGS also opens from the in-match menu
@@ -74,13 +74,17 @@ A mode is a data entry (`GameModeInfo`: name, pitch, players, length, settings, 
 
 Online (Phase 7) this same screen is where the player picks what to queue for, and the bot difficulty row becomes the backfill setting or goes away.
 
+## Map Select
+
+**Built 2026-10-27.** Confirming a game mode opens a row of **map cards**, laid out like the mode cards (same size, ←/→ or the mouse to move, Enter / tap / PLAY to confirm, Esc / B back to the game mode screen); the mode's name sits under the MAP title. One card per map in `MapInfo.All` (`Scripts/Maps/MapInfo.cs`: the map scene to load, name, pitch, size across the boundary, terrain word, sketch): **The Island**, **Broad Reach**, **Shattered Archipelago**. Each card shows a top-down sketch of its land and sea with each team's home runway in its colour, the pitch, SIZE and TERRAIN. Every map plays every mode, so no card is ever locked. PLAY goes on to class select; picking the class loads that map's scene (`MatchManager.SelectMap`, then `MapLoader.Load` at the class pick). The pick is remembered for Play Again (and until the game closes), like the mode; once a map is loaded it can't change until the match is left.
+
 ## Class Select
 
 The existing four cards (stats, loadout, ability, ON YOUR TEAM n), restyled to the game mode screen's card layout. Adds:
 
 - The cards are centred on screen; no roster column (team lineups show on the in-match scoreboard).
 - The highlighted class's plane replaces the one parked in the hangar, so the pick is seen in the world, not just on a card. **Built:** the cards sit in the lower half (shorter than the in-play picker's, no dark wash) and the camera eases in to 26 m and tilts down so the plane shows above them; BACK puts the class picked last back in the hangar.
-- Esc / B goes back to the game mode screen.
+- Esc / B goes back to the map screen.
 
 The respawn and home-airfield pickers stay as built ([aircraft-classes](../02-Mechanics/aircraft-classes.md#class-selection)). Added 2026-10-20: while dead with more than one field to spawn at (Airfield Domination), a SPAWN AT row of field buttons (HOME first, then held fields) sits under the class cards; click one or press TAB / Shift+TAB.
 
@@ -123,6 +127,8 @@ One panel, four tabs (Q / E or LB / RB switch tabs). Every change **applies imme
 | Resolution + window mode | Native, fullscreen | Resolution list; Fullscreen / Windowed / Borderless | PC |
 | Frame rate cap | PC: 144; mobile: 60 | 30 / 60 / 120 / 144 / Unlimited | All (mobile offers 30 / 60, 120 if the screen supports it) |
 | Render scale | PC: 100%; mobile: 80% | 50–100% | All |
+| Trees | PC: High; mobile: Medium | Low (1 in 3) / Medium (2 in 3) / High (all) | All (`TreeDensity`, `TerrainScenery`: thins each kind of terrain tree evenly; kinds with fewer than 50 on a map always stay. Terrain trees are most of a map's draw cost: Broad Reach's 52k take ~20 of ~25 ms CPU per frame) |
+| Render distance | PC: High; mobile: Medium | Low / Medium / High | All (`RenderDistanceProfile`, `TerrainScenery`: tree distance 50 / 75 / 100% and grass 60 / 80 / 100% of what each terrain was built with; the quality level's LOD bias 50 / 75 / 100%, which moves every LOD switch — trees to their camera-facing billboards (`TreeBillboards`, a 10 m tree at ~580 m on PC High) and out, airfield props and vehicles out) |
 | Field of view | 60° | 50–80° | All (`FlightCameraRig.baseFov`; the top-speed and boost widening keeps its offset) |
 | Speed FOV effect | On | On / Off | All (Off = no widening with speed or boost; motion comfort) |
 

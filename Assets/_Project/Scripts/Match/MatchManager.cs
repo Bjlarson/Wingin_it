@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -6,6 +7,7 @@ using UnityEngine.SceneManagement;
 using WingingIt.Bots;
 using WingingIt.CameraSystem;
 using WingingIt.Flight;
+using WingingIt.Maps;
 using WingingIt.Settings;
 using WingingIt.World;
 
@@ -44,14 +46,18 @@ namespace WingingIt.Match
         [SerializeField] FlightStats[] classes;
         [Tooltip("Player controls (input, dev tools) that only run in play.")]
         [SerializeField] Behaviour[] playOnlyBehaviours;
-        [Tooltip("Flight HUD and debug overlay, hidden outside play.")]
+        [Tooltip("Flight HUD and debug overlay, hidden outside play and while the in-match menu is open.")]
         [SerializeField] GameObject[] playOnlyObjects;
-        [Tooltip("On-screen controls: like the HUD, but also hidden while the in-match menu is open (taps go to the menu).")]
+        [Tooltip("On-screen controls: like the HUD, hidden outside play and while the in-match menu is open (taps go to the menu).")]
         [SerializeField] GameObject[] controlObjects;
         [Tooltip("Dev tools that break the match rules (free class switching). Only on after Dismiss.")]
         [SerializeField] Behaviour[] sandboxOnlyBehaviours;
         [Tooltip("The player's chase camera: follows the survivors once the player is out of lives. Found in the scene if empty.")]
         [SerializeField] FlightCameraRig cameraRig;
+        [Tooltip("Spawns each mode's airfields, lanes, stands and arena from the map's layout. Empty: the level as built.")]
+        [SerializeField] ModePieceBuilder pieces;
+        [Tooltip("Loads the map scene when the class is picked (the main menu scene). Empty: the map is part of the level.")]
+        [SerializeField] MapLoader mapLoader;
 
         [Header("Rules")]
         [Tooltip("Real seconds of 3-2-1 before play. The rest of the rules come from the game mode (MatchMode).")]
@@ -60,11 +66,14 @@ namespace WingingIt.Match
         [SerializeField] Color[] teamColors = { new(0.35f, 0.6f, 1f), new(1f, 0.38f, 0.32f) };
         [Tooltip("Seconds a pilot who's out watches its own (or the watched plane's) explosion before the camera moves to a survivor.")]
         [SerializeField, Min(0f)] float spectateHold = 2.5f;
+        [Tooltip("Seconds a pilot who's out watches the winner once the last plane is left, before the scoreboard.")]
+        [SerializeField, Min(0f)] float winnerHold = 3f;
 
         // Kept across Play Again (a scene reload), so a rematch starts with the same picks.
         static readonly Dictionary<string, BotDifficulty> s_difficulty = new(); // per mode id, read from PlayerPrefs once
         static int s_classIndex;
         static int s_modeIndex;
+        static int s_mapIndex;
         static bool s_skipMenu; // Play Again: the reload opens on class select
 
         MatchClock _clock;
@@ -79,13 +88,17 @@ namespace WingingIt.Match
         PlaneRespawner _respawner;
         PlaneHealth _health;
         PlaneRepair _repair;
-        bool _playOnlyOn = true, _controlsOn = true; // as the scene is saved
+        bool _playOnlyOn = true; // as the scene is saved
         bool _parked;
         (int count, int size)? _levelTeams; // the roster's teams while a free-for-all mode has replaced them
         PlaneController _spectated;
         float _spectateHold;
+        float _finishHold = -1f; // counting down on the winner before the scoreboard; -1 = not finishing
 
         public event Action<MatchPhase> PhaseChanged;
+
+        /// <summary>The match is decided and a spectating player is watching the winner before the scoreboard.</summary>
+        public bool Finishing => _finishHold >= 0f;
 
         public MatchPhase Phase => _clock.Phase;
         /// <summary>Seconds left on the countdown (real time) or the match clock (game time).</summary>
@@ -97,6 +110,8 @@ namespace WingingIt.Match
         public ModeArena Arena => _arena;
         /// <summary>Which of <see cref="GameModeInfo.All"/> is being played (-1 for a mode set with <see cref="SetMode"/>).</summary>
         public int ModeIndex { get; private set; }
+        /// <summary>Which of <see cref="MapInfo.All"/> the class pick loads (picked on the map select screen).</summary>
+        public int MapIndex => s_mapIndex;
         /// <summary>The winning team by the mode's rules, or <see cref="MatchScore.Draw"/>.</summary>
         public int Winner => _mode.Winner(_score);
         public PlaneController Player => player;
@@ -108,13 +123,34 @@ namespace WingingIt.Match
         /// <summary>Teams in play: the level's (two), or one per pilot in a free-for-all mode.</summary>
         public int TeamCount => _mode != null && _mode.IsFreeForAll ? _mode.FreeForAllSize : roster != null ? roster.TeamCount : 2;
         public BotRoster Roster => roster;
+        /// <summary>What spawns the mode's pieces from the map's layout; null in a level that has them built in.</summary>
+        public ModePieceBuilder Pieces => pieces;
         public IReadOnlyList<FlightStats> Classes => classes;
         public int SelectedClass => s_classIndex;
         public bool IsDismissed => _dismissed;
         /// <summary>The in-match menu is open (the match runs on; the player's controls are let go).</summary>
         public bool MenuOpen { get; private set; }
-        /// <summary>Where the player's plane waits during the menu: its home hangar. Null if the level has none.</summary>
-        public Transform HangarSpot => player != null ? Airfield.HomeOf(player.Team)?.HangarSpot : null;
+        /// <summary>
+        /// Where the player's plane waits during the menu: the main menu scene's own hangar (<see cref="MenuStage"/>), else
+        /// its home field's hangar. Null if the level has neither.
+        /// </summary>
+        public Transform HangarSpot
+        {
+            get
+            {
+                if (player == null)
+                    return null;
+                var stage = MenuStage.Current;
+                if (stage != null && stage.HangarSpot != null)
+                    return stage.HangarSpot;
+                var home = Airfield.HomeOf(player.Team);
+                return home != null ? home.HangarSpot : null;
+            }
+        }
+        /// <summary>Loads the map at the class pick; null in a level that has its map built in.</summary>
+        public MapLoader MapLoader => mapLoader;
+        /// <summary>The class is picked and the map scene is loading: the loading screen is up, nothing else answers.</summary>
+        public bool IsLoadingMap => mapLoader != null && mapLoader.IsLoading;
 
         /// <summary>Whether (and why) the in-play class picker is showing. The world keeps running under it.</summary>
         public ClassPicker Picker { get; private set; }
@@ -281,6 +317,7 @@ namespace WingingIt.Match
             s_difficulty.Clear();
             s_classIndex = 0;
             s_modeIndex = 0;
+            s_mapIndex = 0;
             s_skipMenu = false;
         }
 
@@ -343,6 +380,18 @@ namespace WingingIt.Match
             UseMode(GameModeInfo.All[index].CreateMode());
         }
 
+        /// <summary>
+        /// Map select: the class pick loads <see cref="MapInfo.All"/>[<paramref name="index"/>]. Only from the menu or
+        /// class select, before a map is in. Remembered for Play Again.
+        /// </summary>
+        public void SelectMap(int index)
+        {
+            if (_dismissed || _clock.Phase is not (MatchPhase.Menu or MatchPhase.ClassSelect) || IsLoadingMap
+                || (mapLoader != null && mapLoader.IsLoaded) || index < 0 || index >= MapInfo.All.Count)
+                return;
+            s_mapIndex = index;
+        }
+
         /// <summary>Plays <paramref name="mode"/>, which isn't on a card (tests, modes in the works). Only from the menu.</summary>
         public void SetMode(MatchMode mode)
         {
@@ -356,6 +405,9 @@ namespace WingingIt.Match
         {
             DropModeWorlds();
             _mode = mode;
+            if (pieces != null)
+                pieces.Build(mode.LayoutId); // in the menu too: the home field's hangar is the backdrop
+            UseLayoutPatrols();
             if (mode is RamRoyaleMode ram)
                 ram.BodyHealth = BodyHealthOf;
             UseTeams();
@@ -430,11 +482,29 @@ namespace WingingIt.Match
                 ApplyPhase();
             if (_clock.Phase != MatchPhase.Playing)
                 return;
+            if (Finishing)
+            {
+                _finishHold -= dt;
+                if (_finishHold <= 0f)
+                    EndMatch();
+                return;
+            }
             _mode.Tick(_score, dt);
             TickBanners(dt);
             TickFields(dt);
+            if (_mode.Lives > 0)
+                RegisterPilots(); // a plane that joined late counts as still flying, so the last-plane check can't end it early
             if (_mode.EarlyWinner(_score) != null)
             {
+                // Out and watching: stay on the winner a moment, then the scoreboard. The score is frozen from here.
+                if (IsSpectating && winnerHold > 0f)
+                {
+                    _finishHold = winnerHold;
+                    var survivors = Survivors;
+                    if (survivors.Count > 0)
+                        Watch(survivors[0]);
+                    return;
+                }
                 EndMatch();
                 return;
             }
@@ -483,6 +553,7 @@ namespace WingingIt.Match
             if (!IsSpectating)
             {
                 IsSpectating = true;
+                MenuOpen = false; // out of lives shows the explosion, never the pause menu
                 _spectated = null;
                 _spectateHold = spectateHold;
                 RefreshPlayOnly();
@@ -582,11 +653,15 @@ namespace WingingIt.Match
 
         /// <summary>
         /// Opens the in-match menu (countdown or play). The match keeps running: the player's controls let go of the
-        /// stick and the mouse is freed; the HUD stays up behind the menu.
+        /// stick, the mouse is freed and the HUD clears off until it closes. Never while the player is going down: a crash
+        /// shows only the plane select, or (out of lives) the explosion and then a survivor, and only from then on can the
+        /// menu open again (to leave). That also covers a button mashed, a back gesture or a pad blip in the crash itself.
         /// </summary>
         public void OpenMenu()
         {
             if (_dismissed || MenuOpen || Picker == ClassPicker.Respawn || _clock.Phase is not (MatchPhase.Countdown or MatchPhase.Playing))
+                return;
+            if (player != null && !player.IsAlive && (!IsSpectating || _spectated == null))
                 return;
             MenuOpen = true;
             RefreshPlayOnly();
@@ -695,7 +770,7 @@ namespace WingingIt.Match
         /// <summary>Class select → menu (the game mode screen). The hangar shows the class picked last again.</summary>
         public void BackToMenu()
         {
-            if (!_clock.BackToMenu())
+            if (IsLoadingMap || !_clock.BackToMenu())
                 return;
             if (_parked)
                 ParkInHangar();
@@ -708,7 +783,7 @@ namespace WingingIt.Match
         /// </summary>
         public void PreviewClass(int index)
         {
-            if (_dismissed || !_parked || _clock.Phase != MatchPhase.ClassSelect || !IsClass(index) || player.Stats == classes[index])
+            if (_dismissed || !_parked || IsLoadingMap || _clock.Phase != MatchPhase.ClassSelect || !IsClass(index) || player.Stats == classes[index])
                 return;
             var spot = HangarSpot;
             if (spot == null)
@@ -719,11 +794,56 @@ namespace WingingIt.Match
 
         /// <summary>
         /// Picks <see cref="Classes"/>[<paramref name="index"/>] on the class select screen: the player spawns fresh over
-        /// home in it, the bots join, and the countdown starts.
+        /// home in it, the bots join, and the countdown starts. In the main menu scene the picked map's scene loads first
+        /// (behind the loading screen) and the mode's pieces spawn in it.
         /// </summary>
         public void SelectClass(int index)
         {
-            if (_clock.Phase != MatchPhase.ClassSelect || index < 0 || index >= classes.Length || classes[index] == null)
+            if (_clock.Phase != MatchPhase.ClassSelect || IsLoadingMap || index < 0 || index >= classes.Length || classes[index] == null)
+                return;
+            if (mapLoader != null && !mapLoader.IsLoaded)
+            {
+                StartCoroutine(mapLoader.Load(MapInfo.All[s_mapIndex].Scene, map =>
+                {
+                    UseMap(map);
+                    StartMatch(index);
+                }));
+                return;
+            }
+            StartMatch(index);
+        }
+
+        /// <summary>
+        /// Loads <paramref name="mapScene"/> (the picked map if empty) beside the menu scene and spawns the mode's
+        /// pieces in it, staying in the menu; the plane parks in its home field's hangar, as the menu stage hides. The
+        /// class pick then starts at once. For tests; does nothing once a map is in.
+        /// </summary>
+        public IEnumerator LoadMap(string mapScene = null)
+        {
+            if (mapLoader == null || mapLoader.IsLoaded || IsLoadingMap)
+                yield break;
+            if (string.IsNullOrEmpty(mapScene))
+                mapScene = MapInfo.All[s_mapIndex].Scene;
+            else if (MapInfo.IndexOf(mapScene) >= 0)
+                s_mapIndex = MapInfo.IndexOf(mapScene); // Play Again comes back to it
+            yield return mapLoader.Load(mapScene, UseMap);
+            if (_parked)
+                ParkInHangar();
+        }
+
+        /// <summary>The map scene is in: the mode's pieces spawn from its layout, and the bots patrol its fight areas.</summary>
+        void UseMap(MapDefinition map)
+        {
+            if (pieces == null || map == null)
+                return;
+            pieces.Configure(map, pieces.Kit);
+            pieces.Build(_mode.LayoutId);
+            UseLayoutPatrols();
+        }
+
+        void StartMatch(int index)
+        {
+            if (_clock.Phase != MatchPhase.ClassSelect)
                 return;
             s_classIndex = index;
             UseArena(); // before anyone spawns: an arena can move the spawns
@@ -761,6 +881,16 @@ namespace WingingIt.Match
             }
         }
 
+        /// <summary>
+        /// Bots patrol the fight areas the map's layout gives the mode (<see cref="ModePieceBuilder.FightAreas"/>), so they
+        /// never fly a route meant for another map. A level with no layout keeps the roster's own.
+        /// </summary>
+        void UseLayoutPatrols()
+        {
+            if (roster != null && pieces != null && pieces.FightAreas.Count > 0)
+                roster.SetFightAreas(pieces.FightAreas);
+        }
+
         /// <summary>The level as built again: its own play area, airfields and patrols.</summary>
         void DropArena()
         {
@@ -775,6 +905,7 @@ namespace WingingIt.Match
         /// <summary>Ends the match now, as if time ran out.</summary>
         public void EndMatch()
         {
+            _finishHold = -1f;
             if (_clock.End())
                 ApplyPhase();
         }
@@ -807,6 +938,8 @@ namespace WingingIt.Match
         void Reload()
         {
             Time.timeScale = 1f;
+            if (pieces != null)
+                pieces.Clear(); // the match is over: its pieces go with it
             SceneManager.LoadScene(gameObject.scene.name);
         }
 
@@ -822,8 +955,11 @@ namespace WingingIt.Match
             Time.timeScale = 1f;
             Picker = ClassPicker.None;
             MenuOpen = false;
-            DropArena(); // free flight is the level as built
+            DropArena(); // free flight is the level as built: every piece the map has
             DropModeWorlds();
+            if (pieces != null)
+                pieces.BuildEverything();
+            UseLayoutPatrols();
             StopSpectating();
             RestoreTeams();
             RefreshPlayOnly();
@@ -856,31 +992,25 @@ namespace WingingIt.Match
         }
 
         /// <summary>
-        /// The flight HUD shows in play with no class picker up (the picker frees the mouse, and the HUD would draw over
-        /// it) and the player not out spectating; the controls and on-screen controls also need the in-match menu closed.
-        /// Dismissed, all of it is on.
+        /// The flight HUD, controls and on-screen controls show in play with no class picker up (the picker frees the
+        /// mouse, and the HUD would draw over it), the player not out spectating and the in-match menu closed (the HUD
+        /// clears off the screen behind it and comes back as it closes). Dismissed, all of it is on.
         /// </summary>
         void RefreshPlayOnly()
         {
-            bool hud = _dismissed || (_clock.Phase == MatchPhase.Playing && Picker == ClassPicker.None && !IsSpectating);
-            bool controls = hud && !MenuOpen;
-            if (hud != _playOnlyOn)
-            {
-                _playOnlyOn = hud;
-                foreach (var go in playOnlyObjects)
-                    if (go != null)
-                        go.SetActive(hud);
-            }
-            if (controls != _controlsOn)
-            {
-                _controlsOn = controls;
-                foreach (var b in playOnlyBehaviours)
-                    if (b != null)
-                        b.enabled = controls;
-                foreach (var go in controlObjects)
-                    if (go != null)
-                        go.SetActive(controls);
-            }
+            bool on = _dismissed || (_clock.Phase == MatchPhase.Playing && Picker == ClassPicker.None && !IsSpectating && !MenuOpen);
+            if (on == _playOnlyOn)
+                return;
+            _playOnlyOn = on;
+            foreach (var go in playOnlyObjects)
+                if (go != null)
+                    go.SetActive(on);
+            foreach (var b in playOnlyBehaviours)
+                if (b != null)
+                    b.enabled = on;
+            foreach (var go in controlObjects)
+                if (go != null)
+                    go.SetActive(on);
         }
 
         PilotRef Ref(PlaneController plane) => new(plane, PilotName(plane), plane.Team);
@@ -894,7 +1024,7 @@ namespace WingingIt.Match
 
         void OnAnyKilled(KillInfo kill)
         {
-            if (_dismissed || _clock.Phase != MatchPhase.Playing || kill.Victim == null)
+            if (_dismissed || _clock.Phase != MatchPhase.Playing || Finishing || kill.Victim == null)
                 return;
             var victim = kill.Victim.Plane;
             _banners?.CarrierDown(victim);
@@ -910,7 +1040,7 @@ namespace WingingIt.Match
 
         void OnAnyRammed(RamInfo ram)
         {
-            if (_dismissed || _clock.Phase != MatchPhase.Playing || ram.Hitter == null || ram.Victim == null)
+            if (_dismissed || _clock.Phase != MatchPhase.Playing || Finishing || ram.Hitter == null || ram.Victim == null)
                 return;
             _mode.RecordRam(_score, Ref(ram.Hitter), Ref(ram.Victim), ram.HitterDamage, ram.VictimDamage);
         }

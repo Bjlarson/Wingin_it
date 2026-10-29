@@ -221,7 +221,7 @@ namespace WingingIt.Editor
         {
             var t = new Texture2D(Size, Size, TextureFormat.RGBA32, false, linear: normalMap);
             for (int i = 0; i < pixels.Length; i++)
-                pixels[i].a = 1f; // opaque: the layers take a constant smoothness (IslandSceneBuilder.Layer)
+                pixels[i].a = 1f; // opaque: the layers take a constant smoothness (MapTerrainBuilder.Layer)
             t.SetPixels(pixels);
             File.WriteAllBytes(path, t.EncodeToPNG());
             Object.DestroyImmediate(t);

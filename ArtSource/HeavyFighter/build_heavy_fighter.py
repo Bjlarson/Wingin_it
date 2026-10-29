@@ -22,7 +22,8 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from plane_kit import (ENGINE, GEAR_L, GEAR_NOSE, GEAR_R, HSTAB, MAIN_LEG, MAIN_WHEEL, MODELS_DIR, NOSE_LEG,  # noqa: E402
+from plane_kit import (control_surface, fin_place, loft_planform, split_planform, tail_place,
+                       wing_place, ENGINE, GEAR_L, GEAR_NOSE, GEAR_R, HSTAB, MAIN_LEG, MAIN_WHEEL, MODELS_DIR, NOSE_LEG,  # noqa: E402
                        NOSE_WHEEL, VSTAB, WING_L, WING_R, Model, Part, build_edge, build_gear, fin_section,
                        lerp_section, octagon, preview_arg, render_previews, ring, roundel, wing_section)
 from mathutils import Vector  # noqa: E402
@@ -65,6 +66,11 @@ NACELLE_X = 2.45
 HUB_Z = 2.62
 GUN_X = (1.00, 3.95)  # either side of the prop arc: inner, outer
 POD_X, POD_Y = 3.95, -0.32  # rocket pod under the shared rocket rail
+
+# Control surfaces (span ranges): ailerons outboard of the nacelles, split elevators, a rudder above the tail.
+AILERON = (3.05, 4.85)
+ELEVATORS = [(-2.05, -0.35), (0.35, 2.05)]
+RUDDER = (0.66, 1.96)
 
 
 def nacelle_y():
@@ -149,8 +155,11 @@ def build_engine():
 def build_wing(side, model):
     name = "WingRight" if side > 0 else "WingLeft"
     p = Part(name, WING_R if side > 0 else WING_L)
-    sections = [wing_section(side * x, le, te, t, wing_y(x)) for x, le, te, t in WING_SECTIONS]
-    p.loft(sections, lambda b, s: "body" if b < 3 else "team", cap_start="body", cap_end="team")
+    place = wing_place(side, wing_y)
+    stations, (aileron,) = split_planform(WING_SECTIONS, [AILERON])
+    loft_planform(p, place, stations, lambda b, s: "body" if b < 3 else "team", cap_start="body", cap_end="team")
+    model.add([control_surface(model, name + "Aileron", place, aileron,
+                               lambda s: "body" if s < 4.35 else "team")])
 
     # Engine nacelle: metal cowl ring at the front, body-coloured, tapering to a point behind the wing.
     x0, yc = side * NACELLE_X, nacelle_y()
@@ -220,16 +229,21 @@ def build_wing_prop_disc(side):
     return p
 
 
-def build_hstab():
+def build_hstab(model):
     p = Part("HorizontalStabilizer", HSTAB)
-    p.loft([wing_section(x, le, te, t, HSTAB_Y) for x, le, te, t in HSTAB_SECTIONS], "team",
-           cap_start="team", cap_end="team")
+    place = tail_place(HSTAB_Y)
+    stations, (left, right) = split_planform(HSTAB_SECTIONS, ELEVATORS)
+    loft_planform(p, place, stations, "team", cap_start="team", cap_end="team")
+    model.add([control_surface(model, "HorizontalStabilizerElevatorLeft", place, left, "team"),
+               control_surface(model, "HorizontalStabilizerElevatorRight", place, right, "team")])
     return p
 
 
-def build_vstab():
+def build_vstab(model):
     p = Part("VerticalStabilizer", VSTAB)
-    p.loft([fin_section(y, le, te, t) for y, le, te, t in FIN_SECTIONS], "team", cap_start="team", cap_end="team")
+    stations, (rudder,) = split_planform(FIN_SECTIONS, [RUDDER])
+    loft_planform(p, fin_place, stations, "team", cap_start="team", cap_end="team")
+    model.add([control_surface(model, "VerticalStabilizerRudder", fin_place, rudder, "team")])
     return p
 
 
@@ -268,8 +282,8 @@ def build():
         build_wing(1, model),
         build_wing_prop(-1),
         build_wing_prop(1),
-        build_hstab(),
-        build_vstab(),
+        build_hstab(model),
+        build_vstab(model),
         build_gear("GearMainLeft", GEAR_L, MAIN_LEG, MAIN_WHEEL, 0.34, strut=0.08, door=(-0.16, 0.85, 0.50), sides=8),
         build_gear("GearMainRight", GEAR_R, MAIN_LEG, MAIN_WHEEL, 0.34, strut=0.08, door=(0.16, 0.85, 0.50), sides=8),
         build_gear("GearNose", GEAR_NOSE, NOSE_LEG, NOSE_WHEEL, 0.26, strut=0.07, sides=8),

@@ -97,6 +97,15 @@
                     "initialStateCheck": false
                 },
                 {
+                    "name": "Eject",
+                    "type": "Button",
+                    "id": "2c693b6e-b095-4ece-8744-667af986866f",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "Hold(duration=0.4)",
+                    "initialStateCheck": false
+                },
+                {
                     "name": "FreeLook",
                     "type": "Button",
                     "id": "1824c6c7-3ace-41a8-b69a-0e7feeaa3281",
@@ -580,6 +589,28 @@
                     "processors": "",
                     "groups": "Gamepad",
                     "action": "Ability",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "f7faf727-f1ff-4616-a314-e1d4189b5e55",
+                    "path": "<Keyboard>/x",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard&Mouse",
+                    "action": "Eject",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "703f4048-b3fa-41f2-a39a-8522c9d929f0",
+                    "path": "<Gamepad>/leftStickPress",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "Eject",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },

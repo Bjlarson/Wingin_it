@@ -38,6 +38,7 @@ namespace WingingIt.UI
                         && plane.LastTouchdown.Result == TouchdownResult.Crashed ? plane.LastTouchdown.Fault : null;
                     string death = plane.LastDeathCause == DeathCause.OutOfBounds ? "OUT OF THE ARENA"
                         : plane.LastDeathCause == DeathCause.Rammed ? HudText.Rammed(killer)
+                        : plane.LastDeathCause == DeathCause.Ejected ? HudText.Ejected(killer)
                         : HudText.Death(plane.LastDeathCause == DeathCause.ShotDown, crashFault, killer);
                     return respawner != null ? $"{death}  —  RESPAWN IN {respawner.RespawnTimeLeft:0.0}" : death;
                 }
@@ -72,6 +73,31 @@ namespace WingingIt.UI
                 return;
             Color color = GameSettings.Blink(Time.time, 0.8f, 0.6875f) ? Red : Color.white;
             _g.Shadowed(new Rect(0f, 136f, width, 48f), warning, _g.Title, 4f, TextAnchor.MiddleCenter, color, 0.85f);
+        }
+
+        PlaneEjection _ejection;
+        bool _ejectionLooked;
+
+        /// <summary>The player plane can bail out now (crippled, in the air): what the eject hint and touch button show for.</summary>
+        public bool CanEject
+        {
+            get
+            {
+                if (!_ejectionLooked && plane != null)
+                    (_ejection, _ejectionLooked) = (plane.GetComponent<PlaneEjection>(), true);
+                return _ejection != null && _ejection.CanEject;
+            }
+        }
+
+        /// <summary>
+        /// Under the center warning while the plane can eject: "HOLD X TO EJECT". Touch has its own EJECT button instead.
+        /// </summary>
+        void DrawEjectHint(float width)
+        {
+            if (!CanEject || player == null || player.TouchControlsActive)
+                return;
+            _g.Shadowed(new Rect(0f, 186f, width, 26f), HudText.EjectHint(player.EjectBindingName), _g.Hint, 2.4f,
+                TextAnchor.MiddleCenter, Alpha(White, 0.9f));
         }
 
         /// <summary>

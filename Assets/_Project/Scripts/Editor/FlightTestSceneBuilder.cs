@@ -40,7 +40,9 @@ namespace WingingIt.Editor
 
         // The home airfield sits south of the action; its air spawn is 300 m up on the approach.
         static readonly Vector3 AirfieldPosition = new Vector3(0f, 0f, -1350f);
-        static readonly Vector2 RunwaySize = new Vector2(40f, 600f);
+        internal static readonly Vector2 RunwaySize = new Vector2(40f, 600f);
+        /// <summary>Where an airfield's hangar stands from its runway's centre: off the right side, toward the approach end.</summary>
+        internal static readonly Vector3 HangarOffset = new Vector3(RunwaySize.x * 0.5f + 55f, 0f, -40f);
         static readonly Vector3 AirSpawnLocal = new Vector3(0f, 300f, -250f);
         const float BoundaryRadius = 2800f;
         const float Ceiling = 1500f;
@@ -514,6 +516,10 @@ namespace WingingIt.Editor
             var ability = root.AddComponent<PlaneAbility>();
             SetField(ability, "shieldMaterial", m.Shield);
             SetField(ability, "flameMaterial", m.Ember);
+            // Bailing out of a crippled plane: the pilot prefabs come from Winging It/Build Pilot Prefabs.
+            root.AddComponent<PlaneEjection>().SetPrefabs(
+                AssetDatabase.LoadAssetAtPath<GameObject>(PilotModels.PilotPrefabPath)?.GetComponent<PilotFigure>(),
+                AssetDatabase.LoadAssetAtPath<GameObject>(PilotModels.ParachutePrefabPath)?.GetComponent<PilotParachute>());
 
             var prefab = PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
             Object.DestroyImmediate(root);
@@ -555,6 +561,15 @@ namespace WingingIt.Editor
                 SetVectors(element.FindPropertyRelative("muzzlePositions"), models[i].muzzlePositions);
                 SetVectors(element.FindPropertyRelative("railPositions"), models[i].railPositions);
                 SetVectors(element.FindPropertyRelative("wingHitboxPositions"), models[i].wingHitboxPositions);
+                var surfaces = element.FindPropertyRelative("surfaces");
+                surfaces.arraySize = models[i].surfaces.Length;
+                for (int s = 0; s < models[i].surfaces.Length; s++)
+                {
+                    var surface = surfaces.GetArrayElementAtIndex(s);
+                    surface.FindPropertyRelative("pivot").objectReferenceValue = models[i].surfaces[s].pivot;
+                    surface.FindPropertyRelative("kind").enumValueIndex = (int)models[i].surfaces[s].kind;
+                    surface.FindPropertyRelative("axis").vector3Value = models[i].surfaces[s].axis;
+                }
             }
             so.ApplyModifiedPropertiesWithoutUndo();
 
@@ -716,6 +731,34 @@ namespace WingingIt.Editor
             return r;
         }
 
+        internal static Renderer Sphere(string name, Transform parent, Vector3 localPos, float diameter, Material mat, bool collider)
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            go.name = name;
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = localPos;
+            go.transform.localScale = Vector3.one * diameter;
+            if (!collider)
+                Object.DestroyImmediate(go.GetComponent<Collider>());
+            var r = go.GetComponent<Renderer>();
+            r.sharedMaterial = mat;
+            return r;
+        }
+
+        /// <summary>A collider-less cylinder <paramref name="diameter"/> across and <paramref name="height"/> tall.</summary>
+        internal static Renderer Cylinder(string name, Transform parent, Vector3 localPos, float diameter, float height, Material mat)
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            go.name = name;
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = localPos;
+            go.transform.localScale = new Vector3(diameter, height * 0.5f, diameter); // the primitive is 2 units tall
+            Object.DestroyImmediate(go.GetComponent<Collider>());
+            var r = go.GetComponent<Renderer>();
+            r.sharedMaterial = mat;
+            return r;
+        }
+
         // ------------------------------------------------------------------ airfield prefab
 
         /// <summary>
@@ -769,12 +812,12 @@ namespace WingingIt.Editor
             Transform hangarSpot;
             if (models != null)
             {
-                hangarSpot = BuildHangar(buildings, new Vector3(halfWidth + 55f, 0f, -40f), models);
+                hangarSpot = BuildHangar(buildings, HangarOffset, models);
                 DressAirfield(buildings, models, halfWidth, halfLength, moving);
             }
             else
             {
-                hangarSpot = BuildHangar(buildings, new Vector3(halfWidth + 55f, 0f, -40f), m);
+                hangarSpot = BuildHangar(buildings, HangarOffset, m);
                 Box("Control Tower", buildings, new Vector3(halfWidth + 45f, 11f, 120f), new Vector3(8f, 22f, 8f), m.ConcreteDark, true);
                 Box("Tower Cab", buildings, new Vector3(halfWidth + 45f, 24f, 120f), new Vector3(11f, 4f, 11f), m.Glass, true);
                 Box("Windsock Pole", buildings, new Vector3(halfWidth + 15f, 5f, -halfLength + 60f), new Vector3(0.4f, 10f, 0.4f), m.PlaneDark, false);
@@ -853,7 +896,7 @@ namespace WingingIt.Editor
         /// gantry crane, tool cart and mechanic beside the repair zone. Big things are solid; small props aren't, and cull
         /// when they're specks. Adds what moves to <paramref name="moving"/>.
         /// </summary>
-        static void DressAirfield(Transform buildings, AirfieldModels models, float halfWidth, float halfLength, List<Transform> moving)
+        internal static void DressAirfield(Transform buildings, AirfieldModels models, float halfWidth, float halfLength, List<Transform> moving)
         {
             var tower = models.Child("ControlTower", buildings, new Vector3(halfWidth + 45f, 0f, 120f), colliderMesh: "ControlTowerCol");
             tower.name = "Control Tower"; // what the Island's field defenses look for
@@ -889,7 +932,7 @@ namespace WingingIt.Editor
         /// mesh collider from its walls, roof and doors, the workshop modelled inside, warm lamps under the trusses and a
         /// mechanic by the plane. Returns the parking spot (nose to the doors), the main menu's backdrop.
         /// </summary>
-        static Transform BuildHangar(Transform parent, Vector3 center, AirfieldModels models)
+        internal static Transform BuildHangar(Transform parent, Vector3 center, AirfieldModels models)
         {
             var hangar = models.Child("Hangar", parent, center, colliderMesh: "HangarCol").transform;
             models.Prop("Mechanic", hangar, new Vector3(8f, 0.1f, -11f), 0f, solid: false);
@@ -917,7 +960,7 @@ namespace WingingIt.Editor
         /// parking T. It's the main menu's backdrop, so it has an interior. Walls and roof are solid (flying into them is
         /// a crash); the floor is paint on the airfield pad. Returns the parking spot (nose to the doors).
         /// </summary>
-        static Transform BuildHangar(Transform parent, Vector3 center, Materials m)
+        internal static Transform BuildHangar(Transform parent, Vector3 center, Materials m)
         {
             const float depth = 40f, width = 32f, height = 14f, wall = 1f, doorHeight = 11f;
             var root = new GameObject("Hangar").transform;
@@ -1452,17 +1495,20 @@ namespace WingingIt.Editor
             onScreenStick.behaviour = OnScreenStick.Behaviour.ExactPositionWithDynamicOrigin;
             onScreenStick.dynamicOriginRange = 150f;
 
-            // Right: action buttons
+            // Right: action buttons, fanned around the fire button
             var fireButton = TouchButton("Fire", controls.transform, knob, new Vector2(-230f, 230f), 190f, new Color(1f, 0.35f, 0.25f, 0.5f), "<Gamepad>/rightTrigger");
             var missileButton = TouchButton("Missile", controls.transform, knob, new Vector2(-430f, 170f), 130f, new Color(1f, 0.75f, 0.2f, 0.5f), "<Gamepad>/leftTrigger");
-            TouchButton("Boost", controls.transform, knob, new Vector2(-190f, 450f), 130f, new Color(0.3f, 0.75f, 1f, 0.5f), "<Gamepad>/buttonEast");
-            var rocketsButton = TouchButton("Rockets", controls.transform, knob, new Vector2(-560f, 300f), 110f, new Color(1f, 0.55f, 0.15f, 0.5f), "<Gamepad>/dpad/left");
-            var bombButton = TouchButton("Bomb", controls.transform, knob, new Vector2(-610f, 130f), 110f, new Color(0.75f, 0.75f, 0.8f, 0.5f), "<Gamepad>/dpad/right");
-            TouchButton("Ability", controls.transform, knob, new Vector2(-390f, 370f), 110f, new Color(0.5f, 1f, 0.5f, 0.5f), "<Gamepad>/buttonSouth");
+            var boostButton = TouchButton("Boost", controls.transform, knob, new Vector2(-250f, 450f), 130f, new Color(0.3f, 0.75f, 1f, 0.5f), "<Gamepad>/buttonEast");
+            var rocketsButton = TouchButton("Rockets", controls.transform, knob, new Vector2(-570f, 290f), 110f, new Color(1f, 0.55f, 0.15f, 0.5f), "<Gamepad>/dpad/left");
+            var bombButton = TouchButton("Bomb", controls.transform, knob, new Vector2(-620f, 120f), 110f, new Color(0.75f, 0.75f, 0.8f, 0.5f), "<Gamepad>/dpad/right");
+            var abilityButton = TouchButton("Ability", controls.transform, knob, new Vector2(-420f, 380f), 110f, new Color(0.5f, 1f, 0.5f, 0.5f), "<Gamepad>/buttonSouth");
+            // Top-left of the fan, away from fire: only up while the plane is crippled, and a hold (the action's).
+            var ejectButton = TouchButton("Eject", controls.transform, knob, new Vector2(-600f, 520f), 110f, new Color(1f, 0.2f, 0.2f, 0.6f), "<Gamepad>/leftStickPress");
 
-            // Left, above the stick: throttle up / down (down also backs the plane up on the ground, to reach the repair zone)
-            TouchButton("Thr +", controls.transform, knob, new Vector2(110f, 660f), 120f, new Color(1f, 1f, 1f, 0.35f), "<Gamepad>/buttonNorth", new Vector2(0f, 0f));
-            TouchButton("Thr -", controls.transform, knob, new Vector2(110f, 520f), 120f, new Color(1f, 1f, 1f, 0.35f), "<Gamepad>/buttonWest", new Vector2(0f, 0f));
+            // Right edge, above fire: throttle up / down (down also backs the plane up on the ground, to reach the repair
+            // zone). The left-hand setting mirrors them over the stick.
+            var throttleUp = TouchButton("Thr +", controls.transform, knob, new Vector2(-80f, 640f), 110f, new Color(1f, 1f, 1f, 0.35f), "<Gamepad>/buttonNorth");
+            var throttleDown = TouchButton("Thr -", controls.transform, knob, new Vector2(-80f, 510f), 110f, new Color(1f, 1f, 1f, 0.35f), "<Gamepad>/buttonWest");
 
             // Top-right: prototype class switch
             var classBtn = UiImage("Class", controls.transform, null, new Color(0f, 0f, 0f, 0.4f),
@@ -1483,6 +1529,13 @@ namespace WingingIt.Editor
             SetField(touchUi, "missileButton", missileButton);
             SetField(touchUi, "bombs", planeGo.GetComponent<PlaneBombs>());
             SetField(touchUi, "bombButton", bombButton);
+            // Boost and the ability hide when the match switches them off (Ram Royale).
+            SetField(touchUi, "ability", planeGo.GetComponent<PlaneAbility>());
+            SetField(touchUi, "abilityButton", abilityButton);
+            SetField(touchUi, "boostButton", boostButton);
+            SetField(touchUi, "ejection", planeGo.GetComponent<PlaneEjection>());
+            SetField(touchUi, "ejectButton", ejectButton);
+            SetArray(touchUi, "throttleButtons", new[] { throttleUp, throttleDown });
             controls.SetActive(false);
         }
 
@@ -1541,6 +1594,14 @@ namespace WingingIt.Editor
             scenes.RemoveAll(s => s.path == path);
             scenes.Insert(first ? 0 : scenes.Count, new EditorBuildSettingsScene(path, true));
             EditorBuildSettings.scenes = scenes.ToArray();
+        }
+
+        /// <summary>Takes <paramref name="path"/> out of the build scenes (a test level the release leaves out).</summary>
+        internal static void RemoveSceneFromBuildSettings(string path)
+        {
+            var scenes = new List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
+            if (scenes.RemoveAll(s => s.path == path) > 0)
+                EditorBuildSettings.scenes = scenes.ToArray();
         }
 
         internal static void EnsureFolder(string path)

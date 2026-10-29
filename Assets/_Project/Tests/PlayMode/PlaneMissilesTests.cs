@@ -108,6 +108,17 @@ namespace WingingIt.Tests
         }
 
         [UnityTest]
+        public IEnumerator Teammate_DeadAhead_GetsNoLock()
+        {
+            _target.Team = _plane.Team;
+            LineUp();
+            yield return Fly(fire: false, _stats.lockTime + 0.3f);
+            Assert.IsNull(_missiles.LockTarget, "teammates are never locked");
+            Assert.IsFalse(_missiles.IsLocked);
+            Assert.IsFalse(PlaneMissiles.GetThreat(_target).BeingLocked);
+        }
+
+        [UnityTest]
         public IEnumerator TargetLeavingTheCone_BreaksTheLock()
         {
             LineUp();

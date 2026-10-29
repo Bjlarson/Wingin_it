@@ -271,7 +271,8 @@ namespace WingingIt.Flight
             float bestAngle = float.MaxValue;
             foreach (var other in PlaneController.All)
             {
-                if (other == _plane || !other.IsAlive)
+                // Only the other side: teammates are never locked (in a free-for-all every pilot has a team of their own).
+                if (other == _plane || !other.IsAlive || _plane.IsAllyOf(other))
                     continue;
                 float angle = Vector3.Angle(nose, other.Position - position);
                 if (angle < bestAngle && CanTrack(other, position, nose, s.lockConeAngle, s))

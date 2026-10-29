@@ -38,6 +38,8 @@ namespace WingingIt.Flight
         public bool DropBomb;
         /// <summary>Press to start the class ability (see <see cref="PlaneAbility"/>).</summary>
         public bool UseAbility;
+        /// <summary>Press to bail out. Only does anything while the plane is crippled (see <see cref="PlaneEjection"/>).</summary>
+        public bool Eject;
         /// <summary>How <see cref="Pitch"/> and <see cref="Roll"/> are read. Default is the classic self-leveling stick.</summary>
         public ControlStyle Style;
     }

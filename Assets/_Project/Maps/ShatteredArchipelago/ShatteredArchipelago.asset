@@ -1,0 +1,342 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5ad68c3fa88fa04383a14113509ef11, type: 3}
+  m_Name: ShatteredArchipelago
+  m_EditorClassIdentifier: WingingIt.Runtime::WingingIt.Maps.MapDefinition
+  displayName: Shattered Archipelago
+  heightmapRaw: {fileID: 4900000, guid: 3467ad19b42660b44b6e286ad950797a, type: 3}
+  heightmapImage: {fileID: 0}
+  worldSize: 4096
+  baseHeight: -20
+  heightRange: 1120
+  seaLevel: 0
+  boundaryRadius: 1900
+  ceiling: 1100
+  seed: 7404
+  rules:
+    beachHeight: 6
+    beachFade: 6
+    rockSlope: {x: 22, y: 34}
+    rockHeight: {x: 140, y: 220}
+    snowHeight: {x: 380, y: 440}
+    snowSlope: {x: 40, y: 55}
+    treeLine: 430
+    pineHeight: 50
+    treeSpacing: 24
+    winter: 0
+  layout:
+    airfields:
+    - name: West Home Airfield
+      team: 0
+      home: 1
+      twoWay: 0
+      capturable: 0
+      position: {x: -760, y: 1010}
+      elevation: 8
+      yaw: 53
+    - name: East Home Airfield
+      team: 1
+      home: 1
+      twoWay: 0
+      capturable: 0
+      position: {x: 760, y: -1010}
+      elevation: 8
+      yaw: 233
+    - name: Central Airfield
+      team: -1
+      home: 0
+      twoWay: 0
+      capturable: 1
+      position: {x: -150, y: -100}
+      elevation: 8
+      yaw: 345
+    - name: Western Isle Airfield
+      team: -1
+      home: 0
+      twoWay: 1
+      capturable: 1
+      position: {x: -950, y: -700}
+      elevation: 8
+      yaw: 150
+    - name: Long Ridge Airfield
+      team: -1
+      home: 0
+      twoWay: 0
+      capturable: 1
+      position: {x: 770, y: 580}
+      elevation: 8
+      yaw: 135
+    lanes:
+    - airfield: West Home Airfield
+      name: West Sound
+      color: {r: 0.6, g: 1, b: 0.2, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: -1499.6274, y: -299.8828}
+        agl: 70
+      - xz: {x: -1479.9756, y: 469.96375}
+        agl: 50
+    - airfield: West Home Airfield
+      name: Inner Bend
+      color: {r: 0.95, g: 0.35, b: 0.9, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: -600.0196, y: 49.960815}
+        agl: 80
+      - xz: {x: -1150.2755, y: 250.11182}
+        agl: 60
+      - xz: {x: -1439.9075, y: 440.05463}
+        agl: 50
+    - airfield: West Home Airfield
+      name: North Pass
+      color: {r: 0.2, g: 0.85, b: 1, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: 250.198, y: 1100.0941}
+        agl: 70
+      - xz: {x: -449.98196, y: 650.103}
+        agl: 60
+      - xz: {x: -1280.366, y: 289.81653}
+        agl: 55
+    - airfield: East Home Airfield
+      name: East Sound
+      color: {r: 0.6, g: 1, b: 0.2, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: 1549.8505, y: -150.60406}
+        agl: 70
+      - xz: {x: 1479.9756, y: -469.96356}
+        agl: 50
+    - airfield: East Home Airfield
+      name: Inner Bend
+      color: {r: 0.95, g: 0.35, b: 0.9, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: 249.86884, y: -600.5574}
+        agl: 80
+      - xz: {x: 1000.2417, y: -499.65308}
+        agl: 60
+      - xz: {x: 1439.9075, y: -440.0545}
+        agl: 50
+    - airfield: East Home Airfield
+      name: South Pass
+      color: {r: 0.2, g: 0.85, b: 1, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: -250.19806, y: -1100.0944}
+        agl: 70
+      - xz: {x: 449.98187, y: -650.1031}
+        agl: 60
+      - xz: {x: 1280.366, y: -289.8164}
+        agl: 55
+    - airfield: Central Airfield
+      name: South Final
+      color: {r: 1, g: 0.8, b: 0.2, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: 350.32208, y: -1449.4899}
+        agl: 140
+      - xz: {x: 109.85455, y: -1069.7896}
+        agl: 120
+    - airfield: Western Isle Airfield
+      name: North Final
+      color: {r: 1, g: 0.55, b: 0.2, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: -1349.5778, y: 650.08875}
+        agl: 60
+      - xz: {x: -1450, y: 166.02533}
+        agl: 50
+    - airfield: Western Isle Airfield
+      name: South Final
+      color: {r: 1, g: 0.55, b: 0.2, a: 1}
+      reverseEnd: 1
+      points:
+      - xz: {x: -100.063416, y: -1350.1329}
+        agl: 60
+      - xz: {x: -449.921, y: -1500.1619}
+        agl: 50
+    - airfield: Long Ridge Airfield
+      name: North Final
+      color: {r: 1, g: 0.55, b: 0.2, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: 500.5923, y: 1499.9458}
+        agl: 70
+      - xz: {x: 62.89325, y: 1287.1067}
+        agl: 50
+    bannerStands:
+    - airfield: West Home Airfield
+      distance: 150
+    - airfield: East Home Airfield
+      distance: 150
+    arenas:
+    - modeId: RamRoyale
+      center: {x: -100, y: 300}
+      radius: 900
+      warning: 150
+      ceiling: 750
+      hardEdge: 1
+      closeAirfields: 1
+      airStart: 1
+      startRadius: 550
+      startAltitude: 500
+      startSlots: 16
+      fightAreas:
+      - xz: {x: -100, y: 300}
+        agl: 450
+      - xz: {x: 218.19806, y: 618.198}
+        agl: 450
+      - xz: {x: 218.19806, y: -18.198029}
+        agl: 450
+      - xz: {x: -418.19803, y: -18.19812}
+        agl: 450
+      - xz: {x: -418.19806, y: 618.198}
+        agl: 450
+    fightAreas:
+    - name: Central Airfield
+      point:
+        xz: {x: -150, y: -100}
+        agl: 250
+    - name: Western Isle
+      point:
+        xz: {x: -950, y: -700}
+        agl: 200
+    - name: Long Ridge
+      point:
+        xz: {x: 770, y: 580}
+        agl: 250
+    - name: Lagoon
+      point:
+        xz: {x: 0, y: 150}
+        agl: 300
+    - name: West Sound
+      point:
+        xz: {x: -1200, y: -100}
+        agl: 200
+    - name: South Sound
+      point:
+        xz: {x: 300, y: -900}
+        agl: 200
+    modes:
+    - modeId: Teams
+      airfields:
+      - West Home Airfield
+      - East Home Airfield
+      - Central Airfield
+      - Western Isle Airfield
+      - Long Ridge Airfield
+      bannerStands: 0
+      arena: 
+      fightAreas: []
+    - modeId: Banner
+      airfields:
+      - West Home Airfield
+      - East Home Airfield
+      - Central Airfield
+      - Western Isle Airfield
+      - Long Ridge Airfield
+      bannerStands: 1
+      arena: 
+      fightAreas: []
+    - modeId: Domination
+      airfields:
+      - West Home Airfield
+      - East Home Airfield
+      - Central Airfield
+      - Western Isle Airfield
+      - Long Ridge Airfield
+      bannerStands: 0
+      arena: 
+      fightAreas: []
+    - modeId: RamRoyale
+      airfields: []
+      bannerStands: 0
+      arena: RamRoyale
+      fightAreas: []
+  regions:
+    areas:
+    - name: Lagoon Isle
+      shape: 0
+      center: {x: -100, y: -250}
+      size: {x: 350, y: 350}
+      landOnly: 1
+    - name: Saddle Peak
+      shape: 0
+      center: {x: -450, y: -700}
+      size: {x: 350, y: 350}
+      landOnly: 1
+    - name: Northern Isles
+      shape: 1
+      center: {x: -200, y: 550}
+      size: {x: 600, y: 350}
+      landOnly: 1
+    - name: Long Ridge
+      shape: 0
+      center: {x: 800, y: 100}
+      size: {x: 700, y: 350}
+      landOnly: 1
+    - name: Crown Island
+      shape: 1
+      center: {x: 1250, y: 1200}
+      size: {x: 650, y: 550}
+      landOnly: 1
+    - name: Western Isle
+      shape: 0
+      center: {x: -1450, y: -850}
+      size: {x: 600, y: 400}
+      landOnly: 1
+    sea: Sea
+    fallback: Outer Rocks
+    seaDepth: 1
+  landmarks:
+  - kind: 1
+    xz: {x: 1100, y: 1450}
+    searchHalfSize: {x: 450, y: 250}
+    region: Crown Island
+  minimap:
+    image: {fileID: 0}
+    sea: {r: 0.12, g: 0.3, b: 0.42, a: 1}
+    margin: 1.06
+  sky:
+    skybox: {fileID: 2100000, guid: 453db78019ab37d459d5e99adf7e5795, type: 2}
+    sunAngles: {x: 48, y: -35}
+    sunIntensity: 1.4
+    sunColor: {r: 1, g: 0.957, b: 0.839, a: 1}
+    fogColor: {r: 0.72, g: 0.82, b: 0.92, a: 1}
+    fogStart: 800
+    fogEnd: 6000
+    clouds:
+    - xz: {x: -400, y: 1300}
+      radius: 230
+      altitude: 480
+      seed: 13
+    - xz: {x: -800, y: 600}
+      radius: 220
+      altitude: 560
+      seed: 29
+    - xz: {x: -1000, y: 1250}
+      radius: 200
+      altitude: 500
+      seed: 31
+    - xz: {x: 0, y: 1000}
+      radius: 200
+      altitude: 520
+      seed: 47
+    - xz: {x: -1400, y: 50}
+      radius: 220
+      altitude: 600
+      seed: 59
+    mirrorClouds: 1
+    cloudCoreHalfHeight: 70
+    cloudClearance: 80
+    snowfall: 0

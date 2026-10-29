@@ -3,6 +3,7 @@ using UnityEngine;
 using WingingIt.CameraSystem;
 using WingingIt.Flight;
 using WingingIt.Input;
+using WingingIt.Maps;
 using WingingIt.Match;
 using WingingIt.Settings;
 using WingingIt.World;
@@ -60,6 +61,10 @@ namespace WingingIt.UI
         float _mapTurn;         // how far the map is turned (clockwise degrees; 0 = north up)
         Vector2 _mapCenter;
         float _mapRadius;
+        bool _mapStale;         // the mode's pieces changed: photograph the level again
+        Color _mapSea = DefaultMapSea;
+        ModePieceBuilder _pieces;
+        MapMinimap _mapSettings; // the map's minimap settings, null in a level with no map definition
         MatchScore _score;
         Rect _clusterRect; // where the cluster was drawn this frame, in HUD space
 
@@ -130,6 +135,9 @@ namespace WingingIt.UI
             }
             if (missiles != null)
                 missiles.HitPlane += OnMissileHit;
+            _pieces = match != null ? match.Pieces : null;
+            if (_pieces != null)
+                _pieces.Changed += OnPiecesChanged;
             if (bombs != null)
             {
                 bombs.HitPlane += OnBombHit;
@@ -144,6 +152,7 @@ namespace WingingIt.UI
         void Start()
         {
             FollowScore();
+            _mapSettings = MapSettings();
             RenderMap();
         }
 
@@ -165,6 +174,8 @@ namespace WingingIt.UI
             }
             if (missiles != null)
                 missiles.HitPlane -= OnMissileHit;
+            if (_pieces != null)
+                _pieces.Changed -= OnPiecesChanged;
             if (bombs != null)
             {
                 bombs.HitPlane -= OnBombHit;
@@ -207,7 +218,7 @@ namespace WingingIt.UI
         void LateUpdate()
         {
             FollowScore();
-            RenderMap(); // again only if a mode's arena moved the boundary
+            RenderMap(); // again only if a mode's arena moved the boundary or its pieces changed
             _mapTurn = GameSettings.Current.Data.minimapHeadingUp && plane != null && plane.IsAlive ? -HudMath.Heading(plane.transform.forward) : 0f;
             if (_mapTurn != 0f && _map != null)
                 TurnMap(_mapTurn);
@@ -326,6 +337,7 @@ namespace WingingIt.UI
             UpdateApproach();
             DrawLandingAssist(scale, width);
             DrawApproachLane(scale);
+            DrawTeamMarkers(scale);
             DrawTargets(scale, width);
             DrawMissileLock(scale);
             DrawBombImpact(scale);
@@ -344,6 +356,7 @@ namespace WingingIt.UI
                 DrawKillFeed(width);
             DrawCluster(width);
             DrawCenterWarning(width);
+            DrawEjectHint(width);
             DrawStatusToast(width);
             DrawCloudStatus(width);
             DrawMouseCaptureHint(width);
@@ -433,7 +446,8 @@ namespace WingingIt.UI
             if (gear != null)
                 DrawGearLight(new Rect(right - 64f, y, 64f, 20f));
             y += 28f;
-            Meter(new Rect(x, y, 196f, 20f), "BST", plane.BoostMeter, plane.IsBoosting ? new Color(1f, 0.55f, 0.1f) : new Color(0.3f, 0.75f, 1f));
+            if (!plane.AbilitiesOff)
+                Meter(new Rect(x, y, 196f, 20f), "BST", plane.BoostMeter, plane.IsBoosting ? new Color(1f, 0.55f, 0.1f) : new Color(0.3f, 0.75f, 1f));
             // Beside it: vertical speed while the gear is out, the ground state on the runway.
             string vs = null;
             Color vsColor = Steel;
@@ -580,7 +594,7 @@ namespace WingingIt.UI
                     continue;
                 if (PlaneAbility.IsRevealedTo(other, plane.Team) && ToScreen(other.transform.position, scale, out Vector2 contact))
                 {
-                    Diamond(contact, 11f, new Color(0.4f, 1f, 0.5f, 0.9f));
+                    Triangle(contact, 11f, new Color(0.4f, 1f, 0.5f, 0.9f)); // radar only reveals enemies
                     _g.Shadowed(new Rect(contact.x - 60f, contact.y + 12f, 120f, 18f), HudText.Distance(Vector3.Distance(plane.Position, other.Position)),
                         _g.Hint, 1f, TextAnchor.MiddleCenter, new Color(0.4f, 1f, 0.5f, 0.9f), 0.8f);
                 }
@@ -603,7 +617,7 @@ namespace WingingIt.UI
                     Circle(pip, 9f, 2f, Alpha(Red, 0.95f));
                     _g.Fill(new Rect(pip.x - 1.5f, pip.y - 1.5f, 3f, 3f), Red);
                 }
-                _g.Shadowed(new Rect(body.x + 18f, body.y - 24f, 120f, 18f), $"{distance:0} M", _g.Hint, 1f, TextAnchor.MiddleLeft, Alpha(White, 0.85f), 0.8f);
+                _g.Shadowed(new Rect(body.x + 18f, body.y - 24f, 120f, 18f), HudText.Metres(distance), _g.Hint, 1f, TextAnchor.MiddleLeft, Alpha(White, 0.85f), 0.8f);
 
                 float angle = Vector3.Angle(nose, lead - plane.transform.position);
                 if (enemy && angle < bestAngle)
@@ -626,6 +640,33 @@ namespace WingingIt.UI
         }
 
         static readonly (float, float)[] Corners = { (-1f, -1f), (1f, -1f), (-1f, 1f), (1f, 1f) };
+
+        const float TeamMarkerRange = 2000f, TeamMarkerLift = 26f;
+        static readonly Color FriendGrey = new(0.72f, 0.74f, 0.76f, 0.85f);
+
+        /// <summary>
+        /// Friend or foe at a glance, over every plane in sight within <see cref="TeamMarkerRange"/>: a red triangle
+        /// (point down) over an enemy, a grey square over a teammate. In a free for all everyone is an enemy.
+        /// </summary>
+        void DrawTeamMarkers(float scale)
+        {
+            if (viewCamera == null || !plane.IsAlive)
+                return;
+            foreach (var other in PlaneController.All)
+            {
+                if (other == plane || !other.IsAlive)
+                    continue;
+                if ((other.Position - plane.Position).sqrMagnitude > TeamMarkerRange * TeamMarkerRange)
+                    continue;
+                if (CloudCover.Blocks(plane.transform.position, other.transform.position) || !ToScreen(other.Position, scale, out Vector2 p))
+                    continue;
+                var at = p + new Vector2(0f, -TeamMarkerLift);
+                if (other.Team != plane.Team)
+                    Triangle(at, 7f, Alpha(Red, 0.9f), solid: true);
+                else
+                    Square(at, 6f, FriendGrey);
+            }
+        }
 
         static readonly (PlanePartType type, string label)[] PartLabels =
         {
@@ -799,26 +840,37 @@ namespace WingingIt.UI
         // ---------- Minimap ----------
 
         /// <summary>
-        /// Photographs the level once from straight above, north up, out to the flight boundary: terrain, sea, city and
-        /// airfields, without clouds, fog or planes. Needs a <see cref="FlightBoundary"/>; without one there's no minimap.
-        /// Taken again when a mode's arena changes the boundary (a smaller map for a smaller arena).
+        /// Photographs the level once from straight above, north up, out to the flight boundary (times the map's
+        /// <see cref="MapMinimap.margin"/>): terrain, sea, city and airfields, without clouds, fog or planes. A map with a
+        /// baked <see cref="MapMinimap.image"/> uses that instead while its own boundary is in force. Needs a
+        /// <see cref="FlightBoundary"/>; without one there's no minimap. Taken again when a mode's arena changes the
+        /// boundary (a smaller map for a smaller arena) or the mode's pieces change (other airfields).
         /// </summary>
         void RenderMap()
         {
             var boundary = FlightBoundary.Active;
             if (boundary == null)
                 return;
+            var settings = _mapSettings;
             var center = new Vector2(boundary.transform.position.x, boundary.transform.position.z);
-            float radius = boundary.radius * 1.06f;
-            if (_map != null && center == _mapCenter && Mathf.Approximately(radius, _mapRadius))
+            float radius = boundary.radius * (settings?.margin ?? DefaultMapMargin);
+            if (_map != null && !_mapStale && center == _mapCenter && Mathf.Approximately(radius, _mapRadius))
                 return;
             if (_map != null)
             {
                 _map.Release();
                 Destroy(_map);
             }
+            _mapStale = false;
             _mapCenter = center;
             _mapRadius = radius;
+            _mapSea = settings?.sea ?? DefaultMapSea;
+            _map = new RenderTexture(MapResolution, MapResolution, 24) { name = "Minimap" };
+            if (settings?.image != null && !boundary.IsOverridden)
+            {
+                Graphics.Blit(settings.image, _map);
+                return;
+            }
 
             var hidden = new List<Renderer>();
             foreach (var cloud in FindObjectsByType<CloudBank>(FindObjectsSortMode.None))
@@ -828,7 +880,6 @@ namespace WingingIt.UI
             bool fog = RenderSettings.fog;
             RenderSettings.fog = false;
 
-            _map = new RenderTexture(MapResolution, MapResolution, 24) { name = "Minimap" };
             var go = new GameObject("Minimap Capture");
             var cam = go.AddComponent<Camera>();
             cam.enabled = false;
@@ -838,7 +889,7 @@ namespace WingingIt.UI
             cam.nearClipPlane = 1f;
             cam.farClipPlane = 5000f;
             cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = MapSea;
+            cam.backgroundColor = _mapSea;
             cam.transform.SetPositionAndRotation(new Vector3(_mapCenter.x, 3000f, _mapCenter.y), Quaternion.Euler(90f, 0f, 0f));
             cam.targetTexture = _map;
             cam.Render();
@@ -851,7 +902,21 @@ namespace WingingIt.UI
                     r.enabled = true;
         }
 
-        static readonly Color MapSea = new(0.12f, 0.3f, 0.42f);
+        static readonly Color DefaultMapSea = new(0.12f, 0.3f, 0.42f);
+        const float DefaultMapMargin = 1.06f;
+
+        /// <summary>The minimap settings of the map being played: the match's layout map, else the loaded map scene's; null in a test level.</summary>
+        MapMinimap MapSettings()
+        {
+            var map = _pieces != null && _pieces.Map != null ? _pieces.Map : MapScene.CurrentMap;
+            return map != null ? map.minimap : null;
+        }
+
+        void OnPiecesChanged()
+        {
+            _mapStale = true;
+            _mapSettings = MapSettings();
+        }
 
         /// <summary>Redraws the level photo into <see cref="_mapView"/> turned clockwise by <paramref name="degrees"/>, sea round the corners.</summary>
         void TurnMap(float degrees)
@@ -860,7 +925,7 @@ namespace WingingIt.UI
                 _mapView = new RenderTexture(MapResolution, MapResolution, 0) { name = "Minimap View" };
             var old = RenderTexture.active;
             RenderTexture.active = _mapView;
-            GL.Clear(false, true, MapSea);
+            GL.Clear(false, true, _mapSea);
             GL.PushMatrix();
             GL.LoadPixelMatrix(0f, MapResolution, MapResolution, 0f); // y down, like GUI space
             var pivot = new Vector3(MapResolution * 0.5f, MapResolution * 0.5f, 0f);
@@ -1038,6 +1103,36 @@ namespace WingingIt.UI
             DottedLine(right, bottom, color, 2.5f, 3f);
             DottedLine(bottom, left, color, 2.5f, 3f);
             DottedLine(left, top, color, 2.5f, 3f);
+        }
+
+        /// <summary>A triangle pointing down at <paramref name="p"/>'s plane: the enemy marker. Solid, or a dotted outline.</summary>
+        void Triangle(Vector2 p, float size, Color color, bool solid = false)
+        {
+            var left = p + new Vector2(-size, -size * 0.6f);
+            var right = p + new Vector2(size, -size * 0.6f);
+            var tip = p + new Vector2(0f, size * 0.9f);
+            if (solid)
+            {
+                // Rows of fill, narrowing to the tip.
+                for (float y = left.y; y <= tip.y; y += 1f)
+                {
+                    float half = size * (tip.y - y) / (tip.y - left.y);
+                    _g.Fill(new Rect(p.x - half, y, half * 2f, 1f), color);
+                }
+                return;
+            }
+            DottedLine(left, right, color, 2.5f, 3f);
+            DottedLine(right, tip, color, 2.5f, 3f);
+            DottedLine(tip, left, color, 2.5f, 3f);
+        }
+
+        /// <summary>A hollow square centred on <paramref name="p"/>: the teammate marker.</summary>
+        void Square(Vector2 p, float half, Color color, float t = 2.5f)
+        {
+            _g.Fill(new Rect(p.x - half, p.y - half, half * 2f, t), color);
+            _g.Fill(new Rect(p.x - half, p.y + half - t, half * 2f, t), color);
+            _g.Fill(new Rect(p.x - half, p.y - half, t, half * 2f), color);
+            _g.Fill(new Rect(p.x + half - t, p.y - half, t, half * 2f), color);
         }
 
         /// <summary>IMGUI has no line primitive, so this draws dots.</summary>

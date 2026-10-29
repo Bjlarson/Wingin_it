@@ -2,7 +2,6 @@ using System.Collections;
 using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using WingingIt.Flight;
 using WingingIt.Input;
@@ -23,8 +22,7 @@ namespace WingingIt.Tests
         public IEnumerator LoadScene()
         {
             GameSettings.UseForTests(new GameSettings(false, null));
-            yield return SceneManager.LoadSceneAsync("Island", LoadSceneMode.Single);
-            yield return null;
+            yield return MapTestScene.Load();
             _match = Object.FindAnyObjectByType<MatchManager>();
             _player = GameObject.Find("Player Plane").GetComponent<PlaneController>();
             _mode = new BannerMode();
@@ -36,6 +34,7 @@ namespace WingingIt.Tests
             while (_match.Phase != MatchPhase.Playing && Time.realtimeSinceStartup - t < 3f)
                 yield return null;
             Assert.AreEqual(MatchPhase.Playing, _match.Phase);
+            yield return MapTestScene.Settle(); // a hitch could carry the plane through the grab zone between two samples
         }
 
         [TearDown]
@@ -72,6 +71,27 @@ namespace WingingIt.Tests
             yield return new WaitForSeconds(1f);
             Assert.Less((cloth.Position - _player.transform.position).magnitude, 60f, "the cloth trails the carrier on its cable");
             Assert.Greater((cloth.Position - _player.transform.position).magnitude, 20f);
+        }
+
+        [UnityTest]
+        public IEnumerator ACarrier_AtFullThrottleInADive_StaysUnderTheDraggedTopSpeed()
+        {
+            _player.GetComponent<PlayerFlightInput>().enabled = false; // so the test's input stands
+            // High over the field at full throttle, nose 20° down, towing (a respawn clears the tow, so set it after).
+            _player.Respawn(_player.Position + Vector3.up * 600f, Quaternion.Euler(20f, 90f, 0f), 1f);
+            new BannerDrag().Apply(_player.Modifiers);
+            _player.CarryingBanner = true;
+            float cap = _player.Modifiers.Get(FlightStat.MaxSpeed);
+            float fastest = 0f;
+            for (float t = 0f; t < 6f && _player.IsAlive; t += Time.fixedDeltaTime)
+            {
+                _player.SetInput(new FlightInput { Throttle = 1f });
+                yield return new WaitForFixedUpdate();
+                if (t > 3f)
+                    fastest = Mathf.Max(fastest, _player.Speed);
+            }
+            Assert.IsTrue(_player.IsAlive);
+            Assert.LessOrEqual(fastest, cap + 0.01f, "full throttle and a dive can't win back the banner drag");
         }
 
         [UnityTest]

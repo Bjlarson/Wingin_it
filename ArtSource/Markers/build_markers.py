@@ -19,6 +19,8 @@ Objects (Unity space, metres):
     Buoy               boundary buoy: orange float with a white band, a cage tower, a lantern and an X topmark, origin on
                        the waterline. BuoyLamp is its red lens (glow), origin on its pivot (0, 21.5, 0), so BoundaryBuoys
                        can blink it alone
+    BoundaryPost       the buoy on land: a concrete footing (reaches 3 m down, so it sits into a slope), a banded mast
+                       and the buoy's lantern top, origin on the ground; it takes BuoyLamp on the same pivot
     Ring               flight-test ring, radius 22 m round its local z, the tube in the team swatch (RingGate tints it
                        idle / passed) with white bands; RingCol is the plain tube for its mesh collider
     TargetTruck        olive army truck, nose +z, with a bullseye on its canvas, origin on the ground
@@ -169,6 +171,18 @@ def buoy():
            cap_end="darkmetal")
     legs = [(-2.0, -2.0), (2.0, -2.0), (2.0, 2.0), (-2.0, 2.0)]
     lattice(p, legs, 3.4, 19.0, 0.6, 3, "orange", brace="white", r=0.2)
+    lantern_top(p)
+
+    lamp = Part("BuoyLamp", LAMP)
+    lx, ly, lz = LAMP
+    rings = [at(ngon_pts(0.7, 8, lx, lz), ly - 1.9), at(ngon_pts(1.15, 8, lx, lz), ly - 1.2),
+             at(ngon_pts(1.15, 8, lx, lz), ly + 1.2), at(ngon_pts(0.7, 8, lx, lz), ly + 1.9)]
+    lamp.loft(rings, "red", cap_start="red", cap_end="red", glow=True)
+    return [p, lamp]
+
+
+def lantern_top(p):
+    """The buoy's top from its tower's head up: lantern deck and posts round the lamp, cap and X topmark."""
     block(p, (0.0, 19.25, 0.0), (2.8, 0.5, 2.8), "darkmetal", c=0.3, ink=0.05)
     for x, z in ((-1.25, -1.25), (1.25, -1.25), (1.25, 1.25), (-1.25, 1.25)):  # lantern posts round the lamp
         beam(p, (x, 19.5, z), (x, 23.6, z), 0.1, "darkmetal")
@@ -180,12 +194,33 @@ def buoy():
         beam(p, (-1.3 * c, 25.5, -1.3 * s), (1.3 * c, 28.1, 1.3 * s), 0.22, "orange", ink=0.04)
         beam(p, (1.3 * c, 25.5, 1.3 * s), (-1.3 * c, 28.1, -1.3 * s), 0.22, "orange", ink=0.04)
 
-    lamp = Part("BuoyLamp", LAMP)
-    lx, ly, lz = LAMP
-    rings = [at(ngon_pts(0.7, 8, lx, lz), ly - 1.9), at(ngon_pts(1.15, 8, lx, lz), ly - 1.2),
-             at(ngon_pts(1.15, 8, lx, lz), ly + 1.2), at(ngon_pts(0.7, 8, lx, lz), ly + 1.9)]
-    lamp.loft(rings, "red", cap_start="red", cap_end="red", glow=True)
-    return [p, lamp]
+
+# ---------------------------------------------------------------------------------------------- boundary post
+
+
+def boundary_post():
+    """
+    The buoy's land twin: a concrete footing that reaches 3 m down (so it stays planted on a slope), a banded orange and
+    white mast and the buoy's lantern top, so the lamp sits on the same pivot and BuoyLamp serves both.
+    """
+    p = Part("BoundaryPost", outline=0.1)
+    prism(p, ngon_pts(2.8, 8), -3.0, 0.5, "concrete", outline=0.08)
+    prism(p, ngon_pts(1.9, 8), 0.5, 1.3, "darkmetal", outline=0.06)
+    for k in range(0, 8, 2):  # hazard chevrons round the footing
+        a = math.pi / 4 + 2 * math.pi * k / 8
+        r = 2.8 * math.cos(math.pi / 8) + 0.03
+        c, s = math.cos(a), math.sin(a)
+        tx, tz = -s, c
+        quad(p, [(r * c - tx * 0.8, -0.1, r * s - tz * 0.8), (r * c + tx * 0.8, -0.1, r * s + tz * 0.8),
+                 (r * c + tx * 0.8, 0.4, r * s + tz * 0.8), (r * c - tx * 0.8, 0.4, r * s - tz * 0.8)], "sun", (c, 0, s))
+    ys = [1.3 + k * (19.0 - 1.3) / 6 for k in range(7)]
+    p.loft([at(ngon_pts(1.25 - 0.4 * (y - 1.3) / 17.7, 8), y) for y in ys],
+           lambda b, s: "orange" if b % 2 == 0 else "white", cap_start="orange", cap_end="white")
+    for yaw in (math.pi / 4, 3 * math.pi / 4, 5 * math.pi / 4, 7 * math.pi / 4):  # guy struts to the plinth
+        c, s = math.cos(yaw), math.sin(yaw)
+        beam(p, (1.75 * c, 1.3, 1.75 * s), (0.95 * c, 6.0, 0.95 * s), 0.14, "darkmetal")
+    lantern_top(p)
+    return p
 
 
 # ---------------------------------------------------------------------------------------------- ring
@@ -264,7 +299,7 @@ def target_radar():
 def build():
     model = Model("Markers")
     materials = model.materials + [glow_material()]
-    parts = pylon() + buoy() + ring_gate() + [target_truck()] + target_radar()
+    parts = pylon() + buoy() + [boundary_post()] + ring_gate() + [target_truck()] + target_radar()
     for part in parts:
         obj = part.finish(model.collection, materials)
         drop_unused_materials(obj)
@@ -285,6 +320,7 @@ def lay_out():
     bpy.data.objects["PylonPole"].scale = (1.0, 1.0, pole_top + SLEEVE_BOTTOM + 0.5)
     bpy.data.objects["Buoy"].location = to_blender((30.0, 0.0, 0.0))
     bpy.data.objects["BuoyLamp"].location = to_blender((30.0 + LAMP[0], LAMP[1], LAMP[2]))
+    bpy.data.objects["BoundaryPost"].location = to_blender((45.0, 0.0, 0.0))
     bpy.data.objects["Ring"].location = to_blender((80.0, 30.0, 0.0))
     bpy.data.objects["TargetTruck"].location = to_blender((-25.0, 0.0, -10.0))
     bpy.data.objects["TargetRadar"].location = to_blender((-25.0, 0.0, 20.0))
@@ -295,6 +331,7 @@ SHOTS = [
     ("markers_overview", (10.0, 40.0, -150.0), (25.0, 25.0, 0.0), None),
     ("markers_pylon_top", (14.0, 58.0, -26.0), (0.0, 54.0, 0.0), None),
     ("markers_buoy", (44.0, 10.0, -30.0), (30.0, 13.0, 0.0), None),
+    ("markers_post", (70.0, 6.0, -55.0), (45.0, 13.0, 0.0), None),
     ("markers_ring", (60.0, 38.0, -60.0), (80.0, 30.0, 0.0), None),
     ("markers_targets", (-5.0, 22.0, -40.0), (-25.0, 4.0, 5.0), None),
 ]

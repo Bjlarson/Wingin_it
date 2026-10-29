@@ -1,0 +1,356 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5ad68c3fa88fa04383a14113509ef11, type: 3}
+  m_Name: IslandV2
+  m_EditorClassIdentifier: WingingIt.Runtime::WingingIt.Maps.MapDefinition
+  displayName: The Island
+  heightmapRaw: {fileID: 4900000, guid: 8b4cf95063ad37243b02deac6cc76333, type: 3}
+  heightmapImage: {fileID: 0}
+  worldSize: 7000
+  baseHeight: -40
+  heightRange: 1440
+  seaLevel: 0
+  boundaryRadius: 3300
+  ceiling: 1500
+  seed: 6303
+  rules:
+    beachHeight: 6
+    beachFade: 6
+    rockSlope: {x: 22, y: 34}
+    rockHeight: {x: 140, y: 220}
+    snowHeight: {x: 380, y: 440}
+    snowSlope: {x: 40, y: 55}
+    treeLine: 430
+    pineHeight: 50
+    treeSpacing: 24
+    winter: 0
+  layout:
+    airfields:
+    - name: West Home Airfield
+      team: 0
+      home: 1
+      twoWay: 0
+      capturable: 0
+      position: {x: -1500, y: -400}
+      elevation: 8
+      yaw: 0
+    - name: East Home Airfield
+      team: 1
+      home: 1
+      twoWay: 0
+      capturable: 0
+      position: {x: 1800, y: 400}
+      elevation: 8
+      yaw: 180
+    - name: Central Airfield
+      team: -1
+      home: 0
+      twoWay: 1
+      capturable: 1
+      position: {x: 100, y: 225}
+      elevation: 8
+      yaw: 0
+    - name: North Plateau Airfield
+      team: -1
+      home: 0
+      twoWay: 0
+      capturable: 1
+      position: {x: -350, y: 2150}
+      elevation: 57.5
+      yaw: 315
+    - name: South Hills Airfield
+      team: -1
+      home: 0
+      twoWay: 1
+      capturable: 1
+      position: {x: 550, y: -1550}
+      elevation: 18.5
+      yaw: 285
+    lanes:
+    - airfield: West Home Airfield
+      name: Open Sea
+      color: {r: 0.6, g: 1, b: 0.2, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: -1500, y: -2300}
+        agl: 60
+      - xz: {x: -1500, y: -1700}
+        agl: 50
+    - airfield: West Home Airfield
+      name: Coast Run
+      color: {r: 0.95, g: 0.35, b: 0.9, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: -600, y: -2100}
+        agl: 70
+      - xz: {x: -900, y: -1750}
+        agl: 60
+      - xz: {x: -1250, y: -1500}
+        agl: 50
+    - airfield: West Home Airfield
+      name: Outer Bend
+      color: {r: 0.2, g: 0.85, b: 1, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: -2000, y: -1800}
+        agl: 70
+      - xz: {x: -1850, y: -1600}
+        agl: 60
+      - xz: {x: -1650, y: -1450}
+        agl: 50
+    - airfield: East Home Airfield
+      name: Open Sea
+      color: {r: 0.6, g: 1, b: 0.2, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: 1800.0001, y: 2300}
+        agl: 60
+      - xz: {x: 1800.0001, y: 1700}
+        agl: 50
+    - airfield: East Home Airfield
+      name: Coast Run
+      color: {r: 0.95, g: 0.35, b: 0.9, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: 900.0001, y: 2100}
+        agl: 70
+      - xz: {x: 1200.0001, y: 1750}
+        agl: 60
+      - xz: {x: 1550.0001, y: 1500}
+        agl: 50
+    - airfield: East Home Airfield
+      name: Outer Bend
+      color: {r: 0.2, g: 0.85, b: 1, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: 2300, y: 1800}
+        agl: 70
+      - xz: {x: 2150, y: 1600}
+        agl: 60
+      - xz: {x: 1950.0001, y: 1450}
+        agl: 50
+    - airfield: Central Airfield
+      name: South Final
+      color: {r: 1, g: 0.8, b: 0.2, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: -200, y: -1475}
+        agl: 60
+      - xz: {x: -50, y: -1025}
+        agl: 50
+    - airfield: Central Airfield
+      name: North Final
+      color: {r: 1, g: 0.8, b: 0.2, a: 1}
+      reverseEnd: 1
+      points:
+      - xz: {x: -199.99985, y: 1925}
+        agl: 60
+      - xz: {x: -49.999893, y: 1475}
+        agl: 50
+    - airfield: North Plateau Airfield
+      name: Plateau Final
+      color: {r: 1, g: 0.55, b: 0.2, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: 569.23895, y: 665.0758}
+        agl: 70
+      - xz: {x: 392.46216, y: 1195.406}
+        agl: 60
+    - airfield: South Hills Airfield
+      name: East Final
+      color: {r: 1, g: 0.55, b: 0.2, a: 1}
+      reverseEnd: 0
+      points:
+      - xz: {x: 2199.0088, y: -1577.7401}
+        agl: 60
+      - xz: {x: 1747.9338, y: -1715.694}
+        agl: 50
+    - airfield: South Hills Airfield
+      name: West Final
+      color: {r: 1, g: 0.55, b: 0.2, a: 1}
+      reverseEnd: 1
+      points:
+      - xz: {x: -917.8357, y: -846.11224}
+        agl: 80
+      - xz: {x: -583.2291, y: -1142.825}
+        agl: 60
+    bannerStands:
+    - airfield: West Home Airfield
+      distance: 150
+    - airfield: East Home Airfield
+      distance: 150
+    arenas:
+    - modeId: RamRoyale
+      center: {x: 100, y: 200}
+      radius: 1000
+      warning: 150
+      ceiling: 800
+      hardEdge: 1
+      closeAirfields: 1
+      airStart: 1
+      startRadius: 800
+      startAltitude: 560
+      startSlots: 16
+      fightAreas:
+      - xz: {x: 100, y: 200}
+        agl: 450
+      - xz: {x: 453.5534, y: 553.55334}
+        agl: 450
+      - xz: {x: 453.55338, y: -153.55334}
+        agl: 450
+      - xz: {x: -253.55334, y: -153.55347}
+        agl: 450
+      - xz: {x: -253.5534, y: 553.55334}
+        agl: 450
+    fightAreas:
+    - name: Central Airfield
+      point:
+        xz: {x: 100, y: 225}
+        agl: 250
+    - name: North Plateau
+      point:
+        xz: {x: -350, y: 2150}
+        agl: 250
+    - name: South Hills
+      point:
+        xz: {x: 550, y: -1550}
+        agl: 250
+    - name: The Strait
+      point:
+        xz: {x: -300, y: 300}
+        agl: 250
+    - name: West Coast
+      point:
+        xz: {x: -900, y: 1000}
+        agl: 200
+    - name: East Coast
+      point:
+        xz: {x: 1100, y: -700}
+        agl: 200
+    modes:
+    - modeId: Teams
+      airfields:
+      - West Home Airfield
+      - East Home Airfield
+      - Central Airfield
+      - North Plateau Airfield
+      - South Hills Airfield
+      bannerStands: 0
+      arena: 
+      fightAreas: []
+    - modeId: Banner
+      airfields:
+      - West Home Airfield
+      - East Home Airfield
+      - Central Airfield
+      - North Plateau Airfield
+      - South Hills Airfield
+      bannerStands: 1
+      arena: 
+      fightAreas: []
+    - modeId: Domination
+      airfields:
+      - West Home Airfield
+      - East Home Airfield
+      - Central Airfield
+      - North Plateau Airfield
+      - South Hills Airfield
+      bannerStands: 0
+      arena: 
+      fightAreas: []
+    - modeId: RamRoyale
+      airfields: []
+      bannerStands: 0
+      arena: RamRoyale
+      fightAreas: []
+  regions:
+    areas:
+    - name: The Strait
+      shape: 0
+      center: {x: 100, y: 250}
+      size: {x: 1000, y: 300}
+      landOnly: 1
+    - name: North Plateau
+      shape: 1
+      center: {x: 0, y: 1700}
+      size: {x: 1000, y: 1150}
+      landOnly: 1
+    - name: South Peaks
+      shape: 1
+      center: {x: 300, y: -1700}
+      size: {x: 1100, y: 1100}
+      landOnly: 1
+    - name: Middle Hills
+      shape: 1
+      center: {x: 100, y: -275}
+      size: {x: 1100, y: 325}
+      landOnly: 1
+    sea: Sea
+    fallback: Coast
+    seaDepth: 1
+  landmarks:
+  - kind: 1
+    xz: {x: 100, y: -1800}
+    searchHalfSize: {x: 700, y: 700}
+    region: South Peaks
+  - kind: 2
+    xz: {x: 250, y: 1300}
+    searchHalfSize: {x: 0, y: 0}
+    region: North Plateau
+  minimap:
+    image: {fileID: 0}
+    sea: {r: 0.12, g: 0.3, b: 0.42, a: 1}
+    margin: 1.06
+  sky:
+    skybox: {fileID: 2100000, guid: b184f3d451c3e2645adbb95e5e7b657b, type: 2}
+    sunAngles: {x: 48, y: -35}
+    sunIntensity: 1.4
+    sunColor: {r: 1, g: 0.957, b: 0.839, a: 1}
+    fogColor: {r: 0.72, g: 0.82, b: 0.92, a: 1}
+    fogStart: 900
+    fogEnd: 7000
+    clouds:
+    - xz: {x: -700, y: 500}
+      radius: 240
+      altitude: 520
+      seed: 11
+    - xz: {x: -500, y: 1500}
+      radius: 250
+      altitude: 600
+      seed: 23
+    - xz: {x: -1500, y: -1300}
+      radius: 230
+      altitude: 480
+      seed: 37
+    - xz: {x: -1100, y: 2300}
+      radius: 220
+      altitude: 650
+      seed: 41
+    - xz: {x: -300, y: -350}
+      radius: 200
+      altitude: 650
+      seed: 53
+    mirrorClouds: 1
+    cloudCoreHalfHeight: 70
+    cloudClearance: 80
+    snowfall: 0
+  outskirts:
+    enabled: 1
+    reach: 7000
+    blend: 1000
+    height: {x: 15, y: 300}
+    featureSize: 1600
+    ridged: 0.25
+    land: 0.3
+    landClearance: 1500
+    treeBand: 0
+    treeDensity: 0.6

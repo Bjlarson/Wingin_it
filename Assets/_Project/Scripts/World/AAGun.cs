@@ -106,8 +106,11 @@ namespace WingingIt.World
             tracerMaterial = tracer;
         }
 
+        /// <summary>Swaps the gun's stats (Domination's light AA on a capture field).</summary>
+        public void SetStats(AAStats gunStats) => stats = gunStats;
+
         /// <summary>
-        /// A modelled turret: <see cref="head"/> only turns, <paramref name="pitchCradle"/> tilts in it, and
+        /// A modelled turret:<see cref="head"/> only turns, <paramref name="pitchCradle"/> tilts in it, and
         /// <paramref name="recoilBarrels"/> (left, right) kick back on alternate shots.
         /// </summary>
         public void SetMount(Transform pitchCradle, Transform[] recoilBarrels)

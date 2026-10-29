@@ -94,6 +94,12 @@ namespace WingingIt.Match
         /// </summary>
         public virtual string ArenaId => Info?.Id;
 
+        /// <summary>
+        /// Which of the map layout's mode entries (<see cref="Maps.ModeLayout.modeId"/>) says what the mode spawns: its own
+        /// card's id by default. Null, or an id the map doesn't list, spawns every piece (the map as built).
+        /// </summary>
+        public virtual string LayoutId => Info?.Id;
+
         /// <summary>A fresh score for a match of <paramref name="teamCount"/> teams.</summary>
         public virtual MatchScore CreateScore(int teamCount) => new MatchScore(teamCount);
 
@@ -165,6 +171,11 @@ namespace WingingIt.Match
     /// </summary>
     public sealed class TeamsMode : MatchMode
     {
+        public const string Id = "Teams";
+
+        /// <summary>The Teams layout even when the mode isn't played from its card (tests).</summary>
+        public override string LayoutId => Info?.Id ?? Id;
+
         static readonly ScoreColumn[] s_columns =
         {
             new("K", p => p.Kills.ToString()),
@@ -196,6 +207,11 @@ namespace WingingIt.Match
     /// </summary>
     public sealed class BannerMode : MatchMode
     {
+        public const string Id = "Banner";
+
+        /// <summary>The Banner layout even when the mode isn't played from its card (tests).</summary>
+        public override string LayoutId => Info?.Id ?? Id;
+
         static readonly ScoreColumn[] s_columns =
         {
             new("K", p => p.Kills.ToString()),
@@ -266,6 +282,11 @@ namespace WingingIt.Match
     /// </summary>
     public sealed class DominationMode : MatchMode
     {
+        public const string Id = "Domination";
+
+        /// <summary>The Domination layout even when the mode isn't played from its card (tests).</summary>
+        public override string LayoutId => Info?.Id ?? Id;
+
         static readonly ScoreColumn[] s_columns =
         {
             new("K", p => p.Kills.ToString()),
@@ -407,6 +428,8 @@ namespace WingingIt.Match
         /// <summary>The Ram Royale arena even when the mode isn't played from its card (tests).</summary>
         public override string ArenaId => Info?.Id ?? Id;
 
+        public override string LayoutId => Info?.Id ?? Id;
+
         public override int FreeForAllSize => Pilots;
 
         public override int Lives => 1;
@@ -505,29 +528,12 @@ namespace WingingIt.Match
         /// <summary>Planes left in place of the team scores; the kill feed and popups stay.</summary>
         public override MatchWidgets Widgets => MatchWidgets.PlanesLeft | MatchWidgets.KillFeed | MatchWidgets.ScorePopups;
 
-        static RamBoostAbility s_ramBoost;
-
-        /// <summary>The ability Support flies with here in place of the Repair Aura (no allies to heal).</summary>
-        public static RamBoostAbility RamBoost
-        {
-            get
-            {
-                if (s_ramBoost == null)
-                {
-                    s_ramBoost = ScriptableObject.CreateInstance<RamBoostAbility>();
-                    s_ramBoost.hideFlags = HideFlags.DontSave;
-                }
-                return s_ramBoost;
-            }
-        }
-
-        /// <summary>Weapons off, ram damage on; Support's aura becomes a Ram Boost. Boost and the other abilities stay.</summary>
+        /// <summary>Weapons off, ram damage on, and no Boost or class ability: it's flying and ramming only.</summary>
         public override void OnSpawned(PlaneController plane)
         {
             plane.WeaponsOff = true;
             plane.RamDamage = true;
-            if (plane.Stats != null && plane.Stats.ability is RepairAuraAbility && plane.TryGetComponent(out PlaneAbility ability))
-                ability.Override = RamBoost;
+            plane.AbilitiesOff = true;
         }
 
         /// <summary>Who's still flying out of how many; the last plane flying by name.</summary>

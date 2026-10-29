@@ -73,6 +73,7 @@ namespace WingingIt.Flight
         PlaneController _plane;
         readonly PlanePart[] _parts = new PlanePart[PlanePart.TypeCount];
         float _lastAttackTime = float.NegativeInfinity;
+        float _firstHitTime = -1f; // first hit by another plane this life, for the time-to-kill log
         readonly Dictionary<PlaneController, AttackRecord> _attackers = new();
 
         /// <summary>What one enemy plane has done to us this life, for assists.</summary>
@@ -200,8 +201,9 @@ namespace WingingIt.Flight
                 if (part == null)
                     continue;
                 part.SetDetached(false);
-                part.ResetHealth(durability.GetMaxHealth(part.partType));
+                part.ResetHealth(durability.GetMaxHealth(part.partType) * CombatTuning.HealthScale);
             }
+            _firstHitTime = -1f;
             ApplyFlightEffects();
             UpdateBodyState(force: true);
             Restored?.Invoke(this);
@@ -270,6 +272,8 @@ namespace WingingIt.Flight
         {
             if (source == null || GetPlane(source) == _plane)
                 return; // dev tools and self-damage never steal credit
+            if (_firstHitTime < 0f && GetPlane(source) != null)
+                _firstHitTime = Time.time;
             LastAttacker = source;
             _lastAttackTime = Time.time;
         }
@@ -310,6 +314,8 @@ namespace WingingIt.Flight
                 source = null;
             var killer = GetPlane(source);
             LastKill = new KillInfo(this, killer, source, _plane.LastDeathCause, Assisters(killer));
+            if (_plane.LastDeathCause == DeathCause.ShotDown && _firstHitTime >= 0f)
+                CombatTuning.RecordKill(_plane.name, Time.time - _firstHitTime);
             Killed?.Invoke(LastKill);
             AnyKilled?.Invoke(LastKill);
         }

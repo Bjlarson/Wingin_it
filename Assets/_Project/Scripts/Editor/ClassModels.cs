@@ -26,7 +26,7 @@ namespace WingingIt.Editor
         /// <summary>The materials every plane and weapon model shares (names match the Blender materials).</summary>
         internal class PlaneMaterials
         {
-            public readonly Material Paint, Team, Ink, PropBlur, Glow;
+            public readonly Material Paint, Team, Trim, Ink, PropBlur, Glow;
 
             public PlaneMaterials()
             {
@@ -36,12 +36,16 @@ namespace WingingIt.Editor
                 // PlaneVisuals tints it per team at runtime; untinted (prefab view, menus) it shows team 0's blue.
                 Team.SetVector("_BaseColor", PlaneVisuals.TeamTint(new Color(0.35f, 0.6f, 1f)));
                 EditorUtility.SetDirty(Team);
+                // The second tintable slot (the parachute's trim gores): the same ramp, white until tinted.
+                Trim = FlightTestSceneBuilder.Materials.Mat("Plane_Trim", Color.white, palette, Vector2.one, smoothness: 0.1f);
+                Trim.SetVector("_BaseColor", PlaneVisuals.TeamTint(Color.white));
+                EditorUtility.SetDirty(Trim);
                 Ink = FlightTestSceneBuilder.Materials.UnlitMat("Plane_Ink", new Color32(0x1E, 0x24, 0x33, 0xFF));
                 PropBlur = PropBlurMat("Plane_PropBlur", new Color32(0x2C, 0x32, 0x42, 0x38));
                 Glow = GlowMat("Weapon_Glow", palette);
             }
 
-            public IEnumerable<Material> All => new[] { Paint, Team, Ink, PropBlur, Glow };
+            public IEnumerable<Material> All => new[] { Paint, Team, Trim, Ink, PropBlur, Glow };
         }
 
         /// <summary>Where the model's objects mount on the prefab.</summary>
@@ -61,9 +65,10 @@ namespace WingingIt.Editor
         /// placeholder alone) if the FBX hasn't been generated yet. Markers move things the placeholder has elsewhere,
         /// for PlaneVisuals to apply per class: Muzzle{Left,Right}{Inner,Outer} the gun muzzles, Rail{Left,Right} the
         /// rocket rails, WingHitbox{Left,Right} the wing hitboxes (a high wing). Optional pieces: a nose Propeller and its
-        /// PropDisc (a jet or a twin has none), and extra objects named after the body or a wing (Body*, WingLeft*,
-        /// WingRight*, origin on their own pivot) that ride on it: a twin's WingLeftProp spins with the engine, its
-        /// WingLeftPropDisc is a blur disc, and a BodyRadar turns slowly.
+        /// PropDisc (a jet or a twin has none), and extra objects named after the body, a wing or a tail surface (Body*,
+        /// WingLeft*, WingRight*, HorizontalStabilizer*, VerticalStabilizer*, origin on their own pivot) that ride on it:
+        /// a twin's WingLeftProp spins with the engine, its WingLeftPropDisc is a blur disc, a BodyRadar turns slowly,
+        /// and *Aileron, *Elevator*, *Rudder are control surfaces hinged between their origin and a *Hinge marker.
         /// </summary>
         internal static bool Dress(string modelName, FlightStats stats, Mounts mounts, PlaneMaterials materials,
             out PlaneVisuals.ClassModel model)
@@ -97,8 +102,9 @@ namespace WingingIt.Editor
 
             var propellers = new List<Transform>();
             var radars = new List<Transform>();
+            var surfaces = new List<PlaneVisuals.ControlSurface>();
             foreach (Transform child in source.transform)
-            foreach (var mount in new[] { mounts.Body, mounts.WingLeft, mounts.WingRight })
+            foreach (var mount in new[] { mounts.Body, mounts.WingLeft, mounts.WingRight, mounts.HStab, mounts.VStab })
             {
                 if (child.name == mount.name || !child.name.StartsWith(mount.name) || child.GetComponent<MeshFilter>() == null)
                     continue;
@@ -109,16 +115,42 @@ namespace WingingIt.Editor
                     propellers.Add(piece.transform);
                 if (child.name.EndsWith("Radar"))
                     radars.Add(piece.transform);
+                if (SurfaceKind(child.name) is { } kind)
+                    surfaces.Add(Surface(source, child, piece.transform, kind));
             }
 
             model = new PlaneVisuals.ClassModel
             {
                 stats = stats, pieces = pieces.ToArray(), propellers = propellers.ToArray(), radars = radars.ToArray(),
+                surfaces = surfaces.ToArray(),
                 muzzlePositions = MarkerPositions(source, mounts.Muzzles, MuzzleMarker),
                 railPositions = MarkerPositions(source, mounts.Rails, (_, side) => "Rail" + side),
                 wingHitboxPositions = MarkerPositions(source, mounts.WingHitboxes, (_, side) => "WingHitbox" + side),
             };
             return true;
+        }
+
+        static PlaneVisuals.ControlSurfaceKind? SurfaceKind(string name) =>
+            name.EndsWith("Aileron") ? name.StartsWith("WingLeft") ? PlaneVisuals.ControlSurfaceKind.AileronLeft
+                : PlaneVisuals.ControlSurfaceKind.AileronRight
+            : name.Contains("Elevator") ? PlaneVisuals.ControlSurfaceKind.Elevator
+            : name.EndsWith("Rudder") ? PlaneVisuals.ControlSurfaceKind.Rudder
+            : null;
+
+        /// <summary>
+        /// A control surface's hinge: the object's origin is one end, its <c>&lt;name&gt;Hinge</c> marker the other. The
+        /// axis is turned to point +x (ailerons, elevators) or +y (rudder) so one angle convention fits both sides.
+        /// </summary>
+        static PlaneVisuals.ControlSurface Surface(GameObject source, Transform child, Transform pivot,
+            PlaneVisuals.ControlSurfaceKind kind)
+        {
+            var end = source.transform.Find(child.name + "Hinge")
+                ?? throw new System.ArgumentException($"{source.name} has no marker '{child.name}Hinge'");
+            Vector3 axis = (end.localPosition - child.localPosition).normalized;
+            Vector3 toward = kind == PlaneVisuals.ControlSurfaceKind.Rudder ? Vector3.up : Vector3.right;
+            if (Vector3.Dot(axis, toward) < 0f)
+                axis = -axis;
+            return new PlaneVisuals.ControlSurface { pivot = pivot, kind = kind, axis = axis };
         }
 
         /// <summary>A gun muzzle's marker: inner/outer goes by the placeholder muzzle's span.</summary>

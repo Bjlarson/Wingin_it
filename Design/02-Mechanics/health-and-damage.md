@@ -117,6 +117,27 @@ Part damage stacks on top of these. A Critical body with a missing wing is in de
 - Every death raises `PlaneHealth.AnyKilled` with a `KillInfo` (victim, killer plane or none, source, cause). Scoring, coins, and the real kill feed will listen to it. A non-plane source (future AA guns) is recorded as the source with no killer plane.
 - The debug HUD shows "SHOT DOWN BY X" or "CRASHED (X gets the kill)" and a placeholder kill feed in the top-left.
 
+## Ejection
+
+**Decided 2026-10-29 (Blake), built the same day.** A pilot whose plane is going down can bail out:
+
+- **Only when crippled:** a part shot off or the body Critical (`PlaneHealth.IsCrippled`), in the air. A healthy or
+  lightly scratched plane can't eject, and nor can one parked on the ground (land and repair instead), so ejecting is
+  never a way out of a fair fight.
+- **Scoring: same as a crash.** It's a death (`DeathCause.Ejected`), and since the plane is crippled, whoever crippled it
+  gets the kill (and the assists stand). A plane crippled by its own scrape with no attacker gives nobody the kill.
+- **The payoff is time:** the respawn starts at once and is **3 s** instead of 5 (`PlaneRespawner.ejectRespawnDelay`),
+  rather than nursing a plane with no tail all the way down to the ground first.
+- **Controls:** hold for 0.4 s (so a stray press can't throw you out): **X** on keyboard, **left stick click** on a
+  gamepad, both rebindable; on touch a red **EJECT** button shows only while you can eject. PC and gamepad show
+  "HOLD X TO EJECT" under the center warning. The death line reads "EJECTED (X GETS THE KILL)".
+- **What you see:** the pilot (team colours) is fired out of the top of the plane at 16 m/s, falls for 0.8 s, then the
+  canopy blooms open (0.6 s) and the pilot floats down at 5 m/s, arms up on the risers, swaying a little
+  (`World/EjectedPilot`, no physics or collider). On touching ground or sea the canopy sags and it's gone 3 s later.
+  The empty plane falls on in one piece, smoking, with no blast (`PlaneVisuals`).
+- Not yet: bots never eject; touch players in gesture-only mode (no on-screen buttons) have no eject; the camera holds
+  on the death spot rather than following the pilot.
+
 ## Damage State for Repair Timing
 
 The repair time is set by the **worst** of body HP and lost parts (proposed):
