@@ -27,6 +27,11 @@ ModelImporter:
   - first:
       type: UnityEngine:Material
       assembly: UnityEngine.CoreModule
+      name: Plane_Trim
+    second: {fileID: 2100000, guid: 6e6a7bb244d18644f9119ca30d1fc24b, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
       name: Weapon_Glow
     second: {fileID: 2100000, guid: 778426062a3ff484ba881cb0ab733688, type: 2}
   materials:

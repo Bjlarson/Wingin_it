@@ -55,9 +55,10 @@ namespace WingingIt.Tests
         {
             Assert.AreEqual(MatchPhase.Menu, _match.Phase);
             Assert.IsNull(MapScene.Current, "no map scene loaded");
-            Assert.IsNull(Terrain.activeTerrain, "no terrain");
             Assert.IsEmpty(Airfield.All, "no airfields");
             Assert.IsNotNull(MenuStage.Current, "the menu's own hangar");
+            foreach (var terrain in Terrain.activeTerrains)
+                Assert.IsTrue(terrain.transform.IsChildOf(MenuStage.Current.transform), $"{terrain.name}: only the menu's own valley");
             Assert.AreSame(MenuStage.Current.HangarSpot, _match.HangarSpot);
             Assert.Less(Vector3.Distance(_player.Position, _match.HangarSpot.position), 3f, "the plane is parked in the hangar");
             Assert.AreEqual(0, SceneManager.GetActiveScene().buildIndex, "the first scene in Build Settings");

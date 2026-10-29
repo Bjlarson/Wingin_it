@@ -19,6 +19,8 @@ namespace WingingIt.World
         [SerializeField] float driftRadius;
         [Tooltip("Seconds per drift circle.")]
         [SerializeField] float driftPeriod = 240f;
+        [Tooltip("Moves on unscaled time, so it keeps going while the game is frozen (the main menu's backdrop).")]
+        [SerializeField] bool unscaledTime;
 
         Vector3 _home;
         Quaternion _rest;
@@ -48,11 +50,12 @@ namespace WingingIt.World
 
         void Update()
         {
-            float t = Time.time * Mathf.PI * 2f / Mathf.Max(0.1f, period) + _phase;
+            float now = unscaledTime ? Time.unscaledTime : Time.time;
+            float t = now * Mathf.PI * 2f / Mathf.Max(0.1f, period) + _phase;
             Vector3 p = _home + Vector3.up * (Mathf.Sin(t) * heave);
             if (driftRadius > 0f)
             {
-                float d = Time.time * Mathf.PI * 2f / Mathf.Max(1f, driftPeriod) + _phase;
+                float d = now * Mathf.PI * 2f / Mathf.Max(1f, driftPeriod) + _phase;
                 p += new Vector3(Mathf.Cos(d) - Mathf.Cos(_phase), 0f, Mathf.Sin(d) - Mathf.Sin(_phase)) * driftRadius;
             }
             var tilt = Quaternion.Euler(Mathf.Sin(t * 0.8f + 1.3f) * rock, 0f, Mathf.Sin(t) * rock);

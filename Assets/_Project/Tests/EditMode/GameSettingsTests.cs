@@ -50,6 +50,48 @@ namespace WingingIt.Tests
         }
 
         [Test]
+        public void Trees_HighOnPc_MediumOnPhones_AndAnUnknownLevelResets()
+        {
+            Assert.AreEqual(TreeDetail.High, new GameSettings(false, new MemoryStore()).Data.trees);
+            var phone = new GameSettings(true, new MemoryStore());
+            Assert.AreEqual(TreeDetail.Medium, phone.Data.trees);
+            phone.Set(s => s.trees = (TreeDetail)42);
+            Assert.AreEqual(TreeDetail.High, phone.Data.trees);
+            phone.Set(s => s.trees = TreeDetail.Low);
+            phone.ResetTab(SettingsTab.Graphics);
+            Assert.AreEqual(TreeDetail.Medium, phone.Data.trees);
+        }
+
+        [Test]
+        public void RenderDistance_HighOnPc_MediumOnPhones_AndAnUnknownLevelResets()
+        {
+            Assert.AreEqual(RenderDistance.High, new GameSettings(false, new MemoryStore()).Data.renderDistance);
+            var phone = new GameSettings(true, new MemoryStore());
+            Assert.AreEqual(RenderDistance.Medium, phone.Data.renderDistance);
+            phone.Set(s => s.renderDistance = (RenderDistance)42);
+            Assert.AreEqual(RenderDistance.High, phone.Data.renderDistance);
+            phone.Set(s => s.renderDistance = RenderDistance.Low);
+            phone.ResetTab(SettingsTab.Graphics);
+            Assert.AreEqual(RenderDistance.Medium, phone.Data.renderDistance);
+        }
+
+        [Test]
+        public void RenderDistanceLevels_ReachFurther_AsTheyGoUp_AndHighIsTheMapsAsBuilt()
+        {
+            var low = RenderDistanceProfile.For(RenderDistance.Low);
+            var medium = RenderDistanceProfile.For(RenderDistance.Medium);
+            var high = RenderDistanceProfile.For(RenderDistance.High);
+            Assert.Less(low.Trees, medium.Trees);
+            Assert.Less(medium.Trees, high.Trees);
+            Assert.Less(low.LodBias, medium.LodBias);
+            Assert.Less(medium.LodBias, high.LodBias);
+            Assert.Less(low.Details, medium.Details);
+            Assert.AreEqual(1f, high.Trees);
+            Assert.AreEqual(1f, high.Details);
+            Assert.AreEqual(1f, high.LodBias);
+        }
+
+        [Test]
         public void ShadowLevels_ReachFurtherAndFilterMore_AsTheyGoUp()
         {
             Assert.IsFalse(ShadowProfile.For(ShadowDetail.Off).Enabled);

@@ -78,6 +78,10 @@ namespace WingingIt.Settings
         public float renderScale = 1f;
         /// <summary>How much shadow detail: distance, map size and edge filtering. Lower on phones.</summary>
         public ShadowDetail shadows = ShadowDetail.High;
+        /// <summary>How many of each map's trees are drawn (<see cref="TreeDensity"/>). Lower on phones.</summary>
+        public TreeDetail trees = TreeDetail.High;
+        /// <summary>How far trees, grass and LOD models reach (<see cref="RenderDistanceProfile"/>). Lower on phones.</summary>
+        public RenderDistance renderDistance = RenderDistance.High;
         public float fieldOfView = 60f;
         public bool speedFov = true;
         /// <summary>High dynamic range rendering. Off by default on phones, where it costs bandwidth for little gain.</summary>
@@ -298,6 +302,8 @@ namespace WingingIt.Settings
                         s.frameRateCap = d.frameRateCap;
                         s.renderScale = d.renderScale;
                         s.shadows = d.shadows;
+                        s.trees = d.trees;
+                        s.renderDistance = d.renderDistance;
                         s.fieldOfView = d.fieldOfView;
                         s.speedFov = d.speedFov;
                         s.hdr = d.hdr;
@@ -339,6 +345,8 @@ namespace WingingIt.Settings
                 d.renderScale = 0.8f;
                 d.hdr = false;
                 d.shadows = ShadowDetail.Medium;
+                d.trees = TreeDetail.Medium;
+                d.renderDistance = RenderDistance.Medium;
             }
             return d;
         }
@@ -364,6 +372,10 @@ namespace WingingIt.Settings
             s.renderScale = Mathf.Clamp(s.renderScale, MinRenderScale, MaxRenderScale);
             if (!Enum.IsDefined(typeof(ShadowDetail), s.shadows))
                 s.shadows = ShadowDetail.High;
+            if (!Enum.IsDefined(typeof(TreeDetail), s.trees))
+                s.trees = TreeDetail.High;
+            if (!Enum.IsDefined(typeof(RenderDistance), s.renderDistance))
+                s.renderDistance = RenderDistance.High;
             s.fieldOfView = Mathf.Clamp(s.fieldOfView, MinFov, MaxFov);
 
             s.masterVolume = Mathf.Clamp01(s.masterVolume);

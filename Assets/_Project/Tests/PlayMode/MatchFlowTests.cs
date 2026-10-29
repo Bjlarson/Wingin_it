@@ -124,7 +124,7 @@ namespace WingingIt.Tests
             Assert.AreEqual(1f, Time.timeScale, "never pauses");
             Assert.IsFalse(input.enabled, "controls let go");
             Assert.IsFalse(touch.activeSelf, "taps go to the menu");
-            Assert.IsNotNull(Object.FindAnyObjectByType<FlightHUD>(), "the HUD stays up behind it");
+            Assert.IsNull(Object.FindAnyObjectByType<FlightHUD>(), "the HUD clears off behind it");
             float left = _match.TimeLeft;
             yield return new WaitForSeconds(0.3f);
             Assert.Less(_match.TimeLeft, left, "the clock runs on");
@@ -134,6 +134,7 @@ namespace WingingIt.Tests
             Assert.IsFalse(_match.MenuOpen);
             Assert.IsTrue(input.enabled);
             Assert.IsTrue(touch.activeSelf);
+            Assert.IsNotNull(Object.FindAnyObjectByType<FlightHUD>(), "and back as it closes");
         }
 
         [UnityTest]

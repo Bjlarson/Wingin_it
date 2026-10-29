@@ -46,9 +46,9 @@ namespace WingingIt.Match
         [SerializeField] FlightStats[] classes;
         [Tooltip("Player controls (input, dev tools) that only run in play.")]
         [SerializeField] Behaviour[] playOnlyBehaviours;
-        [Tooltip("Flight HUD and debug overlay, hidden outside play.")]
+        [Tooltip("Flight HUD and debug overlay, hidden outside play and while the in-match menu is open.")]
         [SerializeField] GameObject[] playOnlyObjects;
-        [Tooltip("On-screen controls: like the HUD, but also hidden while the in-match menu is open (taps go to the menu).")]
+        [Tooltip("On-screen controls: like the HUD, hidden outside play and while the in-match menu is open (taps go to the menu).")]
         [SerializeField] GameObject[] controlObjects;
         [Tooltip("Dev tools that break the match rules (free class switching). Only on after Dismiss.")]
         [SerializeField] Behaviour[] sandboxOnlyBehaviours;
@@ -88,7 +88,7 @@ namespace WingingIt.Match
         PlaneRespawner _respawner;
         PlaneHealth _health;
         PlaneRepair _repair;
-        bool _playOnlyOn = true, _controlsOn = true; // as the scene is saved
+        bool _playOnlyOn = true; // as the scene is saved
         bool _parked;
         (int count, int size)? _levelTeams; // the roster's teams while a free-for-all mode has replaced them
         PlaneController _spectated;
@@ -653,7 +653,7 @@ namespace WingingIt.Match
 
         /// <summary>
         /// Opens the in-match menu (countdown or play). The match keeps running: the player's controls let go of the
-        /// stick and the mouse is freed; the HUD stays up behind the menu. Never while the player is going down: a crash
+        /// stick, the mouse is freed and the HUD clears off until it closes. Never while the player is going down: a crash
         /// shows only the plane select, or (out of lives) the explosion and then a survivor, and only from then on can the
         /// menu open again (to leave). That also covers a button mashed, a back gesture or a pad blip in the crash itself.
         /// </summary>
@@ -992,31 +992,25 @@ namespace WingingIt.Match
         }
 
         /// <summary>
-        /// The flight HUD shows in play with no class picker up (the picker frees the mouse, and the HUD would draw over
-        /// it) and the player not out spectating; the controls and on-screen controls also need the in-match menu closed.
-        /// Dismissed, all of it is on.
+        /// The flight HUD, controls and on-screen controls show in play with no class picker up (the picker frees the
+        /// mouse, and the HUD would draw over it), the player not out spectating and the in-match menu closed (the HUD
+        /// clears off the screen behind it and comes back as it closes). Dismissed, all of it is on.
         /// </summary>
         void RefreshPlayOnly()
         {
-            bool hud = _dismissed || (_clock.Phase == MatchPhase.Playing && Picker == ClassPicker.None && !IsSpectating);
-            bool controls = hud && !MenuOpen;
-            if (hud != _playOnlyOn)
-            {
-                _playOnlyOn = hud;
-                foreach (var go in playOnlyObjects)
-                    if (go != null)
-                        go.SetActive(hud);
-            }
-            if (controls != _controlsOn)
-            {
-                _controlsOn = controls;
-                foreach (var b in playOnlyBehaviours)
-                    if (b != null)
-                        b.enabled = controls;
-                foreach (var go in controlObjects)
-                    if (go != null)
-                        go.SetActive(controls);
-            }
+            bool on = _dismissed || (_clock.Phase == MatchPhase.Playing && Picker == ClassPicker.None && !IsSpectating && !MenuOpen);
+            if (on == _playOnlyOn)
+                return;
+            _playOnlyOn = on;
+            foreach (var go in playOnlyObjects)
+                if (go != null)
+                    go.SetActive(on);
+            foreach (var b in playOnlyBehaviours)
+                if (b != null)
+                    b.enabled = on;
+            foreach (var go in controlObjects)
+                if (go != null)
+                    go.SetActive(on);
         }
 
         PilotRef Ref(PlaneController plane) => new(plane, PilotName(plane), plane.Team);

@@ -10,8 +10,8 @@ namespace WingingIt.Editor
     /// <summary>
     /// Builds <c>Scenes/MainMenu.unity</c>, the scene a build opens: the match flow and its screens (menu, game mode,
     /// class select, settings), the menu camera, the player's plane with its chase camera and HUD, the bot roster and
-    /// the mode piece spawner, and nothing from any map. The menu's backdrop is its own hangar on an apron
-    /// (<see cref="MenuStage"/>). Picking a class loads the map scene beside it (<see cref="MapLoader"/>) and spawns the
+    /// the mode piece spawner, and nothing from any map. The menu's backdrop is its own hangar on a home field in a
+    /// valley (<see cref="MenuStage"/>, <see cref="MenuWorldBuilder"/>). Picking a class loads the map scene beside it (<see cref="MapLoader"/>) and spawns the
     /// mode's pieces there; leaving the match reloads this scene, which unloads the map.
     /// </summary>
     public static class MainMenuSceneBuilder
@@ -20,8 +20,6 @@ namespace WingingIt.Editor
         /// <summary>The map a match loads until the setup has a map select.</summary>
         const string DefaultMap = "Map_IslandV2";
 
-        const float ApronSize = 400f;
-        const float FieldSize = 6000f;
         /// <summary>
         /// Where the pilot stands, in the hangar spot's space: just off the wingtip (the Support's reaches 5.9 m), a
         /// little behind the wing, inside the menu camera's 12 m orbit.
@@ -48,10 +46,11 @@ namespace WingingIt.Editor
             var planePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(B.PrefabPath);
 
             var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
-            MapSkyBuilder.ApplyAtmosphere(new MapSky { skybox = MapSkyBuilder.GreyboxSky() });
+            var sky = MenuWorldBuilder.Sky();
+            MapSkyBuilder.ApplyAtmosphere(sky);
             new GameObject("Level Settings").AddComponent<LevelSettings>().SpawnMode = SpawnMode.Air;
 
-            var stage = BuildStage(m);
+            var stage = BuildStage(m, sky);
             B.BuildPlayer(scene, planePrefab, classes, stage.HangarSpot);
             var roster = IslandSceneBuilder.BuildBotRoster(planePrefab, classes);
             var pieces = new GameObject("Mode Pieces").AddComponent<ModePieceBuilder>();
@@ -67,24 +66,25 @@ namespace WingingIt.Editor
         }
 
         /// <summary>
-        /// The menu's backdrop: the airfield hangar (the same model and interior as a home field's) on a concrete apron
-        /// in a grass field, lit by the scene's sun, which goes under the stage so it hides with it once a map is in.
+        /// The menu's backdrop: the airfield hangar (the same model and interior as a home field's) with the rest of a
+        /// home field round it, in a valley under mountains (<see cref="MenuWorldBuilder"/>), lit by the scene's sun,
+        /// which goes under the stage so it hides with it once a map is in.
         /// </summary>
-        static MenuStage BuildStage(B.Materials m)
+        static MenuStage BuildStage(B.Materials m, MapSky sky)
         {
             var root = new GameObject("Menu Stage");
             var stage = root.AddComponent<MenuStage>();
-            B.Box("Apron", root.transform, new Vector3(0f, -0.5f, 0f), new Vector3(ApronSize, 1f, ApronSize), m.Concrete, true);
-            B.Box("Field", root.transform, new Vector3(0f, -0.55f, 0f), new Vector3(FieldSize, 1f, FieldSize), m.Ground, false);
             var models = AirfieldModels.Load();
             var spot = models != null
                 ? B.BuildHangar(root.transform, Vector3.zero, models)
                 : B.BuildHangar(root.transform, Vector3.zero, m);
+            MenuWorldBuilder.Build(root.transform, models, sky);
             stage.Configure(spot);
             if (RenderSettings.sun != null)
                 RenderSettings.sun.transform.SetParent(root.transform, true);
             foreach (var t in root.GetComponentsInChildren<Transform>())
                 t.gameObject.isStatic = true;
+            MenuWorldBuilder.Unfreeze(root.transform);
             AddPilot(root.transform, spot);
             return stage;
         }

@@ -165,7 +165,7 @@ namespace WingingIt.Editor
         /// shows it too), standing in for the trees past <see cref="MapOutskirts.treeBand"/>, so the far hills don't read
         /// as bare lawn. The texture is made once (delete it to remake); the layer is made or updated in place.
         /// </summary>
-        static TerrainLayer WoodsLayer()
+        internal static TerrainLayer WoodsLayer()
         {
             var grass = MapTerrainBuilder.Layer(TerrainTextures.Kind.Grass, 80f);
             string texturePath = $"{TerrainTextures.Folder}/FarWoods.png";

@@ -325,6 +325,9 @@ namespace WingingIt.UI
                     rows.Add(Slider("RENDER SCALE", () => D.renderScale, v => S.Set(s => s.renderScale = v),
                         GameSettings.MinRenderScale, GameSettings.MaxRenderScale, Notch, v => $"{v * 100f:0}%"));
                     rows.Add(Choice("SHADOWS", new[] { "OFF", "LOW", "MEDIUM", "HIGH" }, () => (int)D.shadows, i => S.Set(s => s.shadows = (ShadowDetail)i)));
+                    rows.Add(Choice("TREES", new[] { "LOW", "MEDIUM", "HIGH" }, () => (int)D.trees, i => S.Set(s => s.trees = (TreeDetail)i)));
+                    rows.Add(Choice("RENDER DISTANCE", new[] { "LOW", "MEDIUM", "HIGH" }, () => (int)D.renderDistance,
+                        i => S.Set(s => s.renderDistance = (RenderDistance)i)));
                     rows.Add(Slider("FIELD OF VIEW", () => D.fieldOfView, v => S.Set(s => s.fieldOfView = v),
                         GameSettings.MinFov, GameSettings.MaxFov, 1f, v => $"{v:0}°"));
                     rows.Add(Toggle("SPEED FOV EFFECT", () => D.speedFov, v => S.Set(s => s.speedFov = v)));

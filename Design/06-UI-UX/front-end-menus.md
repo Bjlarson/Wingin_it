@@ -127,6 +127,8 @@ One panel, four tabs (Q / E or LB / RB switch tabs). Every change **applies imme
 | Resolution + window mode | Native, fullscreen | Resolution list; Fullscreen / Windowed / Borderless | PC |
 | Frame rate cap | PC: 144; mobile: 60 | 30 / 60 / 120 / 144 / Unlimited | All (mobile offers 30 / 60, 120 if the screen supports it) |
 | Render scale | PC: 100%; mobile: 80% | 50–100% | All |
+| Trees | PC: High; mobile: Medium | Low (1 in 3) / Medium (2 in 3) / High (all) | All (`TreeDensity`, `TerrainScenery`: thins each kind of terrain tree evenly; kinds with fewer than 50 on a map always stay. Terrain trees are most of a map's draw cost: Broad Reach's 52k take ~20 of ~25 ms CPU per frame) |
+| Render distance | PC: High; mobile: Medium | Low / Medium / High | All (`RenderDistanceProfile`, `TerrainScenery`: tree distance 50 / 75 / 100% and grass 60 / 80 / 100% of what each terrain was built with; the quality level's LOD bias 50 / 75 / 100%, which moves every LOD switch — trees to their camera-facing billboards (`TreeBillboards`, a 10 m tree at ~580 m on PC High) and out, airfield props and vehicles out) |
 | Field of view | 60° | 50–80° | All (`FlightCameraRig.baseFov`; the top-speed and boost widening keeps its offset) |
 | Speed FOV effect | On | On / Off | All (Off = no widening with speed or boost; motion comfort) |
 

@@ -501,7 +501,8 @@ namespace WingingIt.UI
                     else if (match.CanChangeClassAtAirfield && !match.MenuOpen)
                         DrawSwapPrompt(width);
                     _g.Opacity = 1f;
-                    DrawScoreBar(width);
+                    if (!match.MenuOpen)
+                        DrawScoreBar(width);
                     _g.Opacity = MenuMath.PanelFade(Time.unscaledTime - _shownAt);
                     if (match.MenuOpen)
                     {

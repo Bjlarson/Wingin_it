@@ -40,7 +40,9 @@ namespace WingingIt.Editor
 
         // The home airfield sits south of the action; its air spawn is 300 m up on the approach.
         static readonly Vector3 AirfieldPosition = new Vector3(0f, 0f, -1350f);
-        static readonly Vector2 RunwaySize = new Vector2(40f, 600f);
+        internal static readonly Vector2 RunwaySize = new Vector2(40f, 600f);
+        /// <summary>Where an airfield's hangar stands from its runway's centre: off the right side, toward the approach end.</summary>
+        internal static readonly Vector3 HangarOffset = new Vector3(RunwaySize.x * 0.5f + 55f, 0f, -40f);
         static readonly Vector3 AirSpawnLocal = new Vector3(0f, 300f, -250f);
         const float BoundaryRadius = 2800f;
         const float Ceiling = 1500f;
@@ -810,12 +812,12 @@ namespace WingingIt.Editor
             Transform hangarSpot;
             if (models != null)
             {
-                hangarSpot = BuildHangar(buildings, new Vector3(halfWidth + 55f, 0f, -40f), models);
+                hangarSpot = BuildHangar(buildings, HangarOffset, models);
                 DressAirfield(buildings, models, halfWidth, halfLength, moving);
             }
             else
             {
-                hangarSpot = BuildHangar(buildings, new Vector3(halfWidth + 55f, 0f, -40f), m);
+                hangarSpot = BuildHangar(buildings, HangarOffset, m);
                 Box("Control Tower", buildings, new Vector3(halfWidth + 45f, 11f, 120f), new Vector3(8f, 22f, 8f), m.ConcreteDark, true);
                 Box("Tower Cab", buildings, new Vector3(halfWidth + 45f, 24f, 120f), new Vector3(11f, 4f, 11f), m.Glass, true);
                 Box("Windsock Pole", buildings, new Vector3(halfWidth + 15f, 5f, -halfLength + 60f), new Vector3(0.4f, 10f, 0.4f), m.PlaneDark, false);
@@ -894,7 +896,7 @@ namespace WingingIt.Editor
         /// gantry crane, tool cart and mechanic beside the repair zone. Big things are solid; small props aren't, and cull
         /// when they're specks. Adds what moves to <paramref name="moving"/>.
         /// </summary>
-        static void DressAirfield(Transform buildings, AirfieldModels models, float halfWidth, float halfLength, List<Transform> moving)
+        internal static void DressAirfield(Transform buildings, AirfieldModels models, float halfWidth, float halfLength, List<Transform> moving)
         {
             var tower = models.Child("ControlTower", buildings, new Vector3(halfWidth + 45f, 0f, 120f), colliderMesh: "ControlTowerCol");
             tower.name = "Control Tower"; // what the Island's field defenses look for

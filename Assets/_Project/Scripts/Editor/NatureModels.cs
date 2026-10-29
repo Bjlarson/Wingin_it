@@ -57,9 +57,10 @@ namespace WingingIt.Editor
 
         /// <summary>
         /// A prefab of one prop (mesh and materials at its root, as terrain trees and details need), made or refreshed
-        /// in Prefabs/Nature. Details (grass, flowers) cast no shadows and take no LOD group. Trees get a one-level LOD
-        /// group that culls them once they're smaller than <see cref="TreeCullHeight"/> of the screen (so a bush goes
-        /// long before a tree), which also tells the terrain they're mesh trees, not billboarded legacy ones.
+        /// in Prefabs/Nature. Details (grass, flowers) cast no shadows and take no LOD group. Trees get a LOD group
+        /// (<see cref="TreeBillboards"/>): the mesh near, a camera-facing picture further off, culled once smaller than
+        /// <see cref="TreeCullHeight"/> of the screen (so a bush goes long before a tree). The group also tells the
+        /// terrain they're mesh trees, not legacy ones it would billboard itself.
         /// </summary>
         public GameObject Prefab(string name, bool castShadows = true, bool lod = true)
         {
@@ -72,7 +73,7 @@ namespace WingingIt.Editor
             r.sharedMaterials = Materials(name);
             r.shadowCastingMode = castShadows ? UnityEngine.Rendering.ShadowCastingMode.On : UnityEngine.Rendering.ShadowCastingMode.Off;
             if (lod)
-                go.AddComponent<LODGroup>().SetLODs(new[] { new LOD(TreeCullHeight, new Renderer[] { r }) });
+                TreeBillboards.Add(go, "Nature", TreeCullHeight);
             var prefab = PrefabUtility.SaveAsPrefabAsset(go, $"{PrefabFolder}/{name}.prefab");
             Object.DestroyImmediate(go);
             _prefabs[name] = prefab;

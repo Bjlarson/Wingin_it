@@ -35,8 +35,8 @@ namespace WingingIt.Editor
         }
 
         /// <summary>
-        /// A prefab of one prop for the terrain to scatter as a tree (mesh at its root, a one-level LOD group so it
-        /// culls when small), made or refreshed in Prefabs/MapPacks/&lt;Pack&gt;.
+        /// A prefab of one prop for the terrain to scatter as a tree (mesh at its root, a billboard further off and culled
+        /// when small: <see cref="TreeBillboards"/>), made or refreshed in Prefabs/MapPacks/&lt;Pack&gt;.
         /// </summary>
         public GameObject TreePrefab(string name)
         {
@@ -49,7 +49,7 @@ namespace WingingIt.Editor
             go.AddComponent<MeshFilter>().sharedMesh = Mesh(name);
             var r = go.AddComponent<MeshRenderer>();
             r.sharedMaterials = Materials(name);
-            go.AddComponent<LODGroup>().SetLODs(new[] { new LOD(CullHeight, new Renderer[] { r }) });
+            TreeBillboards.Add(go, Pack, CullHeight);
             var prefab = PrefabUtility.SaveAsPrefabAsset(go, $"{folder}/{name}.prefab");
             Object.DestroyImmediate(go);
             _prefabs[name] = prefab;
